@@ -162,8 +162,10 @@ class _Sweep:
         sub_tf: str,
         log: Callable[[str], None],
         proximity: Any = None,
+        check_probe_sub_consistency: Optional[Callable[[SweepTrigger, Any, PooledStructure], None]] = None,
     ) -> None:
         self.pool = pool
+        self.check_probe_sub_consistency = check_probe_sub_consistency
         self.proximity = proximity
         self.tables = tables
         self.resolve_start = resolve_start
@@ -354,6 +356,9 @@ class _Sweep:
                 self._push(R, _PHASE_FIRE, (_KIND_REVERSAL_SPAWN, sub.pool_idx), ("spawn", sub))
             # R <= idx: reversed before this trigger — nothing to spawn (no record
             # can be live at R); step 6 makes this record zero-length.
+        if created and self.check_probe_sub_consistency is not None:
+            # The probe that decided this sub's start vs the sub's own run (PLAN_T T1; log only).
+            self.check_probe_sub_consistency(t, res, sub, log=self.log)
         if (not created and res.bos0_inner is not None and sub.bos0_inner is not None
                 and abs(float(sub.bos0_inner) - float(res.bos0_inner)) > 1e-9):
             self.log(
@@ -671,6 +676,7 @@ def run_lifecycle_sweep(
     sub_tf: str = "M15",
     log: Callable[[str], None] = print,
     proximity: Any = None,
+    check_probe_sub_consistency: Optional[Callable[[SweepTrigger, Any, PooledStructure], None]] = None,
 ) -> SweepResult:
     """Run the §17.6 sweep over `triggers` and populate `pool` in place.
 
@@ -692,6 +698,9 @@ def run_lifecycle_sweep(
       `initial_ticks()` → `[(idx, order, payload)]` are queued at phase 5, and
       each `on_tick(payload, idx)` → `(SweepTriggers to FIRE, [(SweepTrigger,
       reason, detail)] to log unresolved)`.
+    - `check_probe_sub_consistency(trigger, resolved_start, sub, log=)` (PLAN_T T1) — called once per sub CREATED,
+      right after its geometry is built; logs a disagreement between the probe that decided the start and the
+      sub's own run (`entity_df_mutation.check_probe_sub_consistency`); None = no check.
     """
     if synth_reversal_trigger is None:
         from engine_v2.multitf.entity_df_mutation import _synth_reversal_trigger
@@ -701,6 +710,7 @@ def run_lifecycle_sweep(
         resolve_reversal=resolve_reversal, resolve_cross_fib_limit=resolve_cross_fib_limit,
         synth_reversal_trigger=synth_reversal_trigger,
         parent_path=parent_path, sub_tf=sub_tf, log=log, proximity=proximity,
+        check_probe_sub_consistency=check_probe_sub_consistency,
     )
     sweep.run(list(triggers))
     return SweepResult(pool=pool, unresolved=pool.unresolved, spawned=sweep.spawned)

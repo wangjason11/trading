@@ -474,8 +474,15 @@ def _run_phase2(
     wick_cap: float,
     *,
     max_iterations: int,
+    timeframe: str,
+    pip_size: float,
+    cross_fib_limit: CrossFibLimit,
 ) -> _DetResult:
     """Phase 2 — MS-based, called only by first_confluence (per spec).
+
+    Its MS reads what the sub's own MS reads (PLAN_T T1): the caller's `timeframe` (the proximity + narrow-gap
+    values), the pair's `pip_size` and the sub's cross-fib limit (`cross_fib_limit_for`, handed in by the
+    first_confluence resolver).
 
     Runs MS from `current_start` in **pre-CTS_0 scan-from-start mode**
     (`enforce_cts0_new_extreme=True` + the handed `bos0_inner`), so MS
@@ -547,10 +554,11 @@ def _run_phase2(
             enforce_cts0_new_extreme=True,
             bos0_inner=cur_bos0_inner,
             stop_after_cts_established=2,
-            # No reference price, explicitly (PLAN_I §9.2 F7 / D5): the probe's result reads two
-            # CTS_ESTABLISHED, cycle 0's CTS_CONFIRMED and a reversal — never a proximity confirmation —
-            # so its POI read never decides anything; every cycle >= 1 fib of it is a single.
-            cross_fib_limit=CrossFibLimit(None, "none"),
+            # What the sub's own MS reads (PLAN_T T1; until then the H1 defaults 8 / 50 / 0.0001 and no limit —
+            # PLAN_I §9.2 F7 held them inert because cycle 0 could never confirm by proximity).
+            timeframe=timeframe,
+            pip_size=pip_size,
+            cross_fib_limit=cross_fib_limit,
         )
         ms.debug = True
         df_probe, probe_events, _ = ms.run()
@@ -712,6 +720,7 @@ def unified_probe(
     *,
     max_iterations: int = 10,
     enable_phase2: bool = False,
+    cross_fib_limit: Optional[CrossFibLimit] = None,
 ) -> ProbeResult:
     """Iteratively validate / refine `input_idx` against `reference_zone`.
 
@@ -762,6 +771,9 @@ def unified_probe(
         When True, run Phase 2 after the deterministic method. Used for
         `first_confluence` callers; default False keeps the probe
         deterministic-only for every other caller.
+    cross_fib_limit : CrossFibLimit, optional
+        The sub's cross-fib limit for Phase 2's MS (PLAN_T T1) — REQUIRED
+        when `enable_phase2`, unused otherwise (no MS runs).
     """
     _validate_input(df)
     if direction not in (1, -1):
@@ -814,11 +826,14 @@ def unified_probe(
     # Phase 2 starts from the deterministic method's final current_start
     # and its finalized BOS_0 bounds (the MS pre-CTS_0 scan gate). It
     # re-derives the moving BOS_0 on each of its own resets.
+    assert cross_fib_limit is not None, (
+        "[unified_probe] Phase 2's MS needs the sub's cross-fib limit (PLAN_T T1)")
     p2 = _run_phase2(
         df, det.starting_idx, det.bos0_inner, det.bos0_outer,
         direction, reference_zone, probe_end_idx,
         reset_tol, wick_cap,
-        max_iterations=max_iterations,
+        max_iterations=max_iterations, timeframe=timeframe, pip_size=pip_size,
+        cross_fib_limit=cross_fib_limit,
     )
 
     notes = (

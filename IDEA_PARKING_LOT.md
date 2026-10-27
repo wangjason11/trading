@@ -208,7 +208,13 @@ First, I want to revisit the cycle-0 carve-out that we discussed recently. After
    `Parent (<parent_path_id>)` toggling every parent overlay element (default ON), never built: no H1-overlay trace
    carries a `legendgroup` (only the M15 fibs' `m15_fib`, grep 2026-10-27); **(2) chart zoom** — (a) a +/- switch or
    tool, (b) an idx input the chart zooms to. Then item 6.
-5b. **Revisit the cycle-0 carve-out (no sd-proximity CTS confirmation on any cycle 0)** — **NEXT** (inserted by the user
+5b. **Revisit the cycle-0 carve-out (no sd-proximity CTS confirmation on any cycle 0)** — **IN PROGRESS 2026-10-27:
+   DECIDED** — the carve-out stays on the main sid 0 and on the sub the first_confluence of the main sid 0 cycle 0
+   creates (+ its probe), dropped on every other cycle 0; the first_confluence probe's MS reads what its sub reads
+   (M15 5 / 30, pip size, the sub's cross-fib limit). **PLAN_T** (`engine_v2/plans/PLAN_T_probe_parity_and_cycle0_carveout.md`):
+   T1 the probe — LANDED 2026-10-27, zero change; T2 the carve-out rule — next (measured: subs 4, 7, 8 change). Every
+   round verbatim + the measurements: `engine_v2/plans/qa_cycle0_carveout_inputs/user_spec_20261027_cycle0_carveout.md`.
+   Was **NEXT** (inserted by the user
    2026-10-27 before item 5's final part; moved here from §G, where it was parked 2026-10-26). **DECIDE**; raised by the
    user 2026-10-26 with "WVMI back on the chart": "yes we do need to add line to revisit this. I need to better
    understand the original carve out logic. A decision from May was also quite a long time ago and a lot of things
@@ -478,7 +484,10 @@ First, I want to revisit the cycle-0 carve-out that we discussed recently. After
 - ~~**Opposite-direction POIs**~~ — CLOSED 2026-10-20 by PLAN_R step 2: the parent's opp_sd proximity ladder reads a
   counter sub's POI (the sides assigned by the sub's direction relative to the parent; a structure's own POIs stay
   sd). Detail: `engine_v2/zones/POI_ZONES_SPEC.md` "POIs are always sd-direction (invariant)".
-- **The start-candle probe's market structure runs at the H1 proximity values on M15** (8 pips and the 50-pip
+- ~~**The start-candle probe's market structure runs at the H1 proximity values on M15**~~ — CLOSED 2026-10-27 by
+  PLAN_T T1 (the first_confluence probe's MS gets the caller's timeframe values, pip size and its sub's cross-fib
+  limit — byte-identical on the window; the TRIGGER below fires with PLAN_T T2, which lets most cycle 0s confirm by
+  proximity; the user: "I do think that we need to update to 5/30 and be consistent"). Was: (8 pips and the 50-pip
   narrow-cycle gap instead of 5 / 30): `unified_probe.py`'s Phase 2 builds it through
   `structure_engine._make_market_structure` without `timeframe` (that helper's docstring: "a deferred cleanup").
   INERT BY DESIGN — the probe's result reads two CTS_ESTABLISHED, cycle 0's CTS_CONFIRMED and a reversal, never a

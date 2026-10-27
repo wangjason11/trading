@@ -541,10 +541,12 @@ the H1 values whatever its `timeframe`: `_FALLBACK_PROXIMITY_PIPS` = 8 and
 `_FALLBACK_MIN_GAP_PIPS` = 50 (`tests/test_ms_fallback_proximity_defaults.py`
 guards both against the tables; the first was a stale 9 until PLAN_R step 0b,
 2026-10-20 — and this table read 9 / 6 / 3, stale since `804d19d`, until the
-PLAN_R landing review). The start-candle probe's Phase-2 run builds through the
-helper WITHOUT `timeframe`, so it runs at the H1 values on M15 (inert by design —
-register §E). Pip size derived from `df.attrs["pair"]` (0.01 for JPY pairs,
-0.0001 otherwise).
+PLAN_R landing review). The start-candle probe's Phase-2 run (first_confluence only)
+builds through the helper with the CALLER's `timeframe` and pip size and its sub's
+cross-fib limit — it reads what the sub's own MS reads (PLAN_T T1, 2026-10-27; until
+then it ran at the H1 values and 0.0001 on M15 with no limit, inert while cycle 0
+could never confirm by proximity). Pip size derived from `df.attrs["pair"]` (0.01
+for JPY pairs, 0.0001 otherwise) — on every MS build, the probe's included.
 
 The `min_gap_pips` value also feeds Rules 2 & 3 in the post-facto
 `zones/zone_proximity.py::check_zone_proximity` scan — see that

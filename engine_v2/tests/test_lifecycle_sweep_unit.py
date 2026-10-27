@@ -1972,7 +1972,9 @@ def test_orchestrator_resolve_start_passes_the_parent_cycles_cts_established_mom
     cts_moment = {(0, 1): 652, (1, 2): 902}               # H1 → LOH 2611 / 3611
     seen: List[tuple] = []
 
-    def _fake_resolve(trigger, _h1, _m15, *, pool, hi, m15_parent_cts_established_idx, parent_path):
+    def _fake_resolve(trigger, _h1, _m15, *, pool, hi, m15_parent_cts_established_idx, parent_path,
+                      cross_fib_limit):
+        assert cross_fib_limit is None          # only a first_confluence's probe gets a limit (PLAN_T T1)
         seen.append(((trigger.parent_sid, trigger.parent_cycle_id), hi, m15_parent_cts_established_idx))
 
     def _sweep(triggers, *, resolve_start, **_kw):

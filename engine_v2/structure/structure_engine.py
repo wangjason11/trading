@@ -63,17 +63,13 @@ def _make_market_structure(
     `structure_id` — and `poi_zones.poi_inner_for_fib`. The callers: main sid N
     (`compute_structure`: `compute_main_cross_fib_limit`), a sub's geometry
     (`compute_bounded_structure` ← the pool's `P`), the probe's Phase 2
-    (`unified_probe`: an explicit `CrossFibLimit(None, "none")` — PLAN_I F7, the
-    probe's result does not depend on the read).
+    (`unified_probe`: its sub's limit, handed in by the first_confluence resolver —
+    PLAN_T T1; until then an explicit `CrossFibLimit(None, "none")`, PLAN_I F7).
 
-    Parity carve-out (matches Step 1 baseline): probe-only call sites
-    historically constructed MarketStructure without `timeframe`, falling
-    back to the H1 default of `DEFAULT_PROXIMITY_PIPS["H1"]` proximity_pips
-    regardless of the outer caller's TF. The one such site left —
-    `unified_probe`'s iterative (Phase 2) run — still calls this helper
-    without `timeframe`, preserving the H1 default. Spec §4.4 explicitly
-    listed only the probe-RESET threshold for TF-aware lookup;
-    proximity_pips for probes is a deferred cleanup.
+    Every caller passes its `timeframe` (the proximity + narrow-gap values) and
+    `pip_size` — the probe's Phase 2 since PLAN_T T1 (until then it built here
+    without either, from `df11996`'s byte-identical refactor: the H1 8 / 50 and
+    0.0001 on M15 candles).
     """
     kwargs.setdefault("proximity_pips", _proximity_pips(timeframe))
     kwargs.setdefault("min_gap_pips", _min_gap_pips(timeframe))

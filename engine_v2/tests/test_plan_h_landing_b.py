@@ -40,7 +40,7 @@ from engine_v2.tests.test_unified_probe import (
 )
 from engine_v2.zones.poi_zones import ICSelectionError, POIConfig, fib_zone_bounds
 from engine_v2.tests._cross_fib_limits import NO_P, NO_REF_TRACKER
-from engine_v2.zones.cross_cycle_fib import ICReference
+from engine_v2.zones.cross_cycle_fib import CrossFibLimit, ICReference
 
 
 # ---------------------------------------------------------------------------
@@ -289,13 +289,13 @@ def test_probe_phase2_on_an_unstamped_frame_raises(monkeypatch):
     monkeypatch.setattr(se, "poi_inner_for_fib", lambda *a, **k: calls.append(1) or real(*a, **k))
     df = _prepare_df(_make_multicycle_data())
     with contextlib.redirect_stdout(io.StringIO()):
-        unified_probe(df, 0, 1, _ref_zone_uptrend(), 14, "H1", enable_phase2=True)
+        unified_probe(df, 0, 1, _ref_zone_uptrend(), 14, "H1", enable_phase2=True, cross_fib_limit=CrossFibLimit(None, "none"))
     assert calls, "the fixture's Phase-2 MS reads the resolver"
 
     df = _prepare_df(_make_multicycle_data())
     del df.attrs["timeframe"]
     with contextlib.redirect_stdout(io.StringIO()), pytest.raises(ICSelectionError) as exc:
-        unified_probe(df, 0, 1, _ref_zone_uptrend(), 14, "H1", enable_phase2=True)
+        unified_probe(df, 0, 1, _ref_zone_uptrend(), 14, "H1", enable_phase2=True, cross_fib_limit=CrossFibLimit(None, "none"))
     assert "_run_phase2" in [f.name for f in traceback.extract_tb(exc.tb)]
 
 

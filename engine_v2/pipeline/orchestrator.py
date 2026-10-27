@@ -997,10 +997,12 @@ def _run_multi_tf_dual(
         _resolve_reversal_start,
         _resolve_trigger_m15_start,
         build_or_get_geometry,
+        check_probe_sub_consistency,
         render_sub_projection,
     )
     from engine_v2.multitf.cross_fib_limit import (
-        PREV_SUB_TYPES, check_cross_fib_limits, cross_fib_limit_for, prev_sub_at_fire,
+        PREV_SUB_TYPES, check_cross_fib_limits, cross_fib_limit_for, first_confluence_probe_limit,
+        prev_sub_at_fire,
     )
     from engine_v2.multitf.lifecycle_sweep import SweepTrigger, run_lifecycle_sweep
     from engine_v2.multitf.parent_tables import build_parent_tables
@@ -1145,9 +1147,13 @@ def _run_multi_tf_dual(
         # The sibling window's raw-frame fallback must not reach before the parent cycle (PLAN_R §2):
         # bounded at the cycle's CTS-established MOMENT on M15 — not the real-time floor, which a
         # retroactive cycle's triggers precede (the user, 2026-10-20).
+        # A first_confluence probe's Phase 2 MS reads its sub's cross-fib limit (PLAN_T T1), lazily.
+        fc_limit = (first_confluence_probe_limit(t, h1_events=sorted_events, parent_tables=tables)
+                    if t.trigger_type == "first_confluence" else None)
         return _resolve_trigger_m15_start(
             t.source, h1_df, m15, pool=sub_pool, hi=hi,
             m15_parent_cts_established_idx=_loh(tables.cts_moment[t.cycle]), parent_path=parent_path,
+            cross_fib_limit=fc_limit,
         )
 
     def _build_geometry(key, bos0_inner, cross_fib_limit):
@@ -1180,6 +1186,7 @@ def _run_multi_tf_dual(
         resolve_start=_resolve_start, build_geometry=_build_geometry,
         resolve_reversal=_resolve_reversal, resolve_cross_fib_limit=_resolve_cross_fib_limit,
         parent_path=parent_path, sub_tf="M15", proximity=overlay,
+        check_probe_sub_consistency=check_probe_sub_consistency,
     )
     # The R6-2 tripwire: P re-derived the §1.2 way at each sub's start (a mismatch WARNs, the stored P stays).
     check_cross_fib_limits(sub_pool, sorted_events, tables)

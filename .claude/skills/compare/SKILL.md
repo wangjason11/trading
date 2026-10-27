@@ -212,7 +212,8 @@ log of the replay being reused (the fetch gate above already requires it). See
 dropped 5 sids whose cause sat unread in the log).
 
 Since the sub-structure pool (Plan C, 2026-09-20) this grep also catches, by
-design, two line families (a third, the WVMI lock warning, since 2026-10-26) — each is a **finding to explain**, not a bug by
+design, two line families (a third, the WVMI lock warning, since 2026-10-26; a fourth, the probe/sub consistency
+warning, since PLAN_T T1 2026-10-27) — each is a **finding to explain**, not a bug by
 itself:
 
 - `[sweep] UNRESOLVED (skipping) reason=… lens=… parent=(S,C) type=…
@@ -235,6 +236,12 @@ itself:
   `[prox_view] pool#N cap=…: …` (GOTCHAS "A log line from a sub's downstream prints once per TRACKER RUN"). Expected
   on the reference window: 10 lines, all the collapsed confluence sub 1 cycle 0 (90 != 119 = 1837 != 1866) — the
   confluence lens + `pool#1` at caps None / 1894 / 1902 / 1940 / 1948 / 2231 / 2236 / 2343 / 2367.
+- `WARNING [sweep] probe/sub disagree on the 2nd CTS | cycle 0's CTS_CONFIRMED: pool#N key=… probe finalize=F (cond)
+  vs the sub's own=O (trigger first_confluence@T)` (since PLAN_T T1, 2026-10-27;
+  `entity_df_mutation.check_probe_sub_consistency`) — a first_confluence probe that RAN and CREATED its sub disagrees
+  with the sub's own MS run on the moment its start was finalized from. Expected on the reference window: 0 lines (the
+  one probe that runs Phase 2, FC (0,0): probe and sub both 1020). A line = the probe's start / lifecycle start no
+  longer matches its own structure — PLAN_T §2.2.5 lists the known causes (a pool hit, the probe's bound).
 
 Also read (not caught by the grep) `[probe_cache] hit|APPROX hit …` and
 `[probe_cache] REF-ZONE DIFFERS …` — a probe skipped because an earlier
@@ -760,6 +767,15 @@ per-LP CSVs; `chart_census.py` counts the marks (`wvmi_lp_marks` per trace). A z
 57 LP circles`. Suite 2039; mutants 44 / 44 (+ 1 equivalent, run, surviving). S_wvmi_marks
 `20261026_230619_2dc9e5d` (source `2dc9e5d`, save `915743d`, trunk `cb56121`; = `LATEST_<branch>` from 2026-10-26;
 the save replay = the compared replay). "WVMI back on the chart" is complete.
+**PLAN_T T1 (2026-10-27, SESSION ORDER item 5b — the first_confluence probe's Phase 2 MS reads what its sub reads) —
+ZERO CHANGE:** the probe's MS gets the caller's timeframe values (M15 proximity 5 / narrow-gap 30, not the helper's H1
+default 8 / 50), the pair's pip size and its sub's cross-fib limit (`cross_fib_limit.first_confluence_probe_limit`,
+THE formula, called on a probe-cache miss); + the log-only probe/sub consistency tripwire above. = the prediction
+(PLAN_T §2.3 / §2.6): 30 / 30 CSVs byte-equal to S_wvmi_marks, the three charts equal by trace name
+(`fig_named_diff.py`), the probe's log lines identical, skip grep 33, the tripwire silent. Byte-identical BY
+CONSTRUCTION while the cycle-0 carve-out blocks every cycle 0 (the two values are read only by the proximity
+confirmation; the probe reads nothing after cycle 0's confirmation); on the window the probe's Phase 2 MS runs once
+(FC (0,0), whose limit is none = today's). Not a save-format boundary. Suite 2065; mutants 26 / 26.
 
 **M15.counter** and **M15.confluence** (9 files each — 7 per-lens debug CSVs
 with the same filename suffixes prefixed `*_M15_counter_` /

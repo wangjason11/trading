@@ -37,7 +37,7 @@ import math
 from copy import deepcopy
 from dataclasses import replace
 from datetime import timedelta
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import pandas as pd
 
@@ -590,6 +590,7 @@ def _probe_with_cache(
     enable_phase2: bool,
     timeframe: str,
     label: str,
+    cross_fib_limit: Optional[Callable[[], Any]] = None,
 ) -> Tuple[int, int, str, Optional[float], str, bool]:
     """Run `unified_probe` behind the §17.8 probe cache.
 
@@ -608,6 +609,10 @@ def _probe_with_cache(
     Returns `(starting_idx, finalize_idx, finalize_condition, bos0_inner,
     status, cache_hit)`; `status == "pending"` only from a real run.
     `pool=None` → no cache (unit tests / diagnostics).
+
+    `cross_fib_limit` (PLAN_T T1): a zero-argument callable giving the sub's cross-fib limit for Phase 2's MS,
+    called on a MISS only (a hit runs no probe) — the first_confluence resolver's; None for the Phase-1-only
+    callers.
     """
     from engine_v2.structure.unified_probe import unified_probe
 
@@ -643,6 +648,7 @@ def _probe_with_cache(
         probe_end_idx=int(probe_end_idx),
         timeframe=timeframe,
         enable_phase2=enable_phase2,
+        cross_fib_limit=(cross_fib_limit() if cross_fib_limit is not None else None),
     )
     print(
         f"[entity_compute] unified_probe ({label}): m15_input={input_idx} "
@@ -681,6 +687,7 @@ def _resolve_first_confluence_via_unified_probe(
     *,
     pool: Optional[SubStructurePool] = None,
     parent_path: str = "H1.main",
+    cross_fib_limit: Optional[Callable[[], Any]] = None,
 ):
     """Unified-probe path for `first_confluence` (the one variation that
     anchors on its OWN ad-hoc BOS_0, not a sibling). Phase 2 (MS-based) runs
@@ -689,6 +696,10 @@ def _resolve_first_confluence_via_unified_probe(
 
     Returns a `ResolvedStart` (`parent_bos_anchor_idx` = the parent BOS anchor,
     H1, that seeded the M15 input) or a `ProbeFailure`.
+
+    `cross_fib_limit` (PLAN_T T1): the sub's limit for Phase 2's MS as a zero-argument callable, called on a
+    probe-cache miss only (`_probe_with_cache`); the sweep's resolver always hands it (the orchestrator's
+    `_resolve_start`); None is accepted only where Phase 2 never runs (a cache hit, a failure before the probe).
     """
     from engine_v2.multitf.data_bridge import map_candle_to_lower_tf
 
@@ -746,6 +757,7 @@ def _resolve_first_confluence_via_unified_probe(
         direction=int(trigger.lower_sd), input_idx=int(m15_input_idx),
         reference_zone=ref_zone, probe_end_idx=int(m15_probe_end_idx),
         enable_phase2=True, timeframe=trigger.lower_tf, label=label,
+        cross_fib_limit=cross_fib_limit,   # the sub's limit for Phase 2's MS (PLAN_T T1), lazy
     )
     if status == "pending":
         print(f"[entity_compute] PENDING: unified_probe did not finalize for {label}; skipping M15 build")
@@ -947,6 +959,7 @@ def _resolve_trigger_m15_start(
     hi: Optional[int] = None,
     m15_parent_cts_established_idx: int,
     parent_path: str = "H1.main",
+    cross_fib_limit: Optional[Callable[[], Any]] = None,
 ):
     """Resolve a trigger's M15 `starting_idx` (entity-absolute) — dispatcher.
 
@@ -960,14 +973,15 @@ def _resolve_trigger_m15_start(
     `m15_parent_cts_established_idx` (REQUIRED, PLAN_R §2) = the LOH of the
     parent cycle's CTS-established moment (`ParentTables.cts_moment`): the
     sibling window's `lo` never reaches below it (`_sibling_cts_idx_window`).
-    `first_confluence` does not read it.
+    `first_confluence` does not read it. `cross_fib_limit` (PLAN_T T1) — the first_confluence probe's
+    lazy limit for its Phase 2 MS — is read by `first_confluence` only.
 
     Returns a `ResolvedStart` or a `ProbeFailure`.
     """
     uc = trigger.use_case
     if uc in _FIRST_CONFLUENCE_USE_CASES:
         return _resolve_first_confluence_via_unified_probe(
-            trigger, parent_df, m15_df, pool=pool, parent_path=parent_path,
+            trigger, parent_df, m15_df, pool=pool, parent_path=parent_path, cross_fib_limit=cross_fib_limit,
         )
     if uc in _SIBLING_CTS_USE_CASES:
         assert pool is not None and hi is not None, (
@@ -1287,6 +1301,43 @@ def build_or_get_geometry(
         f"natural_reversal_idx={sub.natural_reversal_idx} events={len(bounded.events)}"
     )
     return sub, True
+
+
+def check_probe_sub_consistency(trigger: Any, res: Any, sub: PooledStructure, *, log=print) -> None:
+    """The probe↔sub consistency tripwire (PLAN_T T1, log only — the user: "its own 2nd CTS should still be
+    consistent"), for a sub CREATED by a first_confluence probe that RAN (not a probe-cache hit), read from the sub's
+    geometry with the probe's own helpers, entity-absolute:
+    - `second_cts_reached` (the finalize IS the probe's 2nd CTS's moment): the sub's own 2nd CTS_ESTABLISHED moment
+      (`_collect_cts_established`, anchor order; `_second_cts_moment`) must equal it;
+    - `no_retrace` (the finalize = the probe's cycle-0 CTS_CONFIRMED, else its probe end — not known here): a sub
+      whose own cycle-0 CTS_CONFIRMED (`_collect_cts_confirmed_for_cycle`) lands BEFORE the finalize disagrees; a
+      probe confirming before its sub is not caught (it would need the probe's bound).
+    A disagreement = one `WARNING [sweep]` line. What can still make them differ: PLAN_T §2.2.5 (a probe-cache hit,
+    a start landing on an existing sub, the probe's bound)."""
+    if trigger.trigger_type != "first_confluence" or res.cache_hit:
+        return
+    from engine_v2.structure.unified_probe import (
+        _collect_cts_confirmed_for_cycle, _collect_cts_established, _second_cts_moment,
+    )
+    bounded, slice_begin = sub.geometry
+    fin, cond = int(res.finalize_idx), str(res.finalize_condition)
+    if cond == "second_cts_reached":
+        est = _collect_cts_established(bounded.events, structure_id=0)
+        own = None if len(est) < 2 else int(_second_cts_moment(est)) + int(slice_begin)
+        what = "the 2nd CTS"
+        disagree = own != fin
+    elif cond == "no_retrace":
+        conf = _collect_cts_confirmed_for_cycle(bounded.events, structure_id=0, cycle_id=0)
+        own = None if conf is None else int(conf.idx) + int(slice_begin)
+        what = "cycle 0's CTS_CONFIRMED"
+        disagree = own is not None and own < fin
+    else:
+        return
+    if disagree:
+        log(
+            f"WARNING [sweep] probe/sub disagree on {what}: pool#{sub.pool_idx} key={tuple(sub.key)} "
+            f"probe finalize={fin} ({cond}) vs the sub's own={own} (trigger {trigger.trigger_type}@{trigger.trigger_idx})"
+        )
 
 
 def render_sub_projection(

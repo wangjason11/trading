@@ -267,10 +267,11 @@ def test_a_tracker_runtime_error_passes_through_unchanged(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# The probe: an explicit "no P", and its result does not depend on the read (F7)
+# The probe: the limit it is handed (PLAN_T T1; F7's explicit "no P" until then), and — while cycle 0 cannot
+# confirm by proximity — its result does not depend on the read (F7)
 # ---------------------------------------------------------------------------
 
-def test_the_probe_passes_no_p_and_does_not_depend_on_the_read(monkeypatch):
+def test_the_probe_passes_the_handed_limit_and_does_not_depend_on_the_read(monkeypatch):
     import engine_v2.structure.unified_probe as up
     from engine_v2.tests.test_unified_probe import _make_multicycle_data, _ref_zone_uptrend
     limits = []
@@ -282,12 +283,14 @@ def test_the_probe_passes_no_p_and_does_not_depend_on_the_read(monkeypatch):
 
     monkeypatch.setattr(up, "_make_market_structure", spy_make)
 
+    handed = CrossFibLimit(None, "none")
+
     def probe():
         return _quiet(up.unified_probe, _prepare_df(_make_multicycle_data()), 0, 1, _ref_zone_uptrend(), 14, "H1",
-                      enable_phase2=True)
+                      enable_phase2=True, cross_fib_limit=handed)
 
     base = probe()
-    assert limits and set(limits) == {CrossFibLimit(None, "none")}
+    assert limits and all(lim is handed for lim in limits)   # the SAME object, not an equal one built in the probe
     reads = []
 
     def always_hit(df, fib, ft, **kw):           # an inner every candle's low reaches: proximity would confirm anything

@@ -247,15 +247,18 @@ the downstream's one logic (CROSS_CYCLE_FIB_SPEC §8) — read at each refresh a
 2. **The establishment is fed AFTER its BOS** (the tracker takes `(bos_idx, bos_price)`), as the downstream pairs them.
 3. **The wiring lives in `structure_engine._make_market_structure`** (market_structure.py imports nothing from
    `zones/` — "MarketStructure Must Not Import From zones/" below); the cross-fib limit is a REQUIRED keyword (main sid N:
-   `compute_main_cross_fib_limit`; a sub's geometry: the pool's `P`; the probe: an explicit `CrossFibLimit(None,
-   "none")`); one fill constant (`FIB_FILL_THRESHOLD`) for both trackers and the IP pick.
+   `compute_main_cross_fib_limit`; a sub's geometry: the pool's `P`; the first_confluence probe's Phase 2: its
+   sub's `P`, by the same formula — `cross_fib_limit.first_confluence_probe_limit`, PLAN_T T1; an explicit
+   `CrossFibLimit(None, "none")` until then); one fill constant (`IMBALANCE_FILL_THRESHOLD`, since PLAN_S —
+   `FIB_FILL_THRESHOLD` retired) for both trackers and the IP pick.
 4. **The end-of-run order tripwire stays a raise.** `check_processing_order()` (the last step of `run()`) raises
    `FibEventOrderError` when the emission order the tracker saw is not `processing_order_key` order — the F16 shape
    (a CTS confirmed with an anchor at or after its confirmation candle — MS no longer produces it since PLAN_J J1) and the F17 (i) / F14 (1) shape (a cycle
    established with an anchor before the previous cycle's confirmation — MS no longer produces it since PLAN_J J2); F17 (ii) (a BOS anchor after its own CTS
    anchor) does not trip MS — only the downstream dispatch (MS no longer produces it since PLAN_J J3 — the BOS window ends at the CTS anchor). 0 on the reference window and on 400 random real slices
    (S5 landing review). It runs in EVERY MS run with a tracker — main, sub geometry AND the probe's Phase 2 (whose
-   result never depends on the read, F7, but whose run still raises: a probe iteration on such a shape stops the
+   result does not depend on the read only while the cycle-0 carve-out blocks its cycle 0 — F7, narrowed by PLAN_T;
+   its run still raises: a probe iteration on such a shape stops the
    replay, even for a candidate start that is never built — decided to keep, the S5 landing review m1). Do not
    downgrade it: the fix is in MS (PLAN_I R9-1 / R9-2, the plan after S5).
 

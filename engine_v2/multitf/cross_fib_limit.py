@@ -5,7 +5,9 @@ in the limit object, each known from its own candle (PLAN_M; `parent_bos_limit`)
 `P` is computed when the sub's MS geometry is built — at its creating trigger's FIRE, from that trigger at its
 record's start (R6-2 (a)); the orchestrator re-derives it after the sweep from the sub's started_by record at the
 sub's `start_idx` with the start-numbered x−1 and WARNING-logs a mismatch (`check_cross_fib_limits`, the R6-2
-tripwire; the stored `P` stays). Both go through `cross_fib_limit_for` — one formula.
+tripwire; the stored `P` stays). Both go through `cross_fib_limit_for` — one formula — and so does the third
+reader, a first_confluence probe's Phase 2 MS (`first_confluence_probe_limit`, PLAN_T T1: the probe's MS reads its
+sub's `P`).
 
 The rule (§1.2; PLAN_M):
 - a COUNTER sub — its direction opposite its first record's parent sid's (`ParentTables.parent_sd`, the sweep's
@@ -245,6 +247,31 @@ def cross_fib_limit_for(
     if trigger_type == "first_confluence":
         return NO_LIMIT if int(C) == 0 else parent_cts_limit(h1_events, int(S), int(C))
     return NO_LIMIT if prev_sub is None else read_prev_sub(prev_sub, int(s), int(direction), log=log)
+
+
+def first_confluence_probe_limit(trigger: Any, *, h1_events: Iterable[Any],
+                                 parent_tables: Any) -> Callable[[], CrossFibLimit]:
+    """The cross-fib limit a first_confluence probe's Phase 2 MS reads (PLAN_T T1 — the probe's MS reads what its
+    sub reads): THE formula (`cross_fib_limit_for`) for the sub this trigger would create, as a zero-argument
+    callable — the probe cache calls it on a MISS only. A first_confluence is a CONFLUENCE sub by construction (its
+    direction = the parent's, `first_confluence_pipeline.to_multi_tf_trigger`) — asserted here, because the
+    formula's counter test comes first; its `s` (= the trigger's idx) then feeds no branch it takes (the
+    first_confluence rule reads the parent cycle only: none on cycle 0, `parent_cts_limit` on c >= 1)."""
+    assert trigger.trigger_type == "first_confluence", (
+        f"[cross_fib_limit] not a first_confluence: {trigger.trigger_type!r}")
+    S = int(trigger.parent_sid)
+    assert int(trigger.direction) == int(parent_tables.parent_sd[S]), (
+        f"[cross_fib_limit] first_confluence {trigger.cycle}@{trigger.trigger_idx}: direction {trigger.direction} "
+        f"is not the parent's {parent_tables.parent_sd[S]}")
+    h1_events = list(h1_events)
+
+    def limit() -> CrossFibLimit:
+        return cross_fib_limit_for(
+            "first_confluence", trigger.cycle, int(trigger.direction), int(trigger.trigger_idx),
+            h1_events=h1_events, parent_tables=parent_tables, reversing_sub=None, prev_sub=None,
+        )
+
+    return limit
 
 
 def check_cross_fib_limits(pool: Any, h1_events: Iterable[Any], parent_tables: Any, *,

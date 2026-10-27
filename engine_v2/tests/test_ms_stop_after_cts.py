@@ -390,7 +390,7 @@ class TestQuiescence:
         the probe (early stop at 15) finalizes `second_cts_reached` at 10, and equals the
         classify-at-exit result."""
         df = _prepare_df(_make_watch_over_second_cts_data())
-        res = unified_probe(df, 0, 1, _ref_zone_uptrend(), 17, "H1", enable_phase2=True)
+        res = unified_probe(df, 0, 1, _ref_zone_uptrend(), 17, "H1", enable_phase2=True, cross_fib_limit=NO_P)
         assert res.finalize_condition == "second_cts_reached"
         assert res.finalize_idx == 10
         assert res.starting_idx == 0
@@ -459,7 +459,7 @@ def _phase2_pair(df, end_idx):
     ref = _ref_zone_uptrend()
     pip = 0.0001
     kw = dict(reset_tol=DEFAULT_PROBE_RESET_PIPS["H1"] * pip,
-              wick_cap=DEFAULT_PROBE_RESET_WICK["H1"] * pip, max_iterations=10)
+              wick_cap=DEFAULT_PROBE_RESET_WICK["H1"] * pip, max_iterations=10, timeframe="H1", pip_size=0.0001, cross_fib_limit=NO_P)
     on = _run_phase2(df, 0, ref.inner, ref.outer, 1, ref, end_idx, **kw)
     orig = up._make_market_structure
     try:

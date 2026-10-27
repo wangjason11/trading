@@ -487,8 +487,10 @@ Decided in this round:
 - **Every cycle-0 CTS confirmation is by a pullback pattern** (H1 2, counter 4, confluence 8); by proximity: H1 1
   (sid 1 c2), confluence 1 (sub 1 c1, collapsed), both cycle > 0.
 - **The two original cases** (LANDMINES, the entry above): H1 sid 0 c0 AND sid 1 c0 (a reversal's cycle 0, not only
-  the main sid 0), both with a ~12-pip BOS–CTS gap — which the narrow-gap gate (H1 50 pips) now blocks on its own. So
-  what the carve-out still blocks today is a cycle 0 with a WIDE gap, e.g. confluence sub 7 c0 (57 pips).
+  the main sid 0), both under the narrow-gap gate's H1 50 pips, which now blocks them on its own (corrected
+  2026-10-27: the "~12 pips" here was LANDMINES' POI-inner-to-CTS distance; the BOS_0–CTS_0 gaps are 31.8 p and
+  22.9 p — measured in `plans/qa_cycle0_carveout_inputs/user_spec_20261027_cycle0_carveout.md`, the revisit's file).
+  So what the carve-out still blocks today is a cycle 0 with a WIDE gap, e.g. confluence sub 7 c0 (57 pips).
 - Visible sub WVMI records on cycle 0: 6 of the 15 unique (subs 2, 4, 5, 6, 7, 8).
 
 ### The hover drafts the user accepted (round 3 reply → "Hover looks good", round 4)

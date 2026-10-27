@@ -101,7 +101,8 @@ then end together. 0 on the reference window (0 / 27 fib cycles move); one real 
   | sub, first_counter / subsequent_* (a CONFLUENCE sub: in production `subsequent_confluence` only — `first_counter` / `subsequent_counter` subs are counter by construction) | the previous sub x−1 at the record start: same direction → its confirmed `cts_threshold`, else its latest CTS anchor; opposite → its BOS threshold, else its starting extreme; no x−1 → none | `prev_sub_cts_threshold` / `prev_sub_latest_cts` / `prev_sub_bos_threshold` / `prev_sub_starting_price` / `none`; a same-direction x−1 with no CTS → `prev_sub_no_cts` (no `P`, a WARNING) — the set: `cross_cycle_fib.CROSS_FIB_LIMIT_SOURCES` |
 
   The sub formula: `multitf/cross_fib_limit.py` (`cross_fib_limit_for(…, parent_tables)`), computed at the sub's
-  first trigger's fire and re-derived at its start by the R6-2 tripwire (`check_cross_fib_limits(pool, h1_events,
+  first trigger's fire, read by a first_confluence probe's Phase 2 MS before it (`first_confluence_probe_limit`,
+  lazily on a probe-cache miss — PLAN_T T1), and re-derived at its start by the R6-2 tripwire (`check_cross_fib_limits(pool, h1_events,
   parent_tables)`, warn-only; it compares a moving limit's `price_at_start` / `price_moves` too, and looks up no
   reversing sub for a counter sub). The counter limit asserts (raise, never degrade): exactly one `BOS_CONFIRMED(S,
   C)`, the first step, known by the record's start; every step mapped to M15 and priced; no step at or after the
@@ -271,8 +272,10 @@ CTS_ESTABLISHED / CTS_UPDATED. Since S5 that inner comes from THIS logic:
   the run's REQUIRED `cross_fib_limit` keyed by its `structure_id` — and injects it with `poi_zones.poi_inner_for_fib`
   (MS imports nothing from `zones/`). The limit: main sid N ← `compute_main_cross_fib_limit(events of sids < N, N)`
   (the helper `compute_main_cross_fib_limits` maps for the downstream — equal by construction); a sub's geometry ←
-  the pool's `P` (§3, computed at the fire; `_build_geometry` → `compute_bounded_structure`); the probe's Phase 2 ←
-  `CrossFibLimit(None, "none")` explicitly (PLAN_I F7: its result never depends on the read).
+  the pool's `P` (§3, computed at the fire; `_build_geometry` → `compute_bounded_structure`); the first_confluence
+  probe's Phase 2 ← its sub's `P` by the same formula (`cross_fib_limit.first_confluence_probe_limit`, called on a
+  probe-cache miss; PLAN_T T1 — the probe's MS reads what its sub's reads; until then `CrossFibLimit(None, "none")`,
+  PLAN_I F7: its result could not depend on the read while cycle 0 could never confirm by proximity).
 - **Fed at emit.** MS hands the tracker each CTS event as it is emitted: CTS_ESTABLISHED after its cycle's
   BOS_CONFIRMED (with `st.bos`, the pairing the downstream dispatch makes), every CTS_UPDATED (raw and pattern path),
   CTS_CONFIRMED, CTS_THRESHOLD_UPDATED (`MarketStructure._feed_fib_tracker`). The tracker's own `RuntimeError`s pass

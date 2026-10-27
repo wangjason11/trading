@@ -37,6 +37,7 @@ from engine_v2.patterns.imbalance import compute_imbalance
 from engine_v2.patterns.pattern_engine import detect_patterns
 from engine_v2.patterns.structure_patterns import BreakoutPatterns
 from engine_v2.structure.reference_zone import ReferenceZone
+from engine_v2.zones.cross_cycle_fib import CrossFibLimit
 from engine_v2.structure.market_structure import StructureEvent
 from engine_v2.tests._event_factory import make_cts_established
 from engine_v2.structure.unified_probe import (
@@ -755,7 +756,7 @@ class TestPhase2MultiCycle:
         two CTS_ESTABLISHED inside [0, 14] -> `second_cts_reached`."""
         retained = self._retain_phase2_ms(monkeypatch)
         df = _prepare_df(_make_multicycle_data())
-        res = unified_probe(df, 0, 1, _ref_zone_uptrend(), 14, "H1", enable_phase2=True)
+        res = unified_probe(df, 0, 1, _ref_zone_uptrend(), 14, "H1", enable_phase2=True, cross_fib_limit=CrossFibLimit(None, "none"))
 
         assert len(retained) >= 1, "Phase 2 must actually run an MS"
         for ms in retained:
@@ -776,7 +777,7 @@ class TestPhase2MultiCycle:
         the cycle-0 CTS_CONFIRMED candle, nothing past 9."""
         retained = self._retain_phase2_ms(monkeypatch)
         df = _prepare_df(_make_multicycle_data())
-        res = unified_probe(df, 0, 1, _ref_zone_uptrend(), 9, "H1", enable_phase2=True)
+        res = unified_probe(df, 0, 1, _ref_zone_uptrend(), 9, "H1", enable_phase2=True, cross_fib_limit=CrossFibLimit(None, "none"))
 
         assert retained and all(max(int(ev.idx) for ev in ms.events) <= 9 for ms in retained)
         assert res.status == "finalized"
@@ -814,7 +815,7 @@ class TestPhase2EarlyStop:
         at the first quiescent point after the 2nd CTS (11) and reads nothing later."""
         retained = self._retain(monkeypatch, disable_stop=False)
         df = _prepare_df(_make_multicycle_data())
-        res = unified_probe(df, 0, 1, _ref_zone_uptrend(), 22, "H1", enable_phase2=True)
+        res = unified_probe(df, 0, 1, _ref_zone_uptrend(), 22, "H1", enable_phase2=True, cross_fib_limit=CrossFibLimit(None, "none"))
         assert len(retained) == 1
         ms = retained[0]
         assert ms.stop_after_cts_established == 2
@@ -852,7 +853,7 @@ class TestPhase2EarlyStop:
         ref = _ref_zone_uptrend()
         pip = 0.0001
         kw = dict(reset_tol=DEFAULT_PROBE_RESET_PIPS["H1"] * pip,
-                  wick_cap=DEFAULT_PROBE_RESET_WICK["H1"] * pip, max_iterations=10)
+                  wick_cap=DEFAULT_PROBE_RESET_WICK["H1"] * pip, max_iterations=10, timeframe="H1", pip_size=0.0001, cross_fib_limit=CrossFibLimit(None, "none"))
 
         retained_on = self._retain(monkeypatch, disable_stop=False)
         on = _run_phase2(df, 0, ref.inner, ref.outer, 1, ref, probe_end_idx, **kw)
@@ -881,7 +882,7 @@ class TestPhase2EarlyStop:
         and the classification is the Plan A `no_retrace` / finalize 7 result."""
         retained = self._retain(monkeypatch, disable_stop=False)
         df = _prepare_df(_make_multicycle_data())
-        res = unified_probe(df, 0, 1, _ref_zone_uptrend(), 9, "H1", enable_phase2=True)
+        res = unified_probe(df, 0, 1, _ref_zone_uptrend(), 9, "H1", enable_phase2=True, cross_fib_limit=CrossFibLimit(None, "none"))
         assert retained[-1].early_stop_idx is None
         assert res.finalize_condition == "no_retrace"
         assert res.finalize_idx == 7
@@ -932,6 +933,7 @@ class TestPlanCRenames:
         wick_cap=float(DEFAULT_PROBE_RESET_WICK["H1"]) * _pip,
         max_iterations=10,
     )
+    _kw2 = dict(_kw, timeframe="H1", pip_size=0.0001, cross_fib_limit=CrossFibLimit(None, "none"))   # Phase 2's own keywords (PLAN_T T1)
 
     def test_probe_result_starting_idx_is_the_only_spelling(self):
         ref = _ref_zone_uptrend()
@@ -997,13 +999,13 @@ class TestPlanCRenames:
     def test_run_phase2_rejects_end_idx_keyword(self):
         df = _prepare_df(_make_multicycle_data())
         ref = _ref_zone_uptrend()
-        with pytest.raises(TypeError):
-            _run_phase2(df, 0, ref.inner, ref.outer, 1, ref, end_idx=9, **self._kw)   # type: ignore[call-arg]
+        with pytest.raises(TypeError, match="end_idx"):
+            _run_phase2(df, 0, ref.inner, ref.outer, 1, ref, end_idx=9, **self._kw2)   # type: ignore[call-arg]
 
     def test_run_phase2_accepts_probe_end_idx_keyword(self):
         df = _prepare_df(_make_multicycle_data())
         ref = _ref_zone_uptrend()
-        p2 = _run_phase2(df, 0, ref.inner, ref.outer, 1, ref, probe_end_idx=9, **self._kw)
+        p2 = _run_phase2(df, 0, ref.inner, ref.outer, 1, ref, probe_end_idx=9, **self._kw2)
         assert isinstance(p2, _DetResult)
         assert p2.starting_idx == 0
         # cycle 0 confirmed in-window (CTS_CONFIRMED@7 <= 9) -> `no_retrace`, finalize = 7
@@ -1097,7 +1099,7 @@ class TestFinalizeIdxTable:
         # (10 == 10); the idx != moment case is the next test.
         retained = _retain_phase2_ms(monkeypatch)
         df = _prepare_df(_make_multicycle_data())
-        res = unified_probe(df, 0, 1, _ref_zone_uptrend(), probe_end_idx, "H1", enable_phase2=True)
+        res = unified_probe(df, 0, 1, _ref_zone_uptrend(), probe_end_idx, "H1", enable_phase2=True, cross_fib_limit=CrossFibLimit(None, "none"))
         assert res.status == "finalized"
         assert res.finalize_condition == "second_cts_reached"
         cts_est = [e for e in retained[-1].events if e.type == "CTS_ESTABLISHED"]
@@ -1111,7 +1113,7 @@ class TestFinalizeIdxTable:
         # The reversal at 14 does not make this `reversal_in_probe`: n_cts = 2 at the exit.
         retained = _retain_phase2_ms(monkeypatch)
         df = _prepare_df(_make_second_cts_moment_after_anchor_data())
-        res = unified_probe(df, 0, 1, _ref_zone_uptrend(), 17, "H1", enable_phase2=True)
+        res = unified_probe(df, 0, 1, _ref_zone_uptrend(), 17, "H1", enable_phase2=True, cross_fib_limit=CrossFibLimit(None, "none"))
         assert res.status == "finalized"
         assert res.finalize_condition == "second_cts_reached"
         cts_est = [e for e in retained[-1].events if e.type == "CTS_ESTABLISHED"]
@@ -1147,7 +1149,7 @@ class TestFinalizeIdxTable:
         # live-mode path gives the same answer).
         retained = _retain_phase2_ms(monkeypatch)
         df = _prepare_df(_make_cycle0_reversal_data())
-        res = unified_probe(df, 0, 1, _ref_zone_uptrend(), probe_end_idx, "H1", enable_phase2=True)
+        res = unified_probe(df, 0, 1, _ref_zone_uptrend(), probe_end_idx, "H1", enable_phase2=True, cross_fib_limit=CrossFibLimit(None, "none"))
         assert res.status == "finalized"
         assert res.finalize_condition == "reversal_in_probe"
         ms = retained[-1]
@@ -1168,7 +1170,7 @@ class TestFinalizeIdxTable:
         # (NOT the bound: 7 != 8 / 9).
         retained = _retain_phase2_ms(monkeypatch)
         df = _prepare_df(_make_multicycle_data())
-        res = unified_probe(df, 0, 1, _ref_zone_uptrend(), probe_end_idx, "H1", enable_phase2=True)
+        res = unified_probe(df, 0, 1, _ref_zone_uptrend(), probe_end_idx, "H1", enable_phase2=True, cross_fib_limit=CrossFibLimit(None, "none"))
         assert res.status == "finalized"
         assert res.finalize_condition == "no_retrace"
         conf = [e for e in retained[-1].events if e.type == "CTS_CONFIRMED" and e.meta.get("cycle_id") == 0]
@@ -1186,7 +1188,7 @@ class TestFinalizeIdxTable:
         # finalize = probe_end_idx.
         retained = _retain_phase2_ms(monkeypatch)
         df = _prepare_df(_make_multicycle_data())
-        res = unified_probe(df, 0, 1, _ref_zone_uptrend(), probe_end_idx, "H1", enable_phase2=True)
+        res = unified_probe(df, 0, 1, _ref_zone_uptrend(), probe_end_idx, "H1", enable_phase2=True, cross_fib_limit=CrossFibLimit(None, "none"))
         assert res.status == "finalized"
         assert res.finalize_condition == "no_retrace"
         types = [e.type for e in retained[-1].events]
@@ -1203,7 +1205,7 @@ class TestFinalizeIdxTable:
         # finalize = probe_end_idx.
         retained = _retain_phase2_ms(monkeypatch)
         df = _prepare_df(_make_multicycle_data())
-        res = unified_probe(df, 0, 1, _ref_zone_uptrend(), probe_end_idx, "H1", enable_phase2=True)
+        res = unified_probe(df, 0, 1, _ref_zone_uptrend(), probe_end_idx, "H1", enable_phase2=True, cross_fib_limit=CrossFibLimit(None, "none"))
         assert len(retained) == 1, "Phase 2 must actually run an MS"
         assert not any(e.type == "CTS_ESTABLISHED" for e in retained[-1].events)
         assert res.status == "finalized"
@@ -1257,7 +1259,7 @@ class TestFinalizeIdxTable:
         # None -> `no_cts_pending`, finalize None.
         retained = _retain_phase2_ms(monkeypatch)
         df = _prepare_df(_make_downtrend_data(n=60))
-        res = unified_probe(df, 0, 1, _ref_zone_uptrend(), None, "H1", enable_phase2=True)
+        res = unified_probe(df, 0, 1, _ref_zone_uptrend(), None, "H1", enable_phase2=True, cross_fib_limit=CrossFibLimit(None, "none"))
         assert len(retained) == 1
         assert not any(e.type == "CTS_ESTABLISHED" for e in retained[-1].events)
         assert res.status == "pending"
@@ -1270,7 +1272,7 @@ class TestFinalizeIdxTable:
         # cannot be bounded -> `one_cts_pending`, finalize None.
         retained = _retain_phase2_ms(monkeypatch)
         df = _prepare_df(_make_uptrend_data(n=80))
-        res = unified_probe(df, 0, 1, _ref_zone_uptrend(), None, "H1", enable_phase2=True)
+        res = unified_probe(df, 0, 1, _ref_zone_uptrend(), None, "H1", enable_phase2=True, cross_fib_limit=CrossFibLimit(None, "none"))
         types = [e.type for e in retained[-1].events]
         assert types.count("CTS_ESTABLISHED") == 1
         assert "CTS_CONFIRMED" not in types
@@ -1300,6 +1302,6 @@ def test_phase2_retrace_window_opens_after_the_first_cts_moment(monkeypatch):
                         lambda d, lo, hi, direction: seen.append((lo, hi)) or None)
     ref = ReferenceZone(outer=0.5980, inner=0.5990, side="buy",
                         source="cts_confirmed", anchor_idx=0)
-    res = up._run_phase2(df, 0, 0.5990, 0.5980, 1, ref, 20, 0.0, 0.0, max_iterations=2)
+    res = up._run_phase2(df, 0, 0.5990, 0.5980, 1, ref, 20, 0.0, 0.0, max_iterations=2, timeframe="H1", pip_size=0.0001, cross_fib_limit=CrossFibLimit(None, "none"))
     assert seen == [(13, 20)]
     assert res.finalize_condition == "no_retrace"

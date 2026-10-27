@@ -974,7 +974,9 @@ convention); M15 indices entity-absolute unless a sub's slice-local frame is nam
   first_confluence (their P reads no previous sub); the creating record == the started_by record 8 / 8.
 - **F7 — the probe's result does not depend on the POI read** (Phase 2 reads two CTS_ESTABLISHED, cycle 0's
   CTS_CONFIRMED — never by proximity — and a reversal before cycle 1). A probe MS gets "no P" (all single); a test
-  pins the independence.
+  pins the independence. [2026-10-27: superseded by PLAN_T T1 — the first_confluence probe's MS gets its sub's `P`,
+  timeframe values and pip size; the independence held only while the cycle-0 carve-out blocked every cycle 0,
+  which PLAN_T T2 narrows — `plans/PLAN_T_probe_parity_and_cycle0_carveout.md`.]
 - **F8 — the latest-anchor fallback (N-f) never decides a cross on the window — a MEASURED invariant, not a code
   guarantee.** Chain: MS establishes cycle T only after T−1's CTS_CONFIRMED in EMISSION order (`establishing_new_cycle`,
   `market_structure.py:1298`); FibTracker decides in `processing_order_key` order, which places CTS_ESTABLISHED(T) at
