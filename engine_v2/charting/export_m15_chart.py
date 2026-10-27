@@ -107,6 +107,8 @@ from engine_v2.zones.structure_lifecycle import (
 from engine_v2.charting.export_plotly import (
     _add_fib_box,
     _add_wvmi_lp_traces,
+    _chart_controls_cfg,
+    _inject_chart_controls_js,
     _volume_axis_range,
     _wvmi_lp_axis_layout,
     _rgba_from_rgb,
@@ -142,6 +144,11 @@ M15_CHART_DEFAULTS = {
     "volume": {"bars": True, "ema_line": True, "spike_marker": True, "wvmi_lps": True},
     "range_candle_marker": False,
 }
+
+#: The legend group of every parent (H1) overlay element — what the control bar's Parent (1H) button flips
+#: (CHARTING_SPEC §14; the user's round 1, 2026-10-27: "All except both" — the proximity triggers and the H1
+#: WVMI LP circles stay out). No legend entry carries it.
+PARENT_OVERLAY_GROUP = "parent_overlay"
 
 #: A sub dot's `relative_dir` before the sub's `start_idx` (`RELATIVE_DIR_BEFORE_START`,
 #: the user's spec 2026-10-22) and the step-function reader `_sub_relative_dir_at`
@@ -1732,8 +1739,10 @@ def export_m15_chart_plotly(
     # ===================================================================
     # Phase C: H1 overlay
     # ===================================================================
+    first_trace, first_shape = len(fig.data), len(fig.layout.shapes)
     _render_h1_overlay(fig, dfx, h1_df, h1_to_m15, m15_to_h1,
                        state_cfg, struct_cfg, zone_cfg)
+    _tag_parent_overlay(fig, first_trace, first_shape)
 
     # Parent (H1) zone-proximity triggers, anchored at the matching M15
     # sub-candle. Parent-event overlay, so no §16.5 owner filter applies.
@@ -1810,6 +1819,8 @@ def export_m15_chart_plotly(
     # Volume auto-rescale JS
     if volume_enabled:
         _inject_volume_autoscale_js(html_path)
+    _inject_chart_controls_js(html_path, _chart_controls_cfg(
+        dfx, tf="15M", idx_1h=idx_1h_col, parent_tf="1H", parent_group=PARENT_OVERLAY_GROUP))
 
     fig.write_image(str(png_path), scale=2)
 
@@ -1978,6 +1989,15 @@ def _render_wvmi_lp_marks(fig, dfx, m15_df, h1_df, sid_records) -> int:
 # ---------------------------------------------------------------------------
 # Phase C: H1 overlay rendering
 # ---------------------------------------------------------------------------
+
+def _tag_parent_overlay(fig, first_trace: int, first_shape: int) -> None:
+    """Puts every trace and shape from `first_trace` / `first_shape` on — what `_render_h1_overlay` just drew — into
+    `PARENT_OVERLAY_GROUP`, the control bar's Parent (1H) button's target."""
+    for tr in fig.data[first_trace:]:
+        tr.legendgroup = PARENT_OVERLAY_GROUP
+    for shape in fig.layout.shapes[first_shape:]:
+        shape.legendgroup = PARENT_OVERLAY_GROUP
+
 
 def _render_h1_overlay(fig, dfx, h1_df, h1_to_m15, m15_to_h1, state_cfg, struct_cfg, zone_cfg):
     """Render all H1 elements as overlays on the M15 chart."""

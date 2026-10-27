@@ -66,6 +66,7 @@ All visual formatting (colors, opacities, line widths, marker sizes) lives in `s
 | H1 overlay | `zone.h1_overlay.kl.*`, `zone.h1_overlay.poi.*` | H1 zones on M15 chart |
 | Hover lines | `hover_line.range` | Invisible hitbox lines |
 | Chart layout | `chart.layout`, `chart.axis` | Background, grid, axis styling |
+| Chart controls | `chart.controls` (`idx_half_window`, `price_pad`, `min_candles`, `wheel_step`, `idx_mark_color`) | The control bar above each chart (§14) |
 
 ### Changing Colors/Styling
 
@@ -337,7 +338,8 @@ To change any visual element:
 - The volume axis = `[0, the bars' max × volume.headroom]` (1.4 — the tallest bar reaches 71 % of the panel, leaving
   the WVMI LP rows above it, §13): in the static layout (`export_plotly._volume_axis_range`, so the PNG matches) and
   in the zoom JS (the visible bars' max; ×1.1 and the layout's autorange until 2026-10-26)
-- Dynamic y-axis auto-scaling on zoom (JavaScript callback)
+- Dynamic y-axis auto-scaling on zoom (JavaScript callback); the price axis re-fits after a time-only change via the
+  control bar's script (§14), which runs after this one
 - Unified border around price + volume as single chart
 - Hover data: idx, time, volume/EMA values
 - Style keys: `volume.bar.up`, `volume.bar.down`, `volume.bar.neutral`, `volume.ema_line`, `volume.spike_marker`
@@ -489,6 +491,50 @@ combinations of `breakout_momentum` / `pullback_momentum` around 1).
   47) + the 57 H1 circles; confluence 185 (88 / 97) + 57. A circle around a sub dot: counter 1 (3755), confluence 7
   (2735, 3499, 3587, 3755, 4179, 4183, 4195). No candle carries both a buy and a sell mark. A zoomed look that keeps
   the volume panel: `plans/qa_chart_edits_inputs/zoom_png_volume.py` (`zoom_png.py` flattens it).
+
+### 14) The chart control bar (H1 + the M15 charts; item 5's final part, 2026-10-27)
+
+The user's ask (2026-10-27): "1) adding a toggle to hide parent (1H) chart overlay elements, and 2) adding an ability
+to zoom into certain parts of the chart via a) a +/- switch or tool and b) allowing user to input an idx for the chart
+to zoom into". Design rounds 1–2, the prototype and the plan: `plans/qa_chart_edits_inputs/
+user_spec_20261027_parent_toggle_and_zoom.md`. A bar of HTML controls above each chart's title — HTML only (the PNG is
+unchanged), one script `charting/chart_controls.js`, appended after the volume zoom JS by
+`export_plotly._inject_chart_controls_js` with its config `_chart_controls_cfg` (both exporters; with or without the
+volume panel):
+`[Parent (1H): shown | hidden]` (M15 charts only) `|` `−` `+` `|` `Box zoom` `Pan` `|` `idx [ ]` `[15M | 1H]` (M15
+charts only) `Go`.
+- **Parent (1H)** — an on-chart button (the user's round 1; PART4 §16.4's legend group was not built) that hides /
+  shows every element `_render_h1_overlay` draws: the H1 swing + PB→BOS lines, CTS / BOS / PB dots, "bo" and
+  pb / pr / rv labels, KL zones (fills, outlines, confirm lines, hover lines), POI zones, wave-candle lines + their
+  hover hitboxes, the Prev BOS line — 60 traces + 40 shapes on each M15 chart of the reference window. They carry
+  `legendgroup = "parent_overlay"` (`export_m15_chart.PARENT_OVERLAY_GROUP`, set by `_tag_parent_overlay` on whatever
+  that call drew; no legend entry shows it). NOT covered (the user: "All except both"): the H1 zone-proximity trigger
+  markers (§12 — they keep their own legend entry) and the H1 WVMI LP circles (§13). Shown on load.
+- **− / +** — the TIME axis only: double / halve the visible candles about the centre (at least
+  `chart.controls.min_candles` 10). **The wheel** over the plot area does the same about the cursor
+  (`wheel_step` 1.2 per notch; outside the plot area the page scrolls). Plotly's own toolbar +/− (both axes about
+  the centre, no re-fit) stays as it was.
+- **Box zoom | Pan** — plotly's `dragmode`, the active one dark. Pan moves the time axis only (`yaxis.fixedrange` while
+  panning — the toolbar's Pan icon too; the switch tracks it) and keeps the window's candle count: plotly pans by
+  CLOCK time, which across a rangebreak (weekend / holiday) shrank the window or stuck it, so on release the window is
+  re-set to the same candles shifted by the candles dragged across (a small snap is visible at the release after a
+  drag over a gap). Box zoom is plotly's (a thin horizontal box zooms the time axis only).
+- **The price re-fit** — after every time-only change (− / +, the wheel, an idx jump, a pan's release, an x-only box,
+  a drag on the time axis labels) the price axis = the visible candles' low..high + `price_pad` 6 % each side. A box
+  zoom that sets a price range keeps it. The volume panel re-fits as before (§9).
+- **The idx box** — an idx of the chart's TF, or on an M15 chart the H1 idx (`1H` in the selector — the candle hover's
+  `idx_1H`, its hour's M15 candles): Go / Enter centres the chart on it with `idx_half_window` 48 candles either side
+  (97 visible, on every chart; H1 was 24 in the first prototype — "too zoomed in", round 2) and highlights the candle(s)
+  with a blue band (`idx_mark_color`) that stays until the next jump; Go on an EMPTY box clears it (round 2). An idx
+  outside the data shows the nearest candle with the note `no <TF> candle at idx <v> - showing idx <n>`; a non-number:
+  `not an idx: <text>`.
+- **The candle table** — `_chart_controls_cfg` ships `[idx, time (UTC wall clock), low, high(, idx_1H)]` for every
+  DRAWN candle (the `idx_range` slice of a zoomed export) in time order — from the frame, not the plotly traces (the
+  imbalance candles are separate candlestick traces). The reference window: H1 1058 candles (0..1057), each M15 chart
+  4228 (0..4227, idx_1H 0..1056).
+- Checked headless (choreographer, kaleido's driver): `plans/qa_chart_edits_inputs/proto_headless_check.py CHART_HTML
+  SHOTS STEPS` drives the bar and prints the visible idx span, the axes, the parent counts, the highlight and the note
+  per step; `controls_landing_check.py` = the landing's figure / CSV check.
 
 ---
 

@@ -2541,6 +2541,12 @@ Recursion rule (relevant only at depth 2+): each chart overlays only its
 
 ### 16.4 Toggle for parent overlay
 
+> **BUILT DIFFERENTLY 2026-10-27 (item 5's final part, the user's round 1):** an on-chart **button**
+> `Parent (1H): shown | hidden` in the chart control bar, not a legend entry; it covers every element
+> `_render_h1_overlay` draws (`legendgroup = "parent_overlay"`, no legend entry) but NOT the H1 zone-proximity
+> trigger markers (their own legend entry) nor the H1 WVMI LP circles — the user: "All except both". Default:
+> shown. Canonical: CHARTING_SPEC §14. The plan below is kept as written.
+
 A single legend group titled `Parent (<parent_path_id>)` contains every
 parent overlay element. Plotly's native legend-group toggle controls all
 of them at once. Default: ON.

@@ -139,7 +139,8 @@ First, I want to revisit the cycle-0 carve-out that we discussed recently. After
    tiebreak rules, Step 3 the ranking rules; Step 4 the lower-TF fallback DEFERRED — D.2 "Step 4 of IC
    identification"); the decisions behind it: PLAN_H / K / L / O / P and `engine_v2/plans/qa_ic_crossfib_inputs/`.
    Each change = its own plan, prediction and `/compare` (as PLAN_O / PLAN_P).
-5. **Chart updates & edits** — NEXT, the very next session (the user, 2026-10-21; the user brings the list). Chart
+5. ~~**Chart updates & edits**~~ — **DONE 2026-10-27** (its edits + the final part, the control bar — below). Was
+   NEXT, the very next session (the user, 2026-10-21; the user brings the list). Chart
    items already on file — background only, none in scope unless the user names it: §G "Overall chart revamp &
    improvements" ((1) the fib hover masks candle hovers, (2) the proximity markers' `zone_confirmed_idx` means two
    things), §G "Uniform 3-tier chart opacity", §G the stepped "current proximity reference" line on the H1 chart
@@ -202,13 +203,21 @@ First, I want to revisit the cycle-0 carve-out that we discussed recently. After
    hover = the accepted drafts, the H1 circle's M15 copy `TF=1H>>15M` — the user, round 12; the volume axis 1.4 × the
    bars' max; canonical CHARTING_SPEC §13); the user's look: "the positioning looks good", the circles "a bit
    smaller" (11 → 9 → 7 → 8, "let's go with 8 as the final value"). **The second edit, "WVMI back on the chart",
-   is COMPLETE.** **PAUSED 2026-10-27 for the cycle-0 carve-out revisit (5b below — DONE 2026-10-27); item 5's FINAL part
-   is NEXT (the next session — the user: "The final part we can do in the next session").** Item 5's FINAL
-   part, after it (the user 2026-10-27; "We can discuss in details those things when we get to them"): **(1) a toggle to
-   hide the parent (1H) overlay elements** on the M15 charts — background: PART4 §16.4 planned one legend group
-   `Parent (<parent_path_id>)` toggling every parent overlay element (default ON), never built: no H1-overlay trace
-   carries a `legendgroup` (only the M15 fibs' `m15_fib`, grep 2026-10-27); **(2) chart zoom** — (a) a +/- switch or
-   tool, (b) an idx input the chart zooms to. Then item 6.
+   is COMPLETE.** Paused 2026-10-27 for the cycle-0 carve-out revisit (5b below — DONE 2026-10-27). **Item 5's FINAL
+   part — DONE 2026-10-27, the chart control bar** (the user's ask: "1) adding a toggle to hide parent (1H) chart
+   overlay elements, and 2) adding an ability to zoom into certain parts of the chart via a) a +/- switch or tool and
+   b) allowing user to input an idx for the chart to zoom into"): HTML controls above each chart's title (the PNGs
+   unchanged) — a **Parent (1H)** button on the M15 charts hiding / showing everything `_render_h1_overlay` draws (60
+   traces + 40 shapes per M15 chart, `legendgroup = "parent_overlay"`; NOT the H1 trigger markers or the H1 WVMI
+   circles — the user, "All except both"; PART4 §16.4's legend group built as this button instead); time-only **− / +**
+   and the wheel, with a price re-fit; a **Box zoom | Pan** switch (pan keeps the window's candle count across
+   rangebreaks); an **idx box** (+ a 15M / 1H selector on the M15 charts) centring 48 candles either side with a blue
+   highlight that stays until the next jump (Go on an empty box clears it — the user, round 2). = the prediction
+   (figure-only: 30 / 30 CSVs byte-equal, the H1 figure equal, each M15 chart's 60 traces + 40 shapes differ only by
+   that `legendgroup`, + the control script); the user's look: "charts look good, go ahead with the commit flow".
+   Canonical: CHARTING_SPEC §14; every round verbatim + the measurements:
+   `engine_v2/plans/qa_chart_edits_inputs/user_spec_20261027_parent_toggle_and_zoom.md`. **Item 5 is COMPLETE — NEXT:
+   item 6.**
 5b. ~~**Revisit the cycle-0 carve-out (no sd-proximity CTS confirmation on any cycle 0)**~~ — **DONE 2026-10-27**
    (PLAN_T, `engine_v2/plans/PLAN_T_probe_parity_and_cycle0_carveout.md`): the carve-out stays on the main sid 0 and
    on the sub the first_confluence of the main sid 0 cycle 0 creates (+ that trigger's probe), dropped on every other
@@ -229,7 +238,7 @@ First, I want to revisit the cycle-0 carve-out that we discussed recently. After
    all confirm by a pullback pattern. Case: confluence sub 7 cycle 0 (a 57-pip gap) sat at its POI from 4071 and
    confirmed only at 4157. Detail + facts: `engine_v2/plans/qa_chart_edits_inputs/user_spec_20261024_wvmi_on_chart.md`
    rounds 6–7 ("Measured for round 7 — facts for the carve-out revisit").
-6. **Zone size adjustments** — D.1 item 3 below (the user's spec).
+6. **Zone size adjustments** — **NEXT** (item 5 DONE 2026-10-27) — D.1 item 3 below (the user's spec).
 
 **D.1 — Ordered (the heavy items):**
 1. **One POI per cycle** (redefine the IC & POI zone logic) — B landed; its chart debugging PAUSED for item 2 (user

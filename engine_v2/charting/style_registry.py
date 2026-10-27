@@ -216,6 +216,16 @@ STYLE = {
         "mirror": True,                  # draw full rectangle (top/right included)
     },
 
+    # The control bar above every chart (CHARTING_SPEC §14 — item 5's final part, the user's look 2026-10-27):
+    # the Parent (1H) button (M15 charts), - / + and the wheel (time axis only), Box zoom | Pan, the idx box.
+    "chart.controls": {
+        "idx_half_window": 48,           # an idx jump shows the candle +/- this many candles (97 on every chart)
+        "price_pad": 0.06,               # the price re-fit: the visible candles' low..high + this fraction each side
+        "min_candles": 10,               # + / the wheel stop zooming in at this many visible candles
+        "wheel_step": 1.2,               # one wheel notch (deltaY 100) zooms by this factor, about the cursor
+        "idx_mark_color": "rgba(30,120,255,0.18)",   # the idx highlight band (stays until the next jump)
+    },
+
     # -----------------------------
     # Week 7: Prev BOS Line (after reversal)
     # -----------------------------

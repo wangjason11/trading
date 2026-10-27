@@ -558,6 +558,22 @@ more point").
 never re-derived from one lens's records — those are per-lens instances with their own ends; a lens record's
 `end_idx` equals the sub's end only on the lens that ended it.
 
+## Chart JS: Plotly Replaces `_fullLayout.xaxis`, and Pans by Clock Time Across Rangebreaks (2026-10-27)
+
+Two traps met building the control bar (`charting/chart_controls.js`, CHARTING_SPEC §14), both in its prototype:
+
+- **`gd._fullLayout.xaxis` is a NEW object after a full relayout** (e.g. a `shapes` update, which the idx highlight
+  does). A script that kept a reference to the axis read the old one's stale range: `+` / `-` / the wheel / the price
+  re-fit all worked from the initial view. Rule: look the axis up at each use (the script's `X()`), never cache it.
+- **Pan moves the axis by clock time, not by candles.** On a chart with rangebreaks (weekends, holidays) a drag across
+  a gap shrank the window (97 → 82 candles) or stuck it at the Christmas break. The fix: on release, re-set the window
+  in CANDLE space — the same candle count, shifted by the candles dragged across (measured: H1 idx 300 252..348 →
+  228..324 → back to 252..348; Christmas 603..699 → 579..675 → back).
+
+Also: the imbalance candles are separate candlestick traces (`imbalance:bullish` / `imbalance:bearish`), so a script
+reading the candles from the `OHLC` trace alone misses them (H1 idx 651 is one) — the bar ships its own candle table
+from the frame (`export_plotly._chart_controls_cfg`).
+
 ## Plotly Hover on Vertical Lines Requires Multiple Data Points
 
 **Problem:** `go.Scatter` with `mode="lines"` only triggers hover near actual data points, not at intermediate positions along the line segment. A vertical line with only 2 points (top and bottom) only hovers when the cursor is at the very top or bottom.
