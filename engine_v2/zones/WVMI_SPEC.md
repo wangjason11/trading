@@ -327,6 +327,50 @@ proximity candle itself on 2 (H1 sid 1 cycle 2; the collapsed confluence sub 1 c
 
 ---
 
+## Per-LP rows (`WVMIRecord.lp_rows`, `*_wvmi_lps.csv`)
+
+Every LP a record has had is kept — one row per temporary LP and the locked one, one dot each on the chart
+("WVMI back on the chart" step 4, 2026-10-26; the user's rounds 3 / 8 / 10 / 11 —
+`plans/qa_chart_edits_inputs/user_spec_20261024_wvmi_on_chart.md`). A row (`common/types.WVMILPRow`): `lp_idx`,
+`as_of_idx` (the candle it became the LP: its own, or the CTS_CONFIRMED moment for a first LP picked from earlier
+candles — "Temporary LP Selection" 2 —, or the lock for a swapped-in locked LP), `lp_status` / `lp_status_reason` /
+`lp_status_idx` (what / why / when — the hover joins them as `lp_status=<status> (<reason> at <idx>)`), and
+`pullback_momentum` with THAT LP (`_lp_pullback_momentum`: LP_vol × LP_weight / FP_vol, the record's formula). The
+tracker builds them (`WVMITracker._set_lp_rows`) from the record's furthest-close sequence on every create /
+re-scan / lock, so the last row is always the record's `lp_idx` / `pullback_momentum`:
+
+| `lp_status` | `lp_status_reason` | `lp_status_idx` | Which row |
+|---|---|---|---|
+| `temporary` | `replaced by a further close` | the next LP's as-of candle | every LP but the last |
+| `temporary` | `replaced by the locked LP` | the lock (BOS_{n+1}'s moment) | the last temporary LP when the locked LP is another candle (the `[wvmi] WARNING` case) |
+| `locked` | `cycle <N+1>'s BOS confirmed` | the lock | the locked LP — the last temporary LP itself when they agree (no extra row), else its own row as of the lock; with no LP before the lock, its only row |
+| `open` | `still moving at the data end` | None | the last LP of a cycle with no end |
+| `unlocked` | `cycle ended by a reversal` / `sub replaced` / `sub ended` | the cycle's lifecycle end | the last LP of a cycle that ended without a lock — its `compute_cycle_lifecycle` `end_reason` (`reversal` / `same_dir_replacement` / `parent_end`; `_compute_wvmi_records` passes it as `cycle_end_reason_by_key`; any other reason prints raw, `cycle ended (<reason>)`) |
+
+A lock that keeps the temporary LP (BOS_{n+1} has no last wave candle, or it lies outside the frame — "3. Locked")
+turns the last temporary row `locked`. A record without an LP has no rows. On a lens df the mirror shifts each row's
+`lp_idx` / `as_of_idx` / `lp_status_idx` by `slice_begin` with the record's FB / LB / FP / LP.
+
+**The CSV** (`debug/export_wvmi.export_wvmi_lps`): `*_wvmi_lps.csv` (H1) and `*_M15_{counter,confluence}_wvmi_lps.csv`,
+the rows of the records of `_wvmi.csv` in its order, then LP order. Columns (round 8): `structure_path_id`,
+`parent_sid`, `parent_cycle_id`, `sub_id`, `bos_structure_id`, `bos_cycle_id` (named as in `_wvmi.csv`),
+`relative_dir`, `zone_side`, `lp_idx`, `as_of_idx`, `lp_status`, `lp_status_reason`, `lp_status_idx`,
+`breakout_momentum` (the record's), `pullback_momentum` (the row's) — full precision, integer columns nullable `Int64`.
+- **One row per dot: a COLLAPSED record (`cycle_collapsed`) gets none** (the user, round 10: "for now collapsed records
+  don't need to get per-LP rows. I may change my mind later" — register §G); it keeps its rows on the record and its
+  `_wvmi.csv` row. `cycle_collapsed` is set after the tracker, so the export filters.
+- **`relative_dir`** (M15) = the sub's at the LP candle — the §17.3 step function over THIS lens's `SidRecord`
+  (`multitf/types.sub_relative_dir_at`, the dot hover's reader); before the sub's `start_idx` it is
+  `NA (before start_idx)` (the user, round 11: a sub cycle can confirm its CTS while the sub is still forming —
+  reference window sub 8 cycle 0, LPs 4102 / 4129 before its start 4143). Empty on an H1 row. A sub row whose
+  `SidRecord` is not on the lens fails loudly.
+
+Reference window (2026-10-26, S_lp_furthest's records): H1 57 rows, counter 74, confluence 185 — `temporary` 54 / 68 /
+171, `locked` 1 / 3 / 7, `unlocked` 1 / 3 / 7, `open` 1 / 0 / 0; no `replaced by the locked LP` row (the one record
+whose locked LP differs is collapsed).
+
+---
+
 ## Guard Rails
 
 | Condition | Behavior |
@@ -368,10 +412,11 @@ wave_candles → Fib tracking → POI zones → WVMI:
 # Both (_compute_wvmi_records):
   life = compute_cycle_lifecycle(events, reversals, floor, cap, reason)
      cycle_end_by_key = its ends                            [temp-LP bound: end - 1]
+     cycle_end_reason_by_key = its end_reasons              [an unlocked record's last per-LP row]
   frame = df.iloc[:cap + 1] if cap is not None else df     [no read past a sub's end]
-  1. for CTS_CONFIRMED events → on_cts_confirmed(frame)     [create; meta {}]
-  2. for BOS_CONFIRMED events → on_bos_confirmed(frame)     [lock; an LP outside the frame → the temp LP]
-  3. update_temporary_lp(frame)                              [shift]
+  1. for CTS_CONFIRMED events → on_cts_confirmed(frame)     [create; meta {}; the per-LP rows]
+  2. for BOS_CONFIRMED events → on_bos_confirmed(frame)     [lock; an LP outside the frame → the temp LP; rows rebuilt]
+  3. update_temporary_lp(frame)                              [shift; rows rebuilt]
   4. rec.cycle_collapsed = end is not None and start >= end [the cycle's window is empty]
 # Main only: _stamp_main_wvmi_attribution(records, the trigger lists) [each cycle's first sd trigger, or None]
   → main: df.attrs["wvmi"]; sub: LowerTFResult.wvmi_records (slice-local)
@@ -380,7 +425,8 @@ wave_candles → Fib tracking → POI zones → WVMI:
 ```
 # Sub records onto the lens dfs (_run_multi_tf_dual)
 step 5: render_sub_projection → mirror step 8: one deep copy per lens the sub is on,
-        FB/LB/FP/LP + slice_begin, field + meta structure_path_id = that lens's path
+        FB/LB/FP/LP + each per-LP row's lp_idx / as_of_idx / lp_status_idx + slice_begin,
+        field + meta structure_path_id = that lens's path
 step 6: _stamp_sub_wvmi_trigger_meta(results_by_lens, _wvmi_trigger_streams_by_lens(...))
         per lens: the first LOH-mapped WVMI-class trigger in [start_idx, m15_end_idx]
         → meta = {triggered_by_event_idx | None, triggered_by_event_type | None,
@@ -407,11 +453,13 @@ step 6: _stamp_sub_wvmi_trigger_meta(results_by_lens, _wvmi_trigger_streams_by_l
 | `lp_locked` | bool | Whether LP is finalized |
 | `locked_by_cycle_id` | Optional[int] | BOS cycle that locked this record |
 | `cycle_collapsed` | bool | The record's CYCLE has an empty lifecycle window (`start >= end` in `compute_cycle_lifecycle`, e.g. a cycle confirmed before a sub's `start_idx`): exported (the column right after `lp_locked`), inert — like a collapsed cycle's zones (`_zone_render.collapsed_cycles`). A flag only, no lifecycle fields (see "Lifecycle — REMOVED"). Main and subs (Plan G G2). A record created ON its cycle's end candle (CTS_CONFIRMED moment == the cap, kept by the inclusive knowable-at clip) is not flagged — documented edge |
+| `lp_rows` | List[WVMILPRow] | Every LP the record has had, in order — the last = `lp_idx` ("Per-LP rows"); empty without an LP (2026-10-26) |
 
 **CSV export** (`debug/export_wvmi.py`, one `_wvmi.csv` per entity / lens): the fields above + the flattened attribution
 (`parent_sid`, `parent_cycle_id`, `sub_id`, `started_by`, `triggered_by_event_idx` / `_type`, `parent_path_id`) + the
 full `meta` text; `cycle_collapsed` right after `lp_locked`. Every integer column is written as pandas nullable
 `Int64` (`_INT_COLUMNS`; the user's decision 2026-09-30): an int column holding a None would otherwise print every
 int as a float (`locked_by_cycle_id` `1.0`, `triggered_by_event_idx` `710.0`); a None is an empty cell. The trigger
-keys are read strictly (`meta[...]`).
+keys are read strictly (`meta[...]`). The per-LP rows (`lp_rows`) go to their own CSV, `*_wvmi_lps.csv` — "Per-LP
+rows" above.
 

@@ -32,7 +32,7 @@ from __future__ import annotations
 import ast
 from collections import Counter
 from copy import deepcopy
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
@@ -46,6 +46,7 @@ from engine_v2.zones.kl_zones_v1 import bounds_step_idx_key
 from engine_v2.patterns import institutional_pattern
 
 from engine_v2.multitf import entity_df_mutation as edm
+from engine_v2.common.types import WVMILPRow
 from engine_v2.multitf.types import LowerTFResult
 from engine_v2.structure.market_structure import StructureEvent
 from engine_v2.tests.test_render_sub_projection import (  # noqa: F401 (fixtures)
@@ -493,6 +494,7 @@ class _Wvmi:
     meta: dict
     structure_path_id: Optional[str] = None
     cycle_collapsed: bool = False
+    lp_rows: list = field(default_factory=list)
 
 
 _V = 7      # every slice-local index value
@@ -527,7 +529,14 @@ def _synthetic_result() -> LowerTFResult:
                       _Wave(first_wave_candle_idx=None, last_wave_candle_idx=None, meta={})],
         wvmi_records=[_Wvmi(fb_idx=_V, lb_idx=_V + 1, fp_idx=None, lp_idx=_V + 2, structure_path_id="src",
                             cycle_collapsed=True,
-                            meta={"triggered_by_event_idx": _V})],   # parent (H1) coords
+                            meta={"triggered_by_event_idx": _V},     # parent (H1) coords
+                            # the per-LP rows (step 4): each idx field its own value; an open row's status idx None
+                            lp_rows=[WVMILPRow(lp_idx=_V, as_of_idx=_V + 1, lp_status="temporary",
+                                               lp_status_reason="replaced by a further close", lp_status_idx=_V + 2,
+                                               pullback_momentum=0.5),
+                                     WVMILPRow(lp_idx=_V + 2, as_of_idx=_V + 3, lp_status="open",
+                                               lp_status_reason="still moving at the data end", lp_status_idx=None,
+                                               pullback_momentum=None)])],
         prev_bos_lines=[{"start_idx": _V, "end_idx": _V + 1, "price": 1.0}, "opaque"],
         status="finalized",
         meta={"slice_begin": _SB, "sub_id": 3, "timeframe": "M15", "parent_tf": "H1"},
@@ -568,7 +577,8 @@ def test_mirror_shifts_every_site_exactly_once():
     """Every shift site of `mirror_lower_tf_result_to_entity_df` on a synthetic
     result with one element of each kind: the event idx, POI `ic_idx`, fib
     `bos_idx` / `cts_idx` / `start_idx` / `end_idx` / `cts_history`, wave-candle
-    `first_/last_wave_candle_idx`, WVMI `fb/lb/fp/lp_idx`, `prev_bos_lines`
+    `first_/last_wave_candle_idx`, WVMI `fb/lb/fp/lp_idx` + each per-LP row's
+    `lp_idx` / `as_of_idx` / `lp_status_idx` (step 4, 2026-10-26), `prev_bos_lines`
     `start_idx` / `end_idx`, each list at its own site, the nested lists, an
     unlisted int key untouched — mirrored into TWO lens dfs (each shifted once;
     the source untouched). The mutation lens found the fib fields (the M15 fib
@@ -586,10 +596,14 @@ def test_mirror_shifts_every_site_exactly_once():
         _check_mirrored(d)
         (w,) = d.attrs["wvmi"]
         assert (w.fb_idx, w.lb_idx, w.fp_idx, w.lp_idx) == (_V + _SB, _V + 1 + _SB, None, _V + 2 + _SB)
+        assert [(r.lp_idx, r.as_of_idx, r.lp_status_idx) for r in w.lp_rows] == [
+            (_V + _SB, _V + 1 + _SB, _V + 2 + _SB), (_V + 2 + _SB, _V + 3 + _SB, None)]
+        assert [(r.lp_status, r.pullback_momentum) for r in w.lp_rows] == [("temporary", 0.5), ("open", None)]
         assert w.meta["triggered_by_event_idx"] == _V          # parent coords: never shifted
         assert (w.structure_path_id, w.meta["structure_path_id"], w.cycle_collapsed) == (f"p{i}", f"p{i}", True)
     (w0,), (w1,) = dfs[0].attrs["wvmi"], dfs[1].attrs["wvmi"]
     assert w0 is not w1 and w0.meta is not w1.meta and w0 is not res.wvmi_records[0]
+    assert w0.lp_rows is not w1.lp_rows and w0.lp_rows[0] is not w1.lp_rows[0]
     assert res.events[0].idx == src.events[0].idx and res.events[0].meta == src.events[0].meta
     for a in ("kl_zones", "poi_zones", "fib_states", "wave_candles", "wvmi_records"):
         assert [x.meta for x in getattr(res, a)] == [x.meta for x in getattr(src, a)], a

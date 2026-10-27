@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 import pandas as pd
 
@@ -77,6 +77,31 @@ class SidRecord:
     start_idx: Optional[int] = None          # subs only — lifecycle start (real-time)
     lenses: Tuple[str, ...] = ()             # subs only — charts this sub draws on
     relative_dir_segments: Tuple[Tuple[int, str], ...] = ()   # subs only — §17.3 step function
+
+
+#: A sub's `relative_dir` before its `start_idx` — no record is live yet (the
+#: user's spec 2026-10-22: the dot hover's `NA (before start_idx)`; the per-LP
+#: WVMI CSV's too, the user 2026-10-26).
+RELATIVE_DIR_BEFORE_START = "NA (before start_idx)"
+
+
+def sub_relative_dir_at(idx: int, segments: Sequence[Tuple[int, str]], start_idx: Optional[int],
+                        sub_id: int) -> str:
+    """A sub's `relative_dir` at candle `idx` — the §17.3 step function
+    (`SidRecord.relative_dir_segments`), the ONE reader (the M15 chart's dot hover,
+    `export_wvmi_lps`). Before the sub's `start_idx` no record is live:
+    `RELATIVE_DIR_BEFORE_START` — exactly the candles that hover `phase=forming`
+    (`_make_sub_phase_fns.is_live`). A live candle without a segment fails loudly."""
+    if start_idx is None or int(idx) < int(start_idx):
+        return RELATIVE_DIR_BEFORE_START
+    cur = None
+    for from_idx, rd in segments:
+        if int(from_idx) <= int(idx):
+            cur = rd
+        else:
+            break
+    assert cur is not None, f"[relative_dir] sub {sub_id}: no relative_dir at {idx} >= start_idx {start_idx}"
+    return cur
 
 
 @dataclass(frozen=True)

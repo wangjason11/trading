@@ -23,12 +23,11 @@ from engine_v2.charting._zone_render import (
     main_dot_structure_lines,
 )
 from engine_v2.charting.export_m15_chart import (
-    RELATIVE_DIR_BEFORE_START,
     _render_m15_dots_layer,
     _sub_dot_hover_lines,
-    _sub_relative_dir_at,
 )
-from engine_v2.multitf.types import SidRecord
+from engine_v2.multitf.types import RELATIVE_DIR_BEFORE_START, SidRecord
+from engine_v2.multitf.types import sub_relative_dir_at as _sub_relative_dir_at
 from engine_v2.structure.market_structure import StructureEvent
 from engine_v2.tests._event_factory import make_bos_confirmed, make_cts_established
 

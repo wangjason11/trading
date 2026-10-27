@@ -11,7 +11,7 @@ from typing import Dict, List, Optional, Tuple
 
 import pandas as pd
 
-from engine_v2.common.types import KLZone, WVMIRecord
+from engine_v2.common.types import KLZone, WVMILPRow, WVMIRecord
 from engine_v2.structure import event_fields as ef
 from engine_v2.structure.market_structure import StructureEvent
 from engine_v2.zones.poi_zones import POIZone
@@ -50,6 +50,24 @@ def _compute_last_wave_weight(df: pd.DataFrame, idx: int, wave_dir: int) -> floa
         return 0.5
 
     return 0.7
+
+
+def _lp_pullback_momentum(df: pd.DataFrame, lp_idx: int, pb_wave_dir: int,
+                          fp_volume: Optional[float]) -> Optional[float]:
+    """`pullback_momentum` with `lp_idx` as the LP — `LP_vol x LP_weight / FP_vol`, the record's formula — for a
+    per-LP row; None when the frame cannot read the candle or there is no FP volume."""
+    if lp_idx not in df.index or not fp_volume:
+        return None
+    return (float(df.loc[lp_idx, "volume"]) * _compute_last_wave_weight(df, lp_idx, pb_wave_dir)) / fp_volume
+
+
+# An unlocked record's last row: why its cycle ended (the lifecycle table's `end_reason` — a sub's cap reason is
+# its `PooledStructure.end_reason`), in the user's words (round 3 / 8, 2026-10-26). Any other reason prints raw.
+_UNLOCKED_REASON = {
+    "reversal": "cycle ended by a reversal",
+    "same_dir_replacement": "sub replaced",
+    "parent_end": "sub ended",
+}
 
 
 def _temporary_lp_sequence(
@@ -188,6 +206,9 @@ class WVMITracker:
        candle closing further in the pullback direction (`_temporary_lp_sequence`)
     3. Locked at BOS_n+1 confirmation — LP finalizes from BOS_n+1 wave candles
 
+    Every LP a record has had is kept as a per-LP row (`WVMIRecord.lp_rows`,
+    `_set_lp_rows`; "WVMI back on the chart" step 4, 2026-10-26).
+
     One tracker per entity (Part 4 §9). `structure_path_id` is stamped on
     every record this tracker emits.
     """
@@ -196,6 +217,7 @@ class WVMITracker:
         self,
         structure_path_id: Optional[str] = None,
         cycle_end_by_key: Optional[Dict[tuple, int]] = None,
+        cycle_end_reason_by_key: Optional[Dict[tuple, str]] = None,
     ):
         self._records: Dict[tuple, WVMIRecord] = {}  # key: (sid, cycle_id)
         self._structure_path_id = structure_path_id
@@ -203,9 +225,15 @@ class WVMITracker:
         # half-open `[start, end)`): the temp-LP search stops at `end - 1`. A key
         # without an end (an open cycle) searches to the data end.
         self._cycle_end_by_key: Dict[tuple, int] = dict(cycle_end_by_key or {})
+        # (sid, cycle_id) -> that end's `end_reason` (the same table): an unlocked
+        # record's last per-LP row says why its cycle ended.
+        self._cycle_end_reason_by_key: Dict[tuple, str] = dict(cycle_end_reason_by_key or {})
         # (sid, cycle_id) -> the record's CTS_CONFIRMED: its moment, method and
         # pattern pick the first temporary LP (`_temporary_lp_sequence`).
         self._cts_event_by_key: Dict[tuple, StructureEvent] = {}
+        # (sid, cycle_id) -> the record's latest temporary LP sequence (the lock
+        # rebuilds its per-LP rows from it).
+        self._lp_seq_by_key: Dict[tuple, List[Tuple[int, int]]] = {}
 
     def _lp_search_end(self, key: tuple, df: pd.DataFrame) -> int:
         """Last candle the temp-LP search may pick: the cycle's last live candle
@@ -214,6 +242,53 @@ class WVMITracker:
         data_end = len(df) - 1
         end = self._cycle_end_by_key.get(key)
         return data_end if end is None else min(data_end, int(end) - 1)
+
+    def _set_lp_rows(
+        self,
+        rec: WVMIRecord,
+        key: tuple,
+        df: pd.DataFrame,
+        lp_seq: List[Tuple[int, int]],
+        lock: Optional[Tuple[int, Optional[int]]] = None,
+    ) -> None:
+        """The record's per-LP rows (WVMI_SPEC "Per-LP rows"), one per LP of `lp_seq`
+        in order: each but the last is `temporary`, replaced by a further close at
+        the next one's as-of candle. The last, with `lock` = (the BOS_{n+1} moment,
+        the locked LP — None when the lock keeps the temporary LP): `locked`; when
+        the locked LP is another candle, `temporary` (replaced by the locked LP)
+        and then a `locked` row for it as of the lock. Without a lock: `open` (the
+        cycle has no end) or `unlocked` at the cycle's end. Rebuilt on every
+        create / re-scan / lock, so the final rows match the final record."""
+        pb_wave_dir = -1 if rec.zone_side == "buy" else 1
+
+        def row(as_of_idx: int, lp_idx: int, status: str, reason: str, status_idx: Optional[int]) -> WVMILPRow:
+            return WVMILPRow(
+                lp_idx=lp_idx, as_of_idx=as_of_idx, lp_status=status, lp_status_reason=reason,
+                lp_status_idx=status_idx,
+                pullback_momentum=_lp_pullback_momentum(df, lp_idx, pb_wave_dir, rec.fp_volume),
+            )
+
+        rows = [row(as_of, lp, "temporary", "replaced by a further close", lp_seq[k + 1][0])
+                for k, (as_of, lp) in enumerate(lp_seq[:-1])]
+        last = lp_seq[-1] if lp_seq else None
+        if lock is not None:
+            lock_idx, lock_lp = lock
+            locked_reason = f"cycle {rec.locked_by_cycle_id}'s BOS confirmed"
+            if last is not None and lock_lp in (None, last[1]):
+                rows.append(row(*last, "locked", locked_reason, lock_idx))
+            else:
+                if last is not None:
+                    rows.append(row(*last, "temporary", "replaced by the locked LP", lock_idx))
+                if lock_lp is not None:
+                    rows.append(row(lock_idx, lock_lp, "locked", locked_reason, lock_idx))
+        elif last is not None:
+            end = self._cycle_end_by_key.get(key)
+            if end is None:
+                rows.append(row(*last, "open", "still moving at the data end", None))
+            else:
+                reason = self._cycle_end_reason_by_key.get(key)
+                rows.append(row(*last, "unlocked", _UNLOCKED_REASON.get(reason, f"cycle ended ({reason})"), int(end)))
+        rec.lp_rows = rows
 
     def on_cts_confirmed(
         self,
@@ -319,6 +394,8 @@ class WVMITracker:
         key = (sid, cycle_id)
         self._records[key] = record
         self._cts_event_by_key[key] = cts_event
+        self._lp_seq_by_key[key] = lp_seq
+        self._set_lp_rows(record, key, df, lp_seq)
         print(f"[wvmi] CREATED sid={sid} cycle={cycle_id}: bo_mom={breakout_momentum:.4f} pb_mom={pullback_momentum if pullback_momentum is not None else 'N/A'} lp_idx={lp_idx}")
         return record
 
@@ -339,6 +416,8 @@ class WVMITracker:
                 df, rec.fp_idx, pb_wave_dir, self._cts_event_by_key[key], self._lp_search_end(key, df),
             )
             new_lp_idx = lp_seq[-1][1] if lp_seq else None
+            self._lp_seq_by_key[key] = lp_seq
+            self._set_lp_rows(rec, key, df, lp_seq)
 
             if new_lp_idx == rec.lp_idx:
                 continue
@@ -418,6 +497,8 @@ class WVMITracker:
         rec.lp_locked = True
         rec.status = "locked"
         rec.locked_by_cycle_id = bos_cycle_id
+        swapped_lp = lp_idx if lp_idx is not None and lp_idx in df.index else None
+        self._set_lp_rows(rec, key, df, self._lp_seq_by_key[key], lock=(ef.event_moment(bos_event), swapped_lp))
         locked.append(rec)
         print(f"[wvmi] LOCKED sid={sid} cycle={prev_cycle_id}: pb_mom={rec.pullback_momentum if rec.pullback_momentum is not None else 'N/A'} lp_idx={rec.lp_idx} (by BOS cycle={bos_cycle_id})")
 

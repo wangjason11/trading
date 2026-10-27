@@ -775,7 +775,8 @@ TriggerRecords (`attrs["triggers"]`), one per line, in `(start_idx, seq)` order;
 `| zero_length`; none → `lens records: none`. `sub_window` = the real-time lifecycle `[start_idx, end_idx | open]`,
 `end_reason ∈ {reversal, same_dir_replacement, parent_end, open}`. `relative_dir` = the §17.3 step function
 (`SidRecord.relative_dir_segments`) at the dot's candle — `NA (before start_idx)` before the sub's start, exactly the
-`phase=forming` candles (`_sub_relative_dir_at`; a live candle without a segment fails loudly; `-` until 2026-10-22).
+`phase=forming` candles (`multitf/types.sub_relative_dir_at` — the one reader, shared with the per-LP WVMI CSV since
+2026-10-26; a live candle without a segment fails loudly; `-` until 2026-10-22).
 One builder for the sub lines, `_sub_dot_hover_lines`; the sub KL / POI hovers reuse its `first record:` line
 (`_sub_zone_id_lines`, since 2026-10-23 — §5 / §7 "Hover"), and so do the sub fib hover (§8) and the sub wave-candle
 hover (§10, with the `sub_window=` line too; both 2026-10-23). The M15 Prev BOS line hover still carries the older

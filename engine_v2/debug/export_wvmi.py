@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Iterable
+
 import pandas as pd
 
 from engine_v2.common.types import WVMIRecord
+from engine_v2.multitf.types import SidRecord, sub_relative_dir_at
 
 
 # Explicit column order so an empty export still emits a usable header.
@@ -101,5 +104,79 @@ def export_wvmi(records: list[WVMIRecord], path: str | Path) -> None:
 
     out = pd.DataFrame(rows, columns=_COLUMNS)
     for col in _INT_COLUMNS:
+        out[col] = out[col].astype("Int64")
+    out.to_csv(path, index=False)
+
+
+# The per-LP CSV ("WVMI back on the chart" step 4 — the user's round 8, 2026-10-26): the record keys named as in
+# `_wvmi.csv`, then the row. `relative_dir` = the sub's at the LP candle (M15; empty on an H1 row).
+_LP_COLUMNS = [
+    "structure_path_id",
+    "parent_sid",
+    "parent_cycle_id",
+    "sub_id",
+    "bos_structure_id",
+    "bos_cycle_id",
+    "relative_dir",
+    "zone_side",
+    "lp_idx",
+    "as_of_idx",
+    "lp_status",
+    "lp_status_reason",
+    "lp_status_idx",
+    "breakout_momentum",
+    "pullback_momentum",
+]
+
+_LP_INT_COLUMNS = (
+    "parent_sid", "parent_cycle_id", "sub_id", "bos_structure_id", "bos_cycle_id",
+    "lp_idx", "as_of_idx", "lp_status_idx",
+)
+
+
+def export_wvmi_lps(records: list[WVMIRecord], path: str | Path, sid_records: Iterable[SidRecord] = ()) -> None:
+    """Export the per-LP rows (`WVMIRecord.lp_rows`) to CSV — one row per dot: every
+    temporary LP and the locked one, in record order then LP order (WVMI_SPEC "Per-LP
+    rows"). A COLLAPSED record (`cycle_collapsed`) gets no rows (the user 2026-10-26:
+    "for now collapsed records don't need to get per-LP rows"; it keeps its `_wvmi.csv`
+    row). `relative_dir` on a sub row = `sub_relative_dir_at` at the LP candle over
+    that sub's `SidRecord` (THIS lens's `attrs["sids"]`) — `NA (before start_idx)`
+    before the sub is live (the user 2026-10-26); empty on an H1 row. Indices are
+    entity-df coords; integer columns nullable `Int64` (as `export_wvmi`)."""
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    sid_by_sub_id = {int(s.sub_id): s for s in sid_records if s.sub_id is not None}
+
+    rows = []
+    for r in records:
+        if r.cycle_collapsed:
+            continue
+        m = r.meta or {}
+        sub_id = m.get("sub_id")
+        sid_rec = sid_by_sub_id[int(sub_id)] if sub_id is not None else None
+        for lp in r.lp_rows:
+            rows.append({
+                "structure_path_id": r.structure_path_id,
+                "parent_sid": m.get("parent_sid"),
+                "parent_cycle_id": m.get("parent_cycle_id"),
+                "sub_id": sub_id,
+                "bos_structure_id": r.bos_structure_id,
+                "bos_cycle_id": r.bos_cycle_id,
+                "relative_dir": (
+                    sub_relative_dir_at(lp.lp_idx, sid_rec.relative_dir_segments, sid_rec.start_idx, int(sub_id))
+                    if sid_rec is not None else None
+                ),
+                "zone_side": r.zone_side,
+                "lp_idx": lp.lp_idx,
+                "as_of_idx": lp.as_of_idx,
+                "lp_status": lp.lp_status,
+                "lp_status_reason": lp.lp_status_reason,
+                "lp_status_idx": lp.lp_status_idx,
+                "breakout_momentum": r.breakout_momentum,
+                "pullback_momentum": lp.pullback_momentum,
+            })
+
+    out = pd.DataFrame(rows, columns=_LP_COLUMNS)
+    for col in _LP_INT_COLUMNS:
         out[col] = out[col].astype("Int64")
     out.to_csv(path, index=False)

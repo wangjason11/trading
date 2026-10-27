@@ -112,6 +112,7 @@ from engine_v2.charting.export_plotly import (
 )
 from engine_v2.multitf.registry import StructureRegistry
 from engine_v2.multitf.types import SidRecord
+from engine_v2.multitf.types import sub_relative_dir_at as _sub_relative_dir_at
 
 
 # ---------------------------------------------------------------------------
@@ -136,9 +137,9 @@ M15_CHART_DEFAULTS = {
     "range_candle_marker": False,
 }
 
-#: A sub dot's `relative_dir` before the sub's `start_idx` — no record is live yet
-#: (the user's spec 2026-10-22; `-` until then).
-RELATIVE_DIR_BEFORE_START = "NA (before start_idx)"
+#: A sub dot's `relative_dir` before the sub's `start_idx` (`RELATIVE_DIR_BEFORE_START`,
+#: the user's spec 2026-10-22) and the step-function reader `_sub_relative_dir_at`
+#: live in `multitf/types.py` since 2026-10-26 — shared with the per-LP WVMI CSV.
 
 
 # ---------------------------------------------------------------------------
@@ -281,24 +282,6 @@ def _sub_zone_id_lines(sub_id: int, cycle_id: int, first_record: str) -> str:
     """A sub KL / POI hover's identity lines (the user's spec 2026-10-23): `sub_id=<id> | cycle_id=<the sub's own
     cycle>` + the dot hover's `first record: lens | parent_sid | parent_cycle_id` line (`_sub_dot_hover_lines`)."""
     return f"sub_id={sub_id} | cycle_id={cycle_id}<br>{first_record}"
-
-
-def _sub_relative_dir_at(idx: int, segments: Sequence[Tuple[int, str]], start_idx: Optional[int],
-                         sub_id: int) -> str:
-    """A sub dot's `relative_dir` at `idx` — the §17.3 step function
-    (`SidRecord.relative_dir_segments`). Before the sub's `start_idx` no record is
-    live: `NA (before start_idx)` — exactly the candles that hover `phase=forming`
-    (`_make_sub_phase_fns.is_live`). A live candle without a segment fails loudly."""
-    if start_idx is None or int(idx) < int(start_idx):
-        return RELATIVE_DIR_BEFORE_START
-    cur = None
-    for from_idx, rd in segments:
-        if int(from_idx) <= int(idx):
-            cur = rd
-        else:
-            break
-    assert cur is not None, f"[m15 chart] sub {sub_id}: no relative_dir at {idx} >= start_idx {start_idx}"
-    return cur
 
 
 def _compute_forming_by_idx_dir(sid_records: Iterable[SidRecord]) -> dict:

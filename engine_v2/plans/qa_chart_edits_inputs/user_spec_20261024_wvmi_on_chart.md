@@ -693,6 +693,70 @@ Decided: `*_wvmi_lps.csv` = one row per dot — a collapsed record (`cycle_colla
 keeps its `_wvmi.csv` row). Parked for a possible revisit: register §G "Per-LP WVMI rows for COLLAPSED records".
 Step 4 in a new session.
 
+## Round 11 — the user's answer (2026-10-26, step 4's session, before the build)
+
+Put (measured on S_lp_furthest, `wvmi_asof.py` + scratchpad `step4_predict.py`): the per-LP rows re-measured =
+H1 57 / counter 74 / confluence 185 (the build note's numbers hold). 4 of them have their LP candle BEFORE their
+sub's `start_idx`: sub 8 cycle 0 on both lenses (buy; sub 8 `start_idx` 4143; its CTS confirmed at 4103 by the
+pattern 4102–4103 while the sub was forming) — LP 4102 as of 4103 (`temporary`, replaced by a further close at
+4129) and LP 4129 as of 4129 (`locked`, cycle 1's BOS confirmed at 4157); no `relative_dir` exists there (the §17.3
+step function starts at `start_idx`). Sub 8 c0's FB 4030 / LB 4082 / FP 4083 wave-candle lines are drawn before 4143
+too, and the BOS / CTS dot hover already says `relative_dir=NA (before start_idx)` on such candles. Options: (a) keep
+the rows, `relative_dir = NA (before start_idx)` (the dot hover's helper); (b) keep, an empty cell; (c) drop the
+pre-start rows (and their step-5 dots) → 57 / 72 / 183; (d) write the sub's first segment (`counter`).
+
+> (a) Keep, NA string (Recommended)
+
+Decided: a per-LP row whose LP candle precedes its sub's `start_idx` is kept; its `relative_dir` = `NA (before
+start_idx)` — the value the BOS / CTS dot hover gives (one helper for the CSV and the hovers: the chart's
+`_sub_relative_dir_at` moved to `multitf/types.sub_relative_dir_at` in step 4).
+
+## Step 4 — the per-LP rows + `*_wvmi_lps.csv` (2026-10-26)
+
+- **Design (from the code, `f44ad3e`):** a row type `common/types.WVMILPRow` (`lp_idx`, `as_of_idx`, `lp_status`,
+  `lp_status_reason`, `lp_status_idx`, `pullback_momentum`) and `WVMIRecord.lp_rows`. The tracker keeps each record's
+  latest `_temporary_lp_sequence` (`_lp_seq_by_key`) and rebuilds the rows (`WVMITracker._set_lp_rows`) on every create
+  / re-scan / lock — so the final rows match the final record whatever the call order: each LP but the last
+  `temporary` (`replaced by a further close` at the next LP's as-of candle); the last `locked` (`cycle <N+1>'s BOS
+  confirmed` at the BOS_{n+1} moment, `ef.event_moment`) — or, the locked LP another candle, `temporary` (`replaced by
+  the locked LP` at the lock) + a `locked` row for it as of the lock; without a lock `open` (`still moving at the data
+  end`, no idx) or `unlocked` at the cycle's lifecycle end with its `end_reason` in the user's words (`reversal` → `cycle
+  ended by a reversal`, `same_dir_replacement` → `sub replaced`, `parent_end` → `sub ended`; any other raw — the
+  proximity view's `proximity_view` cap, never exported). `_compute_wvmi_records` hands the tracker the lifecycle
+  table's `end_reason` too (`cycle_end_reason_by_key`). The row's momentum: `_lp_pullback_momentum` (the record's
+  formula, `LP_vol × LP_weight / FP_vol`). The sub mirror (step 8) shifts each row's three indices by `slice_begin`.
+  The export `debug/export_wvmi.export_wvmi_lps(records, path, sid_records=())` skips collapsed records (round 10) and
+  reads `relative_dir` at the LP candle from the lens's `attrs["sids"]` through ONE helper,
+  `multitf/types.sub_relative_dir_at` (moved from the M15 chart's `_sub_relative_dir_at`, which the dot hover keeps
+  using under its old name — round 11); a sub row whose `SidRecord` is missing fails loudly. `run_replay` writes the
+  three files beside each `_wvmi.csv`.
+- **Predicted (vs S_lp_furthest; `wvmi_asof.py` on `f44ad3e` + scratchpad `step4_predict.py` — each non-collapsed
+  record's `new_to_bound` sequence + its lock + its lifecycle end / reason, `relative_dir` from the save's
+  `_subs.csv`):** H1 57 rows, counter 74, confluence 185 (= the build note's numbers); `temporary` 54 / 68 / 171,
+  `locked` 1 / 3 / 7, `unlocked` 1 / 3 / 7 (H1 a reversal; counter 3 sub replaced; confluence 5 reversals + 2 sub
+  replaced), `open` 1 / 0 / 0 (H1 sid 1 c2); no `replaced by the locked LP` row (the one differing lock is collapsed);
+  `relative_dir` — counter 66 counter / 6 confluence / 2 NA, confluence 99 confluence / 84 counter / 2 NA (sub 8 c0,
+  round 11). The 27 existing CSVs byte-equal, the three charts unchanged, the log unchanged (skip grep 33).
+- **Measured (the run-mode replay, fetch gate PASS, 135.1 s wall — the suite ran beside it):** = the prediction in
+  every cell (scratchpad `step4_check.py`: row count, `lp_idx`, `as_of_idx`, status / reason / idx, `relative_dir`,
+  `zone_side`, `sub_id`, both momenta to 1e-12; each record's last row = its `_wvmi.csv` `lp_idx` / `pullback_momentum`
+  and `lp_locked`; no collapsed or LP-less record has rows); 27 / 27 old CSVs byte-equal + the 3 new; `fig_named_diff.py`
+  81 / 234, 154 / 136, 302 / 307, nothing added / removed / changed, layouts equal; skip grep 33 (the same lines),
+  `[wvmi] total=5, locked=3`, the same 3 `[uc1_trigger]` lines.
+- **Tests:** suite 1992 → 2012 passed — `test_wvmi_lp_rows.py` (new, 20: the tracker's rows on every status / reason,
+  the `end − 1` bound, the lock on the same / another / no / an out-of-frame LP, a lock before any LP, the re-scan and
+  a lock after it, the orchestrator's end-reason wiring; the CSV's column order, the collapsed filter, `relative_dir`
+  at the LP candle incl. `NA (before start_idx)`, an H1 row, the strict `SidRecord` read); the mirror guard
+  `test_event_meta_idx_keys.py::test_mirror_shifts_every_site_exactly_once` extended to the rows' three indices; the
+  dot-hover test imports the helper from its new home. **Mutants 29 / 29 KILLED** (`mutants_wvmi_step4.py`: each
+  status / reason / status candle, as-of vs LP, the lock branches, the three call sites + the stored sequence, the
+  row momentum, the end-reason wiring, the mirror's three shifts, the collapsed filter, `relative_dir` at the as-of
+  candle, the strict read, the CSV momentum, the column order; three equivalent mutants named in the file).
+- **Docs:** WVMI_SPEC "Per-LP rows" (new) + Pipeline Integration + the field table + the CSV paragraph; GLOSSARY
+  "per-LP row"; PART4 §16.5's WVMI row; CHARTING_SPEC (the helper's new home); the `/compare` skill (H1 11 + 2 × 9 + 1
+  = 30 CSVs, both file tables), WORKFLOWS, `review_scripts/README.md`. The `/commit-save` skill holds no CSV count or
+  file table (it copies every `*.csv` newer than the run's `*_raw.csv`) — nothing to change there.
+
 ## Build notes for steps 2–5 (written at the session close 2026-10-26 — read with the decisions above)
 
 Every step: predict the numbers from the mechanism → build → tests (+ mutants where a rule changes) → replay →

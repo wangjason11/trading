@@ -421,6 +421,13 @@ def mirror_lower_tf_result_to_entity_df(
             cur = getattr(nw, attr)
             if cur is not None:
                 setattr(nw, attr, cur + slice_begin)
+        # the per-LP rows ("WVMI back on the chart" step 4): the LP, its as-of candle and the status candle
+        nw.lp_rows = [replace(
+            r,
+            lp_idx=r.lp_idx + slice_begin,
+            as_of_idx=r.as_of_idx + slice_begin,
+            lp_status_idx=r.lp_status_idx + slice_begin if r.lp_status_idx is not None else None,
+        ) for r in nw.lp_rows]
         nw.structure_path_id = structure_path_id
         nw.meta.update(attribution)
         new_wvmis.append(nw)

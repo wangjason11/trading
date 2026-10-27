@@ -394,10 +394,17 @@ def main() -> None:
             # both lens CSVs, each with its lens's path + trigger — WVMI_SPEC
             # "Sub entities", Plan G). Not in any other CSV and not drawn on the
             # chart, so this is the only inspectable surface.
-            from engine_v2.debug.export_wvmi import export_wvmi
+            from engine_v2.debug.export_wvmi import export_wvmi, export_wvmi_lps
             export_wvmi(
                 sub_entry.df.attrs.get("wvmi", []) or [],
                 f"artifacts/debug/{basename}_{leaf_label}_wvmi.csv",
+            )
+            # ... and their per-LP rows, one per dot (collapsed records none;
+            # `relative_dir` from this lens's SidRecords — WVMI_SPEC "Per-LP rows").
+            export_wvmi_lps(
+                sub_entry.df.attrs.get("wvmi", []) or [],
+                f"artifacts/debug/{basename}_{leaf_label}_wvmi_lps.csv",
+                sid_records=sub_entry.df.attrs.get("sids", []) or [],
             )
 
             # Debug: per-sub fib lifecycle (start_idx/end_idx/end_reason/status).
@@ -429,8 +436,9 @@ def main() -> None:
     from engine_v2.debug.export_zones import export_ic_candidates
     export_ic_candidates(res.meta.get("ic_candidates", []) or [], f"artifacts/debug/{basename}_ic_candidates.csv")
 
-    from engine_v2.debug.export_wvmi import export_wvmi
+    from engine_v2.debug.export_wvmi import export_wvmi, export_wvmi_lps
     export_wvmi(res.meta.get("wvmi", []) or [], f"artifacts/debug/{basename}_wvmi.csv")
+    export_wvmi_lps(res.meta.get("wvmi", []) or [], f"artifacts/debug/{basename}_wvmi_lps.csv")
 
     from engine_v2.debug.export_fib_lifecycle import export_fib_lifecycle
     export_fib_lifecycle(

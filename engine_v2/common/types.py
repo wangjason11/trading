@@ -312,6 +312,19 @@ class KLZone:
 
 
 @dataclass
+class WVMILPRow:
+    """One LP of a WVMI record — a temporary LP or the locked one; one dot on the chart, one `*_wvmi_lps.csv` row
+    ("WVMI back on the chart" step 4, the user's rounds 3 / 8 / 10, 2026-10-26; WVMI_SPEC "Per-LP rows")."""
+    lp_idx: int                      # the LP candle
+    as_of_idx: int                   # the candle it became the LP: its own, or later — the CTS_CONFIRMED moment (a first LP
+                                     # picked from earlier candles), the lock (a swapped-in locked LP)
+    lp_status: Literal["temporary", "locked", "open", "unlocked"]
+    lp_status_reason: str            # why / how it ends, e.g. "replaced by a further close", "cycle 2's BOS confirmed"
+    lp_status_idx: Optional[int]     # when: the replacing LP's as-of candle / the lock / the cycle's end; None when open
+    pullback_momentum: Optional[float]   # LP_vol x LP_weight / FP_vol with THIS LP
+
+
+@dataclass
 class WVMIRecord:
     """Wave Volume Momentum Indicator for a BOS zone."""
     # Attribution to entity (Part 4 §8.7) and that entity's BOS zone
@@ -357,6 +370,10 @@ class WVMIRecord:
     # exported, inert, like a collapsed cycle's zones (Plan G G2). A flag only —
     # WVMI has no lifecycle of its own (WVMI_SPEC "Lifecycle — REMOVED").
     cycle_collapsed: bool = False
+
+    # Every LP the record has had, in order (`_temporary_lp_sequence` + the lock) — the last row is the record's LP.
+    # Empty when it has none. Entity-df coords, like the wave-candle idx fields.
+    lp_rows: List[WVMILPRow] = field(default_factory=list)
 
     # Metadata
     meta: Dict[str, Any] = field(default_factory=dict)

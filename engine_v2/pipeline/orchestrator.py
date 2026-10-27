@@ -175,8 +175,11 @@ def _compute_wvmi_records(
     Bounded by the `compute_cycle_lifecycle` table KL / POI read (the same
     events / floor / cap / reason): a temp LP never passes its cycle's
     `end - 1` (2026-09-28 on the main: H1 (0,1), ended by the sid-0 reversal at
-    902, took a sid-1 candle 988; Plan G Q4 on subs), and `cycle_collapsed` =
-    the cycle's window is empty (`start >= end`). With a cap the tracker's
+    902, took a sid-1 candle 988; Plan G Q4 on subs), an unlocked record's last
+    per-LP row (`lp_rows`) says why the cycle ended (the table's `end_reason`),
+    and `cycle_collapsed` = the cycle's window is empty (`start >= end` — set
+    HERE, after the tracker, so `export_wvmi_lps` drops a collapsed record's
+    rows, the user 2026-10-26). With a cap the tracker's
     frame is `df.iloc[:cap + 1]`: the natural-end frame a sub projection gets
     would otherwise let FP (<= CTS_CONFIRMED moment + 10), LB (<= CTS anchor + 5)
     and the lock LP (<= BOS_{n+1} anchor + 5) read candles past the sub's end.
@@ -185,8 +188,10 @@ def _compute_wvmi_records(
         events, compute_reversal_idx_by_sid(events), lifecycle_floor, lifecycle_cap, cap_reason,
     )
     cycle_end_by_key = {key: end for key, (_start, end, _reason) in life.items() if end is not None}
+    cycle_end_reason_by_key = {key: reason for key, (_start, end, reason) in life.items() if end is not None}
     frame = df.iloc[:lifecycle_cap + 1] if lifecycle_cap is not None else df
-    tracker = WVMITracker(structure_path_id=structure_path_id, cycle_end_by_key=cycle_end_by_key)
+    tracker = WVMITracker(structure_path_id=structure_path_id, cycle_end_by_key=cycle_end_by_key,
+                          cycle_end_reason_by_key=cycle_end_reason_by_key)
 
     for ev in sorted_events:
         if ev.type == "CTS_CONFIRMED":

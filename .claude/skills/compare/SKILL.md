@@ -86,7 +86,7 @@ data — the same guard as `/commit-save` reuse mode.
 ### 2b. Post-replay log grep (fetch gate FIRST, then the silent-skip grep)
 
 **Fetch-completeness gate: MANDATORY, and it runs before any diff is
-trusted.** The M15 input is not among the 27 saved CSVs and saves carry no
+trusted.** The M15 input is not among the 30 saved CSVs and saves carry no
 `run.log`, so an incomplete M15 frame shows up only as M15 deltas that look
 exactly like an engine change. This happened in a 2026-09-22 audit run:
 `multitf/data_bridge.fetch_lower_tf_data` (14-day OANDA chunks) then printed a
@@ -431,7 +431,7 @@ All changes are causally linked to the root change.
 Per-entity CSV outputs cover **H1.main**, **M15.counter**, and
 **M15.confluence**. Compare every file md5 by entity:
 
-**H1.main** (10 files):
+**H1.main** (11 files):
 
 | File pattern |
 |--|
@@ -445,6 +445,7 @@ Per-entity CSV outputs cover **H1.main**, **M15.counter**, and
 | `*_imbalance_instances.csv` |
 | `*_fib_lifecycle.csv` — no `fib_mode` column since PLAN_I S6 (2026-10-09): against an older save (S_J `20261009_013718_708a8d9` and before) diff the 3 fib CSVs with `engine_v2/plans/plan_i_inputs/cmp_s6_fib_mode.py BASE CUR` (positional `cmp_save.py` shifts the `meta` cell); the `ic_ref_*` meta keys since PLAN_K landing A |
 | `*_wvmi.csv` |
+| `*_wvmi_lps.csv` — the per-LP WVMI rows, one per dot ("WVMI back on the chart" step 4, 2026-10-26 — `debug/export_wvmi.export_wvmi_lps`; collapsed records none; WVMI_SPEC "Per-LP rows"); NEW since step 4's save — against an older save it is `NEW (no baseline)` |
 
 **Save-format boundary — PLAN_K landing A (2026-10-09; S_K_A `20261009_112137_02e9381` is the first save with it):** a save up to S_S6
 `20261009_020650_5f6bae3` lacks the IP CSVs' `ic_ref_reason` column, the fib meta's `ic_ref_price` / `ic_ref_source` /
@@ -734,7 +735,7 @@ predicted 2: the prediction deduplicated tracker runs by content). `[wvmi] total
 = `LATEST_<branch>` from 2026-10-26; the save replay = the compared replay, 27 / 27 CSVs byte-equal). Next (step 4,
 the per-LP rows + `*_wvmi_lps.csv`): 27 → 30 CSVs; ask the user first whether collapsed records keep flagged rows.
 
-**M15.counter** and **M15.confluence** (8 files each — 6 per-lens debug CSVs
+**M15.counter** and **M15.confluence** (9 files each — 7 per-lens debug CSVs
 with the same filename suffixes prefixed `*_M15_counter_` /
 `*_M15_confluence_`, plus the two per-lens pool tables):
 
@@ -746,13 +747,16 @@ with the same filename suffixes prefixed `*_M15_counter_` /
 | `*_M15_{lens}_ic_candidates.csv` (`_ip_` until PLAN_L landing 1) | chart loop |
 | `*_M15_{lens}_fib_lifecycle.csv` | chart loop |
 | `*_M15_{lens}_wvmi.csv` | chart loop |
+| `*_M15_{lens}_wvmi_lps.csv` — the per-LP WVMI rows (step 4, 2026-10-26; `relative_dir` from this lens's `attrs["sids"]`) | chart loop |
 | `*_M15_{lens}_subs.csv` — one row per unique sub on this lens | `debug/export_sub_tables.py`, BEFORE the chart loop |
 | `*_M15_{lens}_triggers.csv` — one row per `TriggerRecord` on this lens (incl. zero-length) | `debug/export_sub_tables.py`, BEFORE the chart loop |
 
 **Pool-wide** (1 file): `*_M15_unresolved_triggers.csv` — one row per
 `UnresolvedTrigger` (`debug/export_sub_tables.py`, written once).
 
-Total: **10 + 2×8 + 1 = 27 CSVs** per replay (POI-zones CSVs added 2026-06-08;
+Total: **11 + 2×9 + 1 = 30 CSVs** per replay (the three `*_wvmi_lps.csv` added by "WVMI back on the chart" step 4,
+2026-10-26 — a save before it has 27, so `cmp_fig_full.py` lists the three as `NEW (no baseline)` and exits 1;
+POI-zones CSVs added 2026-06-08;
 pool tables added by Plan C 2026-09-20; the three `*_ip_candidates.csv` by PLAN_H
 landing A 2026-10-06, renamed `*_ic_candidates.csv` by PLAN_L landing 1. A save before PLAN_H landing A has 24, so against
 one `cmp_fig_full.py` lists the three as `NEW (no baseline)` and exits 1; a save from PLAN_H landing A up to S_TBU has 27
@@ -917,7 +921,7 @@ fib shows only in `_fib_lifecycle.csv`. H1 and confluence counts were unchanged.
 These print as `DEBUG traces:` / `DEBUG shapes:` (H1) and `[m15_chart] traces:
 N, shapes: M` (each M15 entity) at the end of `python -m engine_v2.run_replay`.
 
-A run with all CSVs byte-identical (27; 24 before 2026-10-06) but shifted chart counts means a
+A run with all CSVs byte-identical (30; 27 before 2026-10-26, 24 before 2026-10-06) but shifted chart counts means a
 purely rendering-side change (e.g. style registry tweak). A run with
 matching chart counts but mismatched CSVs means a logic change. Both
 matrices clean = full parity.
