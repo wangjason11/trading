@@ -1,0 +1,4 @@
+commit_hash=5dfb5b3
+timestamp=20261027_164527
+branch=week9-entries-decisions
+commit_message=Item 5 final part: the chart control bar (Parent (1H) button, time-only -/+ and wheel, Box zoom | Pan, idx box) - figure-only vs S_T2
