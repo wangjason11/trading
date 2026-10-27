@@ -737,11 +737,12 @@ predicted 2: the prediction deduplicated tracker runs by content). `[wvmi] total
 NEW CSVs, nothing else:** every LP a WVMI record has had is kept as a row (`WVMIRecord.lp_rows`; statuses `temporary` /
 `locked` / `open` / `unlocked` with their why / when) and exported one row per dot — collapsed records none (the user,
 round 10), an LP before its sub's `start_idx` with `relative_dir = NA (before start_idx)` (round 11). = the prediction
-in every cell (scratchpad `step4_check.py` vs `wvmi_asof.py`'s sequences + locks + lifecycle ends): H1 57 rows,
+in every cell (`plans/qa_chart_edits_inputs/wvmi_step4_check.py` vs `wvmi_step4_predict.py`): H1 57 rows,
 counter 74, confluence 185 (`temporary` 54 / 68 / 171, `locked` 1 / 3 / 7, `unlocked` 1 / 3 / 7, `open` 1 / 0 / 0);
 each record's last row = its `_wvmi.csv` LP. 27 / 27 old CSVs byte-equal + the 3 new (27 → 30: against an older
 save `cmp_fig_full.py` lists them `NEW (no baseline)`); the three charts unchanged (`fig_named_diff.py`); skip grep
-33 (the same lines); `[wvmi] total=5, locked=3`; the same 3 `[uc1_trigger]` lines. Suite 2012; mutants 29 / 29.
+33 (the same lines); `[wvmi] total=5, locked=3`; the same 3 `[uc1_trigger]` lines. Suite 2012 (2013 with the
+session-close pin); mutants 30 / 30 (+ 2 equivalent, run, surviving).
 S_lp_rows `20261026_220225_588014a` (source `588014a`, save `04d2f0a`, trunk `fef0135`; = `LATEST_<branch>` from
 2026-10-26; the save replay = the compared replay). Next: step 5, the dots + hovers on the three charts (a rendered
 example and the user's look before the commit; `fig_named_diff.py` — traces are added).

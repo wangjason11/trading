@@ -6,11 +6,13 @@ candle, the column order). Run from the repo root:
     python engine_v2/plans/plan_e_inputs/review_scripts/mutant_runner.py \
         engine_v2/plans/qa_chart_edits_inputs/mutants_wvmi_step4.py
 
-`old` / `new` use LF (the runner reads in text mode). Every mutant must be KILLED by the full suite. Left out as
-EQUIVALENT: a temporary row's status candle = the next LP's `lp_idx` instead of its `as_of_idx` (only the FIRST LP can
-be as of a later candle, and the first LP is never a "next" one); the H1 row's `relative_dir` None vs "" (both an
-empty CSV cell); the lock's status candle = the cycle's lifecycle end instead of the BOS_{n+1} moment (equal on every
-non-collapsed record: cycle n's end is cycle n+1's clamped start, and a floor above that moment collapses n too).
+`old` / `new` use LF (the runner reads in text mode). Every mutant must be KILLED by the full suite. The two
+EQUIVALENT ones are in `mutants_wvmi_step4_equivalent.py` (run, both SURVIVE — the PLAN_Q rule: run every "equivalent"
+mutant). `lock_dated_by_cycle_end` was first called equivalent too (cycle n's end = the BOS_{n+1} moment on every
+visible record) — wrongly: a COLLAPSED record's end (the next cycle's clamped start, raised to the floor) lies past the
+moment, and running it showed `test_a_lock_before_any_lp_is_the_only_row` already killed it, but only incidentally (its
+end 12 is there to empty the sequence). Its own pin: `test_the_lock_is_dated_by_the_bos_moment_not_the_cycle_end`
+(end 23, the lock at 21). 30 / 30 KILLED; the 2 equivalent SURVIVE.
 """
 WVMI = "engine_v2/zones/wvmi.py"
 ORCH = "engine_v2/pipeline/orchestrator.py"
@@ -67,6 +69,10 @@ MUT = [
     ("lock_no_rows", WVMI,
      "        self._set_lp_rows(rec, key, df, self._lp_seq_by_key[key], lock=(ef.event_moment(bos_event), swapped_lp))\n",
      "        pass\n"),
+    ("lock_dated_by_cycle_end", WVMI,
+     "        self._set_lp_rows(rec, key, df, self._lp_seq_by_key[key], lock=(ef.event_moment(bos_event), swapped_lp))\n",
+     "        self._set_lp_rows(rec, key, df, self._lp_seq_by_key[key],\n"
+     "                          lock=(self._cycle_end_by_key.get(key, ef.event_moment(bos_event)), swapped_lp))\n"),
     ("lock_lp_unread", WVMI,
      "        swapped_lp = lp_idx if lp_idx is not None and lp_idx in df.index else None\n",
      "        swapped_lp = None\n"),

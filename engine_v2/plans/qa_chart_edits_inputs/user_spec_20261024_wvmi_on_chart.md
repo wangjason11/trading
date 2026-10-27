@@ -695,7 +695,7 @@ Step 4 in a new session.
 
 ## Round 11 — the user's answer (2026-10-26, step 4's session, before the build)
 
-Put (measured on S_lp_furthest, `wvmi_asof.py` + scratchpad `step4_predict.py`): the per-LP rows re-measured =
+Put (measured on S_lp_furthest, `wvmi_asof.py` + `wvmi_step4_predict.py`, this folder): the per-LP rows re-measured =
 H1 57 / counter 74 / confluence 185 (the build note's numbers hold). 4 of them have their LP candle BEFORE their
 sub's `start_idx`: sub 8 cycle 0 on both lenses (buy; sub 8 `start_idx` 4143; its CTS confirmed at 4103 by the
 pattern 4102–4103 while the sub was forming) — LP 4102 as of 4103 (`temporary`, replaced by a further close at
@@ -730,7 +730,7 @@ start_idx)` — the value the BOS / CTS dot hover gives (one helper for the CSV 
   `multitf/types.sub_relative_dir_at` (moved from the M15 chart's `_sub_relative_dir_at`, which the dot hover keeps
   using under its old name — round 11); a sub row whose `SidRecord` is missing fails loudly. `run_replay` writes the
   three files beside each `_wvmi.csv`.
-- **Predicted (vs S_lp_furthest; `wvmi_asof.py` on `f44ad3e` + scratchpad `step4_predict.py` — each non-collapsed
+- **Predicted (vs S_lp_furthest; `wvmi_asof.py` on `f44ad3e` + `wvmi_step4_predict.py` (this folder; was a scratchpad script) — each non-collapsed
   record's `new_to_bound` sequence + its lock + its lifecycle end / reason, `relative_dir` from the save's
   `_subs.csv`):** H1 57 rows, counter 74, confluence 185 (= the build note's numbers); `temporary` 54 / 68 / 171,
   `locked` 1 / 3 / 7, `unlocked` 1 / 3 / 7 (H1 a reversal; counter 3 sub replaced; confluence 5 reversals + 2 sub
@@ -738,12 +738,12 @@ start_idx)` — the value the BOS / CTS dot hover gives (one helper for the CSV 
   `relative_dir` — counter 66 counter / 6 confluence / 2 NA, confluence 99 confluence / 84 counter / 2 NA (sub 8 c0,
   round 11). The 27 existing CSVs byte-equal, the three charts unchanged, the log unchanged (skip grep 33).
 - **Measured (the run-mode replay, fetch gate PASS, 135.1 s wall — the suite ran beside it):** = the prediction in
-  every cell (scratchpad `step4_check.py`: row count, `lp_idx`, `as_of_idx`, status / reason / idx, `relative_dir`,
+  every cell (`wvmi_step4_check.py`, this folder: row count, `lp_idx`, `as_of_idx`, status / reason / idx, `relative_dir`,
   `zone_side`, `sub_id`, both momenta to 1e-12; each record's last row = its `_wvmi.csv` `lp_idx` / `pullback_momentum`
   and `lp_locked`; no collapsed or LP-less record has rows); 27 / 27 old CSVs byte-equal + the 3 new; `fig_named_diff.py`
   81 / 234, 154 / 136, 302 / 307, nothing added / removed / changed, layouts equal; skip grep 33 (the same lines),
   `[wvmi] total=5, locked=3`, the same 3 `[uc1_trigger]` lines.
-- **Tests:** suite 1992 → 2012 passed — `test_wvmi_lp_rows.py` (new, 20: the tracker's rows on every status / reason,
+- **Tests:** suite 1992 → 2012 passed (2013 after the session-close pin below) — `test_wvmi_lp_rows.py` (new, 20: the tracker's rows on every status / reason,
   the `end − 1` bound, the lock on the same / another / no / an out-of-frame LP, a lock before any LP, the re-scan and
   a lock after it, the orchestrator's end-reason wiring; the CSV's column order, the collapsed filter, `relative_dir`
   at the LP candle incl. `NA (before start_idx)`, an H1 row, the strict `SidRecord` read); the mirror guard
@@ -752,6 +752,12 @@ start_idx)` — the value the BOS / CTS dot hover gives (one helper for the CSV 
   status / reason / status candle, as-of vs LP, the lock branches, the three call sites + the stored sequence, the
   row momentum, the end-reason wiring, the mirror's three shifts, the collapsed filter, `relative_dir` at the as-of
   candle, the strict read, the CSV momentum, the column order; three equivalent mutants named in the file).
+  **Session-close follow-up (the PLAN_Q rule: run every "equivalent" mutant):** of the three, the lock's status
+  candle = the cycle's END instead of the BOS_{n+1} moment was NOT equivalent — a collapsed record's end (the next
+  cycle's clamped start, raised to the floor) lies past the moment; it was killed only incidentally (by
+  `test_a_lock_before_any_lp_is_the_only_row`, end 12) → its own pin `test_the_lock_is_dated_by_the_bos_moment_not_the_cycle_end`
+  (end 23, lock 21) and a regular mutant: **30 / 30 KILLED**; the two truly equivalent ones
+  (`mutants_wvmi_step4_equivalent.py`) run and SURVIVE as claimed. Suite 2013.
 - **Docs:** WVMI_SPEC "Per-LP rows" (new) + Pipeline Integration + the field table + the CSV paragraph; GLOSSARY
   "per-LP row"; PART4 §16.5's WVMI row; CHARTING_SPEC (the helper's new home); the `/compare` skill (H1 11 + 2 × 9 + 1
   = 30 CSVs, both file tables), WORKFLOWS, `review_scripts/README.md`. The `/commit-save` skill holds no CSV count or
@@ -849,3 +855,14 @@ fitting around a sub dot); collapsed records hidden; hovers = the accepted draft
 `fig_named_diff.py` (traces are added); check `debug/chart_census.py` still reads the charts. Docs that describe
 WVMI as not drawn: WAVE_CANDLES_SPEC "Rendering simplifications" ("Full WVMI momentum markers deferred") and its
 "Active last cycle" row ("not drawn"), PART4 §16.5's WVMI row (the planned design), register §G's entry.
+**Step 5 code facts from step 4 (`588014a`; re-check against the code):** one dot = one `WVMIRecord.lp_rows` entry
+(`common/types.WVMILPRow`) — the M15 charts read a lens df's `attrs["wvmi"]` (entity-absolute; collapsed records
+carry rows too — hide them by `cycle_collapsed`, as the CSV does), the H1 records the `H1.main` entity df's `attrs["wvmi"]` (= `res.meta["wvmi"]`, H1 indices; on
+the M15 charts an H1 row's `lp_idx` → `_map_parent_idx_to_m15_hour_end` = the hover's `lp_idx`, the H1 one =
+`lp_idx_1H`). The hover's status line = `lp_status=<status> (<lp_status_reason> at <lp_status_idx>)`, or
+`(<reason>)` alone for `open` (no idx); `as_of_idx` joins the `lp_idx` line only when it differs (round 4).
+`relative_dir` (sub hover) at the LP candle = `multitf/types.sub_relative_dir_at` over the lens's `attrs["sids"]` —
+`NA (before start_idx)` before the sub is live (round 11: sub 8 c0's dots 4102 / 4129 ARE drawn — keep the rows ⇒
+keep the dots). Expected dot counts = the CSV rows: H1 chart 57; counter 74 sub dots, confluence 185 (+ the H1
+circles on each M15 chart: the 57 H1 rows mapped — re-check the M15 charts' H1-overlay filter, which may hide some).
+`wvmi_step4_check.py` re-checks the per-LP CSVs are unchanged (a figure-only step: 30 / 30 CSVs byte-equal).

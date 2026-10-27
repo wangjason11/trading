@@ -133,6 +133,16 @@ def test_a_lock_on_the_last_temporary_lp_makes_it_the_locked_row():
     _check_last_is_the_record(rec)
 
 
+def test_the_lock_is_dated_by_the_bos_moment_not_the_cycle_end():
+    """`cycle N+1's BOS confirmed at <idx>` = the BOS_{n+1} moment (21). The cycle's lifecycle end equals it on a
+    visible record, but a COLLAPSED record's end is the next cycle's CLAMPED start (raised to the floor), past the
+    moment — here 23 (the rows stay on the record; only the CSV drops them)."""
+    df, wcs, zones = _setup(bos2_last=19)
+    tracker, _ = _create(df, wcs, zones, ends={(0, 1): 23}, reasons={(0, 1): "next_cycle"})
+    rec = _lock(tracker, df, wcs)
+    assert _rows(rec)[-1][:5] == (19, 19, "locked", "cycle 2's BOS confirmed", 21)
+
+
 def test_a_lock_on_another_candle_replaces_the_last_temporary_lp():
     """BOS_2's last wave candle 18 is not the last temporary LP 19 (the warning case): 19 stays `temporary`, replaced
     by the locked LP at the lock 21, and the locked LP 18 gets its own row as of the lock."""
