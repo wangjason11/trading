@@ -743,9 +743,23 @@ each record's last row = its `_wvmi.csv` LP. 27 / 27 old CSVs byte-equal + the 3
 save `cmp_fig_full.py` lists them `NEW (no baseline)`); the three charts unchanged (`fig_named_diff.py`); skip grep
 33 (the same lines); `[wvmi] total=5, locked=3`; the same 3 `[uc1_trigger]` lines. Suite 2012 (2013 with the
 session-close pin); mutants 30 / 30 (+ 2 equivalent, run, surviving).
-S_lp_rows `20261026_220225_588014a` (source `588014a`, save `04d2f0a`, trunk `fef0135`; = `LATEST_<branch>` from
-2026-10-26; the save replay = the compared replay). Next: step 5, the dots + hovers on the three charts (a rendered
-example and the user's look before the commit; `fig_named_diff.py` — traces are added).
+S_lp_rows `20261026_220225_588014a` (source `588014a`, save `04d2f0a`, trunk `fef0135`; = `LATEST_<branch>` until
+S_wvmi_marks, below; the save replay = the compared replay).
+**WVMI back on the chart, step 5: the LP marks above the volume bars (2026-10-26, the same design file "Step 5" +
+rounds 12–14; canonical CHARTING_SPEC §13) — FIGURE-ONLY:** one mark per per-LP row of every non-collapsed record on
+the volume panel's own axis `yaxis3` — sell on a row just above the bars, buy one step higher; a sub's a dot (size
+5), an H1 LP an open circle (size 8 — the user's final value), on the M15 charts at the hour's last M15 candle; the
+hover = the accepted drafts (`TF=1H>>15M` on an H1 circle's M15 copy); the volume axis `[0, max × 1.4]` (static +
+zoom JS, ×1.1 before). = the prediction: 30 / 30 CSVs byte-equal to S_lp_rows (`wvmi_step4_check.py` 0 problems);
+traces ADDED only — H1 81 → 83 (`WVMI LP buy` 42 / `sell` 15), counter 154 → 158 (`M15 WVMI LP` buy 27 / sell 47,
+`H1 WVMI LP` 42 / 15), confluence 302 → 306 (88 / 97, 42 / 15); shapes unchanged; the layouts gain `yaxis2.range` +
+`yaxis3` only. **Positional `fig_scope.py` breaks across it** — diff figures with `fig_named_diff.py` (+ the layout
+delta); `plans/qa_chart_edits_inputs/wvmi_step5_check.py BASE CUR` re-builds every mark (x / row / hover) from the
+per-LP CSVs; `chart_census.py` counts the marks (`wvmi_lp_marks` per trace). A zoomed PNG that keeps the volume panel:
+`zoom_png_volume.py` (`zoom_png.py` flattens it). Skip grep 33 (the same lines) + the log line `[chart][wvmi] rendered
+57 LP circles`. Suite 2039; mutants 44 / 44 (+ 1 equivalent, run, surviving). S_wvmi_marks
+`20261026_230619_2dc9e5d` (source `2dc9e5d`, save `915743d`, trunk `cb56121`; = `LATEST_<branch>` from 2026-10-26;
+the save replay = the compared replay). "WVMI back on the chart" is complete.
 
 **M15.counter** and **M15.confluence** (9 files each — 7 per-lens debug CSVs
 with the same filename suffixes prefixed `*_M15_counter_` /

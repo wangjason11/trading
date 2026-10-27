@@ -44,7 +44,9 @@ proximity trigger, not the WVMI records; step 2 landed 2026-10-26: the H1 WVMI w
 CTS_CONFIRMED has a record, attributed to its first sd trigger; step 3 landed 2026-10-26: the WVMI temporary LP =
 the furthest qualified close in the pullback direction, its first one by how the CTS confirmed — a pullback
 CTS_CONFIRMED carries `pattern_anchor_idx`; step 4 landed 2026-10-26: every LP a record has had is kept as a
-per-LP row, exported one row per dot to `*_wvmi_lps.csv` — 30 CSVs per replay; next, step 5: the dots + hovers),
+per-LP row, exported one row per dot to `*_wvmi_lps.csv` — 30 CSVs per replay; step 5 landed 2026-10-26: the WVMI LP
+marks above the volume bars, one per per-LP row (sub dots, H1 circles), CHARTING_SPEC §13 — the second edit COMPLETE;
+next in item 5: the charts' other elements, the user's list),
 then item 3, zone size adjustments),
 Part 2 entry decisions, Part 3 other decisions.
 

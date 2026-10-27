@@ -844,7 +844,12 @@ hover at the centre (0 vs 1 − 3 / 4 = 0.25). Go to commit, no push.
 - **The rendered example** (`zoom_png_volume.py`, this folder — `zoom_png.py` flattens the volume panel): counter
   3740–3860 (the circle around sub 5's sell dot at 3755), confluence 4095–4215 (sub 8 c0's 4102 as of 4103 and the
   locked 4129, sub 7 c0's sell dots to the unlocked 4196, three circles around its dots) + the hover strings off the
-  charts. No candle has both a buy and a sell mark on this window (the fixture has one). The user: round 12.
+  charts. No candle has both a buy and a sell mark on this window (the fixture has one). The user: rounds 12–14
+  (`TF=1H>>15M`; the positioning "looks good"; the circle size 11 → 9 → 7 → 8, the final).
+- **LANDED 2026-10-26** (the user: "Thanks let's go with 8 as the final value. Then proceed with the commit flow
+  without pushing"): source `2dc9e5d`, save S_wvmi_marks `20261026_230619_2dc9e5d` (save `915743d`, trunk `cb56121`)
+  = `LATEST_<branch>` — the save replay = the compared replay (fetch gate PASS; 30 / 30 CSVs byte-equal to S_lp_rows,
+  the marks = the prediction, skip grep 33). **"WVMI back on the chart" is complete** (steps 1–5).
 
 ## Build notes for steps 2–5 (written at the session close 2026-10-26 — read with the decisions above)
 

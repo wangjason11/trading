@@ -173,7 +173,7 @@ zone size adjustments.** Verbatim: "I was simply saying that we may come back to
    user's request + decision + what landed: `engine_v2/plans/qa_chart_edits_inputs/user_spec_20261024_replacement_break.md`;
    figure-only, +1 PB dot per M15 chart; canonical CHARTING_SPEC "Replaced subs run through one more point"; source
    `56517e7`, save S_repl_break `20261024_171443_56517e7`; the user: "charts look good go ahead"). The second edit —
-   **WVMI back on the chart** (UN-TABLED by the user 2026-10-24, §G): the design settled in nine rounds 2026-10-24 →
+   **WVMI back on the chart** (UN-TABLED by the user 2026-10-24; CLOSED 2026-10-26 — "Recently closed"): the design settled in nine rounds 2026-10-24 →
    26 (the user's request, every answer verbatim, the measurements and the decisions:
    `engine_v2/plans/qa_chart_edits_inputs/user_spec_20261024_wvmi_on_chart.md`) — dots above the volume bars at each
    temporary LP, a furthest-close LP rule with first-LP rules by how the CTS confirmed, no H1 gate, a per-LP CSV per
@@ -192,12 +192,14 @@ zone size adjustments.** Verbatim: "I was simply saying that we may come back to
    collapsed records get none — the user, "I may change my mind later", §G; an LP before its sub's `start_idx` keeps
    its row with `relative_dir = NA (before start_idx)` — the user, round 11; 27 → 30 CSVs, the 27 byte-equal, charts
    unchanged; source `588014a`, save S_lp_rows `20261026_220225_588014a`); **5** the dots + hovers on the three
-   charts — BUILT 2026-10-26, = the prediction (figure-only: 30 / 30 CSVs byte-equal; traces added only — H1 +2,
+   charts — LANDED 2026-10-26 (source `2dc9e5d`, save S_wvmi_marks `20261026_230619_2dc9e5d` = `LATEST_<branch>`), =
+   the prediction (figure-only: 30 / 30 CSVs byte-equal; traces added only — H1 +2,
    each M15 chart +4; one mark per per-LP row above the volume bars, sell red just above the bars / buy green one step
    higher, a sub's a dot, an H1 LP a circle — 57 per chart, on the M15 charts at the hour's last M15 candle; the
    hover = the accepted drafts, the H1 circle's M15 copy `TF=1H>>15M` — the user, round 12; the volume axis 1.4 × the
    bars' max; canonical CHARTING_SPEC §13); the user's look: "the positioning looks good", the circles "a bit
-   smaller" (11 → 9 → 7 → 8, "let's go with 8 as the final value").
+   smaller" (11 → 9 → 7 → 8, "let's go with 8 as the final value"). **The second edit, "WVMI back on the chart",
+   is COMPLETE.** Next in item 5: the charts' other elements (the user brings the list); then item 6.
 6. **Zone size adjustments** — D.1 item 3 below (the user's spec).
 
 **D.1 — Ordered (the heavy items):**
@@ -507,18 +509,6 @@ zone size adjustments.** Verbatim: "I was simply saying that we may come back to
   both show on one chart as `end_reason=`. Exported values, so a rename is a meta-contract migration (LANDMINES
   "Event Contract Rules" rule 3), not a hover change. Detail:
   `engine_v2/plans/qa_chart_edits_inputs/user_spec_20261023_fib_hover.md`.
-- **WVMI back on the chart (the wave-candle hover)** — deferred 2026-05-28 (`e64556a`, WAVE_CANDLES_SPEC "Rendering
-  simplifications": "Full WVMI momentum markers deferred (revisit later)"; logged here 2026-10-23, the user asking
-  about it with the wave-candle hover spec; TABLED by the user the same day: "Let's table WVMI back on chart for
-  now"). **UN-TABLED by the user 2026-10-24** (SESSION ORDER item 5's second pass): "Next I'd like to work on
-  adding WVMI back" — the request + design: `engine_v2/plans/qa_chart_edits_inputs/user_spec_20261024_wvmi_on_chart.md`;
-  **Steps 1–5 built 2026-10-26** (status: §D SESSION ORDER item 5): WVMI is drawn as its LP marks above the volume
-  bars (CHARTING_SPEC §13), the wave-candle hover stays without it. Until 2026-05-28 every wave-candle hover carried `Weighted vol` and, on an LB /
-  LP line, `<Buy|Sell> momentum` + the paired weighted volumes, looked up by candle index. Open design: WVMI's `lp_idx`
-  is its own temporary last pullback, not the drawn LP line (on H1 neither live record's LP is drawn), and an
-  index-only lookup can hit another sub's or role's line; PART4 §16.5's WVMI row has the planned design (locked
-  records show final values; in-progress ones re-render as `update_temporary_lp` moves the temp LP). Detail +
-  measurements: `engine_v2/plans/qa_chart_edits_inputs/user_spec_20261023_wave_candle_hover.md`.
 - **Revisit the cycle-0 carve-out (no sd-proximity CTS confirmation on any cycle 0)** — **DECIDE**; raised by the
   user 2026-10-26 with "WVMI back on the chart": "yes we do need to add line to revisit this. I need to better
   understand the original carve out logic. A decision from May was also quite a long time ago and a lot of things
@@ -568,6 +558,12 @@ zone size adjustments.** Verbatim: "I was simply saying that we may come back to
 
 ## Recently closed (history pointers)
 
+- **WVMI back on the chart** (§G; deferred 2026-05-28 `e64556a`, un-tabled by the user 2026-10-24) — CLOSED 2026-10-26
+  in five landings (`257f8ba`, `76b5a17`, `f63df34`, `588014a`, `2dc9e5d`; save S_wvmi_marks
+  `20261026_230619_2dc9e5d`): no H1 gate, the furthest-close LP rule, the per-LP rows + `*_wvmi_lps.csv`, and the
+  WVMI LP marks above the volume bars on the three charts (CHARTING_SPEC §13) — not the old wave-candle hover, which
+  stays without WVMI. The user's request, every answer verbatim and each step:
+  `engine_v2/plans/qa_chart_edits_inputs/user_spec_20261024_wvmi_on_chart.md`.
 - **Naming-Standard audit of never-audited index keys** (§A) — CLOSED 2026-10-12 by PLAN_N
   (`engine_v2/plans/PLAN_N_naming_audit.md`; committed `1b2f24c`, saved S_N `20261012_165925_1b2f24c`): KL steps
   `base_idx` / `expanded_idx`; RANGE_STARTED `range_anchor_idx` (MS's range start on every path) / `confirmed_at`;
