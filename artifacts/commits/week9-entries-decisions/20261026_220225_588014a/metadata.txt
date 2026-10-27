@@ -1,0 +1,4 @@
+commit_hash=588014a
+timestamp=20261026_220225
+branch=week9-entries-decisions
+commit_message=Chart edit (SESSION ORDER item 5, second pass): WVMI back on the chart, step 4 - the per-LP rows + *_wvmi_lps.csv
