@@ -77,6 +77,17 @@ zone size adjustments.** Verbatim: "I was simply saying that we may come back to
 **UPDATED by the user 2026-10-27 (after "WVMI back on the chart" landed) — the cycle-0 carve-out revisit NEXT, then item
 5's final part.** Verbatim: "I will give you a bit of a preview of what I'd like to work on in the next few sessions.
 First, I want to revisit the cycle-0 carve-out that we discussed recently. Afterward that, we will complete the final parts of charting updates, which will consist of 1) adding a toggle to hide parent (1H) chart overlay elements, and 2) adding an ability to zoom into certain parts of the chart via a) a +/- switch or tool and b) allowing user to input an idx for the chart to zoom into. We can discuss in details those things when we get to them." (Zone size adjustments, item 6, not restated — they stay after item 5.)
+**UPDATED by the user 2026-10-27 (after item 5 completed) — item 6, zone size adjustments, MOVED out of Part 1 into
+Parts 2 / 3 (D.3 below); the pinbar body-pip floor calibration NEXT (item 7), the last major Part 1 item; then the
+remaining minor pre-Part-2 items (item 8); the entry confirmation candle patterns MOVED to Part 2 (D.3).** Verbatim:
+"with that we've now completed all the charting updates I wanted to make for now. At this point we are close to being
+done with part 1 of week 9." "Now originally I wanted to work on zone adjustments as part of Week 9 Part 1, however
+I've since changed my mind. We will incorporate this directly into entry & decisions (Part 2 & 3) rather than as a
+separate item that adjusts existing zones." "Instead, the last major item I want to tackle in the next session is the
+Pinbar body-pip floor calibration. Afterwards, we can take care of any remaining minor tasks & items in the next
+session(s) that we previously documented as pre-reqs to starting part 2 of week 9. We will also move entry candle
+patterns to part 2 of Week 9, thus allowing us to complete part 1." The rationale for moving zone sizing (verbatim):
+SYLLABUS Week 9 Part 2 "Zone size at entry and stop-loss".
 1. ~~**The H1 range-hover follow-up**~~ — **LANDED 2026-10-12** (session 1; `9f9406d`, S_N_hover): widened by
    the user to option B (the hover line = the box, candle for candle) + the dead passes deleted; `/compare` vs S_N = the
    prediction (4 H1 hover traces, 28 candle points). Register §A; `engine_v2/plans/plan_n_inputs/
@@ -240,7 +251,15 @@ First, I want to revisit the cycle-0 carve-out that we discussed recently. After
    all confirm by a pullback pattern. Case: confluence sub 7 cycle 0 (a 57-pip gap) sat at its POI from 4071 and
    confirmed only at 4157. Detail + facts: `engine_v2/plans/qa_chart_edits_inputs/user_spec_20261024_wvmi_on_chart.md`
    rounds 6–7 ("Measured for round 7 — facts for the carve-out revisit").
-6. **Zone size adjustments** — **NEXT** (item 5 DONE 2026-10-27) — D.1 item 3 below (the user's spec).
+6. ~~**Zone size adjustments**~~ — **MOVED 2026-10-27 to Parts 2 / 3** (the user, after item 5: "We will incorporate
+   this directly into entry & decisions (Part 2 & 3) rather than as a separate item that adjusts existing zones") —
+   D.3 below; the zones keep their base form. Was D.1 item 3.
+7. **Pinbar body-pip floor calibration** — **NEXT, the next session** (the user 2026-10-27: "the last major item I want
+   to tackle in the next session") — D.1 item 4 below.
+8. **The remaining minor items before Part 2** — after item 7, in the next session(s) (the user 2026-10-27: "any
+   remaining minor tasks & items in the next session(s) that we previously documented as pre-reqs to starting part 2
+   of week 9"). Candidates on file: D.2 below (the backlog "decided after D.1 is complete", the user 2026-10-01) and
+   §A's carry-overs; the user names which. Then Part 1 is complete.
 
 **D.1 — Ordered (the heavy items):**
 1. **One POI per cycle** (redefine the IC & POI zone logic) — B landed; its chart debugging PAUSED for item 2 (user
@@ -380,25 +399,18 @@ First, I want to revisit the cycle-0 carve-out that we discussed recently. After
    do need to fix, but we can do that as item 2." Detail: memory
    `project_sub_single_cycle_fib_pois.md`; `engine_v2/zones/CROSS_CYCLE_FIB_SPEC.md` (§13), `POI_ZONES_SPEC.md`
    "Cross-Cycle Mode".
-3. **Zone size adjustments** — **last (6th) in the SESSION ORDER above (user 2026-10-12: after the hover follow-up, the IC /
-   cross-fib questions and the opp_sd proximity-trigger edits; the IC revisit (2026-10-20) and the chart updates & edits
-   (2026-10-21) went before it).** User 2026-09-30:
-   "currently some KL & POI zones may be very large or small in their
-   current base form. This will cover additional logic that adjust the size." The user provides a detailed spec.
-   The Naming-Standard audit landed first (PLAN_N, 2026-10-12: a KL step's index is `base_idx` on INIT, `expanded_idx`
-   on an expansion — read via `kl_zones_v1.bounds_step_draw_idx`). Related: "Zone strength scoring" (D.2). Detail: `engine_v2/zones/KL_ZONES_SPEC.md`,
-   `POI_ZONES_SPEC.md`; measured sizes: memory `project_week9_part1_inputs.md`.
-4. **Pinbar body-pip floor calibration** — scheduled here by the user 2026-10-01 (was TRIGGER: strategy optimization):
+3. ~~**Zone size adjustments**~~ — **MOVED 2026-10-27 to D.3** (Parts 2 / 3: the adjustment goes into the entry price
+   and stop loss, not into the zones — the user, after item 5).
+4. **Pinbar body-pip floor calibration** — **NEXT (SESSION ORDER item 7, the user 2026-10-27: "the last major item I
+   want to tackle in the next session")**. Scheduled here by the user 2026-10-01 (was TRIGGER: strategy optimization):
    the provisional values (H1 2.2 / M15 1.0 / M5 0.5 pips, NZD_USD only) and the reclassify-to-pinbar approach itself.
    Iterative: parameter flips + chart review; a candle-type change cascades (patterns → structure → zones), so every
    flip gets a full `/compare`. Detail: memory `project_pinbar_body_pip_floor.md`,
    `engine_v2/features/CANDLE_BODY_FLOOR_NOTES.md`.
 
 **D.2 — Backlog: decided after D.1 is complete (user 2026-10-01).**
-- **Entry confirmation candle patterns** — user 2026-09-30: "define new candle patterns that will be used to confirm
-  entry (when necessary). This is a prerequisite for Entry, but can go last in Part 1 or first in Part 2." Related:
-  "Candle-direction / rejection confirmation at a zone touch" below; D.1 item 4 (the pinbar floor); the pattern engine
-  (`patterns/structure_patterns.py`, `features/candles_v2.py`). OPEN.
+- ~~**Entry confirmation candle patterns**~~ — **MOVED 2026-10-27 to D.3** (Part 2 — the user: "We will also move
+  entry candle patterns to part 2 of Week 9, thus allowing us to complete part 1").
 - **The M5 layer** (`H1.main >> M5.counter` — a third lens directly under H1.main, the Part 4 vision's 4th chart;
   memory `project_part4_vision.md`) — DECIDED 2026-09-30: its own Heavy block (plan + cold review), before any Entries
   work that reads M5; not a Week 8 blocker. Footprint seen so far: `debug/export_sub_tables.py` hard-codes `_M15_`, and
@@ -465,6 +477,24 @@ First, I want to revisit the cycle-0 carve-out that we discussed recently. After
   (`wave_candles._is_qualified`, inline in `wvmi._find_temporary_lp`) — ONE helper since 2026-10-26 (the WVMI temp
   LP calls `_is_qualified`, "WVMI back on the chart" step 3; no output change from the helper); the rule change
   itself → its own `/compare`. DECIDE (when).
+
+**D.3 — Moved out of Part 1 into Parts 2 / 3 (the user 2026-10-27, after item 5; SYLLABUS Week 9).**
+- **Zone size at entry and stop loss** (was D.1 item 3 / SESSION ORDER item 6, "zone size adjustments") — the zones
+  stay in their base form; the size adjustment becomes part of the entry decision: the entry price (likely near the
+  zone's inner edge) and the stop loss (around its outer edge) are adjusted when a zone is too big or too small. Why
+  (the user): changing the zones themselves "would have additional consequences such as altering proximity
+  triggers". The user's rationale verbatim: SYLLABUS Week 9 Part 2 "Zone size at entry and stop-loss". Background:
+  the user 2026-09-30, "currently some KL & POI zones may be very large or small in their current base form"; the
+  measured sizes: memory `project_week9_part1_inputs.md`; the zone specs `engine_v2/zones/KL_ZONES_SPEC.md`,
+  `POI_ZONES_SPEC.md`; the Naming-Standard audit (PLAN_N, 2026-10-12) landed for it (a KL step's index is `base_idx`
+  on INIT, `expanded_idx` on an expansion — `kl_zones_v1.bounds_step_draw_idx`). Related: "Zone strength scoring"
+  (D.2). OPEN (Part 2 / 3; the user's spec).
+- **Entry confirmation candle patterns** (was D.2) — Part 2 (the user 2026-10-27: "We will also move entry candle
+  patterns to part 2 of Week 9, thus allowing us to complete part 1"). User 2026-09-30: "define new candle patterns
+  that will be used to confirm entry (when necessary). This is a prerequisite for Entry, but can go last in Part 1 or
+  first in Part 2." Related: D.2 "Candle-direction / rejection confirmation at a zone touch"; D.1 item 4 (the pinbar
+  floor — the patterns read candle types); the pattern engine (`patterns/structure_patterns.py`,
+  `features/candles_v2.py`). OPEN (Part 2).
 
 ## E. Trigger-based (only when the trigger fires)
 

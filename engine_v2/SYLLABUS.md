@@ -374,9 +374,41 @@ You can debug **confluence vs non-confluence** trades visually.
 >   the overall sub cross-fib logic (2026-10-06: the cross-cycle fib revamp — one logic for main and sub — NEXT,
 >   item 1's chart debugging paused until after it), (3) zone size adjustments, (4) pinbar body-pip floor calibration; the rest (entry
 >   confirmation candle patterns, the M5 lens, zone strength scoring, ...) is decided after those four.
-> - **Part 2 — Entry decision build & logic** — the original Week 9 plan below. The entry confirmation candle
->   patterns may open Part 2 instead of closing Part 1.
+>   **Updated by the user 2026-10-27** (after the chart updates, SESSION ORDER item 5, were complete): (3) zone size
+>   adjustments MOVED to Parts 2 / 3 (below) and the entry confirmation candle patterns MOVED to Part 2; the pinbar
+>   floor (4) is the last major Part 1 item, then the remaining minor pre-Part-2 items close Part 1 (register §D
+>   SESSION ORDER items 7–8, §D.3).
+> - **Part 2 — Entry decision build & logic** — the original Week 9 plan below, + the entry confirmation candle
+>   patterns (moved here from Part 1 by the user 2026-10-27) and the zone size at entry and stop-loss (below).
 > - **Part 3 — Other decisions build & logic** — to be defined by the user.
+
+### **Part 2 / 3 — Zone size at entry and stop-loss (moved from Part 1 by the user 2026-10-27)**
+
+The zones keep their base form; the size adjustment is applied when the entry price and the stop loss are set, at
+the moment price comes to the zone (register §D.3). The user, verbatim (2026-10-27):
+
+> "Now originally I wanted to work on zone adjustments as part of Week 9 Part 1, however I've since changed my mind.
+> We will incorporate this directly into entry & decisions (Part 2 & 3) rather than as a separate item that adjusts
+> existing zones."
+>
+> "Originally, the idea was to make zone adjustments when the zone sizes are too small or too big. As previously
+> mentioned, zones will often be reference points for not only entry decisions, but also decisions around where to set
+> our stop losses and entry price. Entry price will likely be near zone inner while stop loss around zone outer. Thus,
+> the size of the zones are quite important to optimize our entry & stop loss decisions. If the zone is too big, we
+> could have a large stop loss distance and take on higher risk vs. a small zone could lead to a small stop loss
+> distance that increases the likelihood of the stop loss getting triggered, resulting in a losing trade."
+>
+> "Thus the goal of zone adjustments was to help optimize for accuracy and risk when we make decisions around setting
+> entry parameters entry price and stop loss based on our zones. I've come to the realization that instead of making
+> adjustments to or editing the zones when they are too small or large, we simply implement the adjustment logic
+> directly to entry & stop loss when we need to make those decisions when price comes to those zones. This preserves
+> the zones in their original form whereas changing the zones themselves would have additional consequences such as
+> altering proximity triggers."
+
+Why it matters for the build: a zone's inner / outer edges are read by the proximity triggers (and through them the
+subs) — resizing the zones would move those; adjusting only the entry / stop derived from a zone leaves every
+structure output as it is. Inputs on file: the measured zone sizes (memory `project_week9_part1_inputs.md`), the
+"Stop/TP builder" and "Enforce RR ≥ 3" items below.
 
 ### **Part 2 — the original plan (Entry Planner v1 + Visual Trade Intents)**
 

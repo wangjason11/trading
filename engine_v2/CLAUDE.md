@@ -50,8 +50,11 @@ item 5 paused 2026-10-27 for the cycle-0 carve-out revisit (register §D 5b — 
 first_confluence probe's MS reads what its sub reads, zero change; T2 the carve-out kept only on the main sid 0 +
 the sub its cycle-0 first_confluence creates — subs 4, 7, 8 confirm cycle 0 by proximity); item 5's final part
 DONE 2026-10-27 — the chart control bar (a Parent (1H) button on the M15 charts, time-only − / + and the wheel, Box
-zoom | Pan, an idx box; CHARTING_SPEC §14) — item 5 COMPLETE),
-NEXT item 6, zone size adjustments),
+zoom | Pan, an idx box; CHARTING_SPEC §14) — item 5 COMPLETE); updated by the user 2026-10-27: zone size
+adjustments MOVED to Parts 2 / 3 (applied to the entry price and stop loss, the zones unchanged — SYLLABUS Week 9
+"Zone size at entry and stop-loss") and the entry confirmation candle patterns to Part 2 (register §D.3); NEXT the
+pinbar body-pip floor calibration (the last major Part 1 item), then the remaining minor pre-Part-2 items, which
+complete Part 1),
 Part 2 entry decisions, Part 3 other decisions.
 
 **Pre-Week 8 fix:** Exception 2 probe relaxed from CTS_CONFIRMED to CTS_ESTABLISHED (`bbb6d32`).

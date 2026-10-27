@@ -20,7 +20,8 @@ S_M2 replay's (fetch gate: `Fetched 4228 M15 candles for NZD_USD in 5 chunks`).
 `pullback_range_candles.py` — the M15 candles of the first pullback-created range (N5's example); `cmp_plan_n.py BASE
 CUR_DEBUG` (written at the build — §4: applies the declared transform to the base CSVs and requires text equality).
 **Followed by:** register §D.1 item 3, zone size adjustments (the user brings the spec) — this plan lands first so item
-3's `/compare` carries no rename diffs and nothing reads a two-kind key.
+3's `/compare` carries no rename diffs and nothing reads a two-kind key. (Item 3 MOVED 2026-10-27 to Week 9
+Parts 2 / 3 - the size adjustment goes into the entry price and stop loss, not the zones; register §D.3.)
 
 ---
 
