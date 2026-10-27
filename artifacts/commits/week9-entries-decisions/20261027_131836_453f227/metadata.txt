@@ -1,0 +1,4 @@
+commit_hash=453f227
+timestamp=20261027_131836
+branch=week9-entries-decisions
+commit_message=PLAN_T T1: the first_confluence probe's Phase 2 MS reads what its sub reads (caller's timeframe values M15 5/30, pip size, the sub's cross-fib limit, lazy) + a log-only probe/sub consistency tripwire - zero change (30/30 CSVs byte-equal, charts equal)
