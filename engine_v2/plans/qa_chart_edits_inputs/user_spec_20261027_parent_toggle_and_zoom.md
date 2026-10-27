@@ -186,3 +186,9 @@ Shown the replay's three charts (`artifacts/charts/NZD_USD_H1_2025-11-15_2026-01
 _M15_confluence}.html`) with the landing's results. The user, verbatim: "charts look good, go ahead with the commit
 flow". No change asked. Item 5's final part is DONE, and with it SESSION ORDER item 5; next: item 6, zone size
 adjustments (register §D).
+
+Committed: source `5dfb5b3`; save S_controls `20261027_164527_5dfb5b3` (save `32cde54`, trunk `6ab4b62`) =
+`LATEST_<branch>`. The save replay (105.77 s wall — the chart stages slower than the landing's 69.95 s, machine
+variance): fetch gate PASS, skip grep 33 (the same families), `controls_landing_check.py` vs S_T2 ALL OK again, the
+three PNGs byte-equal to S_T2. `cmp_save` vs S_T2: 0 real cells, `traces_xy_equal=True` everywhere,
+`shapes_equal=False` on both M15 charts (the 40 tagged shapes — expected).

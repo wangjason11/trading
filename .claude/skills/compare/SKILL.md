@@ -790,7 +790,22 @@ unchanged. Charts (`fig_named_diff.py`): H1 equal; counter `M15 WVMI LP buy` (+2
 cycle-0 carve-out's first_confluence … did not create its sub`). Not a save-format boundary (same columns;
 positional `cmp_save` fine — diff the events keyed with `qa_cycle0_carveout_inputs/c0_evdiff.py BASE CUR`). Suite
 2096; mutants 36 / 36. S_T2 `20261027_140757_017c920` (source `017c920`, save `c0153a9`, trunk `1564ccd`; =
-`LATEST_<branch>` from 2026-10-27; the save = the compared replay, reused).
+`LATEST_<branch>` until S_controls, below; the save = the compared replay, reused).
+**Item 5's final part (2026-10-27, the chart control bar — CHARTING_SPEC §14) — FIGURE-ONLY:** = the prediction
+(`plans/qa_chart_edits_inputs/user_spec_20261027_parent_toggle_and_zoom.md` "The plan + prediction"). Vs S_T2: 30 / 30
+CSVs byte-equal; the PNGs byte-equal; the H1 figure equal; each M15 chart's traces + shapes in the same order and
+counts (counter 158 / 136, confluence 306 / 307), exactly 60 traces + 40 shapes differ, each ONLY by `legendgroup =
+"parent_overlay"` (what `_render_h1_overlay` draws; not the H1 trigger markers or H1 WVMI circles); the layouts
+otherwise equal; each HTML (H1 too) gains one control script (`charting/chart_controls.js` + its candle table). Check
+it with `plans/qa_chart_edits_inputs/controls_landing_check.py BASE CUR_DEBUG CUR_CHARTS` (CSVs, figures vs the
+prototype's classifier, the script + its table: H1 1058 candles, M15 4228 with idx_1H 0..1056) or
+`fig_named_diff.py` (120 changed traces, all `['legendgroup']`). A figure-format boundary for the M15 charts only
+(`legendgroup` + the script): across it `cmp_save` prints `shapes_equal=False` on both M15 charts (the 40 tagged
+shapes — expected; `traces_xy_equal=True`, 0 real cells), measured on the save replay vs S_T2. The browser
+behaviour: `proto_headless_check.py CHART_HTML SHOTS STEPS` (choreographer; kaleido's Chrome). Skip grep 33 (the same
+families). Suite 2108; mutants 33 / 33. S_controls `20261027_164527_5dfb5b3` (source `5dfb5b3`, save `32cde54`, trunk
+`6ab4b62`; = `LATEST_<branch>` from 2026-10-27; the save replay = `controls_landing_check.py` ALL OK vs S_T2 again).
+SESSION ORDER item 5 is complete.
 
 **M15.counter** and **M15.confluence** (9 files each — 7 per-lens debug CSVs
 with the same filename suffixes prefixed `*_M15_counter_` /

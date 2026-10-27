@@ -215,6 +215,8 @@ First, I want to revisit the cycle-0 carve-out that we discussed recently. After
    highlight that stays until the next jump (Go on an empty box clears it — the user, round 2). = the prediction
    (figure-only: 30 / 30 CSVs byte-equal, the H1 figure equal, each M15 chart's 60 traces + 40 shapes differ only by
    that `legendgroup`, + the control script); the user's look: "charts look good, go ahead with the commit flow".
+   Source `5dfb5b3`, save S_controls `20261027_164527_5dfb5b3` = `LATEST_<branch>` (save `32cde54`, trunk `6ab4b62`;
+   the `/compare` skill's entry).
    Canonical: CHARTING_SPEC §14; every round verbatim + the measurements:
    `engine_v2/plans/qa_chart_edits_inputs/user_spec_20261027_parent_toggle_and_zoom.md`. **Item 5 is COMPLETE — NEXT:
    item 6.**
