@@ -1,0 +1,4 @@
+commit_hash=017c920
+timestamp=20261027_140757
+branch=week9-entries-decisions
+commit_message=PLAN_T T2: the cycle-0 carve-out kept only on the main sid 0 and the sub its cycle-0 first_confluence creates (+ that trigger's probe) - subs 4, 7, 8 confirm cycle 0 by proximity (= the measured prediction)
