@@ -483,8 +483,8 @@ combinations of `breakout_momentum` / `pullback_momentum` around 1).
     close at 4129)`.
 - **A circled dot's two hovers:** Plotly's closest-point hover subtracts each marker's radius from the cursor
   distance (floored at `1 − 3 / radius`), so the dot (the smaller radius) wins at the centre and the circle on its
-  ring (size 8: the dot 0 vs the circle 1 − 3 / 4 = 0.25 at the centre) — derived from Plotly's scatter hover rule,
-  not checked in a browser.
+  ring (size 8: the dot 0 vs the circle 1 − 3 / 4 = 0.25 at the centre) — derived from Plotly's scatter hover rule;
+  checked by the user in the browser 2026-10-27: "the browser circle surrounding sub dot looks good".
 - **Reference window (S_lp_rows' records):** the H1 chart 57 circles (42 buy / 15 sell); counter 74 sub dots (27 /
   47) + the 57 H1 circles; confluence 185 (88 / 97) + 57. A circle around a sub dot: counter 1 (3755), confluence 7
   (2735, 3499, 3587, 3755, 4179, 4183, 4195). No candle carries both a buy and a sell mark. A zoomed look that keeps

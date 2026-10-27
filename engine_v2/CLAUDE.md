@@ -46,7 +46,8 @@ the furthest qualified close in the pullback direction, its first one by how the
 CTS_CONFIRMED carries `pattern_anchor_idx`; step 4 landed 2026-10-26: every LP a record has had is kept as a
 per-LP row, exported one row per dot to `*_wvmi_lps.csv` — 30 CSVs per replay; step 5 landed 2026-10-26: the WVMI LP
 marks above the volume bars, one per per-LP row (sub dots, H1 circles), CHARTING_SPEC §13 — the second edit COMPLETE;
-next in item 5: the charts' other elements, the user's list),
+item 5 paused 2026-10-27 for the NEXT session, the cycle-0 carve-out revisit (register §D 5b), then item 5's final part:
+a toggle to hide the parent (1H) overlay, chart zoom),
 then item 3, zone size adjustments),
 Part 2 entry decisions, Part 3 other decisions.
 

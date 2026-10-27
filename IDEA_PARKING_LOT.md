@@ -74,6 +74,9 @@ direction / CTS zone proximity trigger. Finally, after that we will start zone s
 Verbatim: "For now let's consider item 3 done. We could potentially revist down the line when I notice something else in the future. Before moving on to zone adjustments, I'd like to go back and revisit some things around IC identification logic. I will provide further specs for the changes in future sessions."
 **UPDATED by the user 2026-10-21 (after PLAN_S landed) — item 4 DONE (closed; may be revisited), a new item 5 before
 zone size adjustments.** Verbatim: "I was simply saying that we may come back to IC if in the future I see something wrong or want to fix. BUt for now, we can consider it closed. Just don't be surprised in the future if we come back to it again." And: "for the very next session, I would like to actually work on a few charge updates & edits before we move on to zone adjustments." ("charge" = chart.)
+**UPDATED by the user 2026-10-27 (after "WVMI back on the chart" landed) — the cycle-0 carve-out revisit NEXT, then item
+5's final part.** Verbatim: "I will give you a bit of a preview of what I'd like to work on in the next few sessions.
+First, I want to revisit the cycle-0 carve-out that we discussed recently. Afterward that, we will complete the final parts of charting updates, which will consist of 1) adding a toggle to hide parent (1H) chart overlay elements, and 2) adding an ability to zoom into certain parts of the chart via a) a +/- switch or tool and b) allowing user to input an idx for the chart to zoom into. We can discuss in details those things when we get to them." (Zone size adjustments, item 6, not restated — they stay after item 5.)
 1. ~~**The H1 range-hover follow-up**~~ — **LANDED 2026-10-12** (session 1; `9f9406d`, S_N_hover): widened by
    the user to option B (the hover line = the box, candle for candle) + the dead passes deleted; `/compare` vs S_N = the
    prediction (4 H1 hover traces, 28 candle points). Register §A; `engine_v2/plans/plan_n_inputs/
@@ -199,7 +202,23 @@ zone size adjustments.** Verbatim: "I was simply saying that we may come back to
    hover = the accepted drafts, the H1 circle's M15 copy `TF=1H>>15M` — the user, round 12; the volume axis 1.4 × the
    bars' max; canonical CHARTING_SPEC §13); the user's look: "the positioning looks good", the circles "a bit
    smaller" (11 → 9 → 7 → 8, "let's go with 8 as the final value"). **The second edit, "WVMI back on the chart",
-   is COMPLETE.** Next in item 5: the charts' other elements (the user brings the list); then item 6.
+   is COMPLETE.** **PAUSED 2026-10-27 for the cycle-0 carve-out revisit (below — the user's order).** Item 5's FINAL
+   part, after it (the user 2026-10-27; "We can discuss in details those things when we get to them"): **(1) a toggle to
+   hide the parent (1H) overlay elements** on the M15 charts — background: PART4 §16.4 planned one legend group
+   `Parent (<parent_path_id>)` toggling every parent overlay element (default ON), never built: no H1-overlay trace
+   carries a `legendgroup` (only the M15 fibs' `m15_fib`, grep 2026-10-27); **(2) chart zoom** — (a) a +/- switch or
+   tool, (b) an idx input the chart zooms to. Then item 6.
+5b. **Revisit the cycle-0 carve-out (no sd-proximity CTS confirmation on any cycle 0)** — **NEXT** (inserted by the user
+   2026-10-27 before item 5's final part; moved here from §G, where it was parked 2026-10-26). **DECIDE**; raised by the
+   user 2026-10-26 with "WVMI back on the chart": "yes we do need to add line to revisit this. I need to better
+   understand the original carve out logic. A decision from May was also quite a long time ago and a lot of things
+   have changed since then … We can come back to it in more detail later". The rule: MARKET_STRUCTURE_SPEC "Cycle-0
+   carve-out (proximity disabled)" + LANDMINES "Dual CTS Proximity Confirmation — Cycle-0 + Rule 1 Are BOTH Required"
+   (both gates kept by the user's 2026-05-12 decision). The user's concerns: it reads as built for the main sid 0
+   cycle 0 (other cycle 0s come from the engine's own structure logic and triggers); single-cycle unique subs must
+   all confirm by a pullback pattern. Case: confluence sub 7 cycle 0 (a 57-pip gap) sat at its POI from 4071 and
+   confirmed only at 4157. Detail + facts: `engine_v2/plans/qa_chart_edits_inputs/user_spec_20261024_wvmi_on_chart.md`
+   rounds 6–7 ("Measured for round 7 — facts for the carve-out revisit").
 6. **Zone size adjustments** — D.1 item 3 below (the user's spec).
 
 **D.1 — Ordered (the heavy items):**
@@ -509,16 +528,6 @@ zone size adjustments.** Verbatim: "I was simply saying that we may come back to
   both show on one chart as `end_reason=`. Exported values, so a rename is a meta-contract migration (LANDMINES
   "Event Contract Rules" rule 3), not a hover change. Detail:
   `engine_v2/plans/qa_chart_edits_inputs/user_spec_20261023_fib_hover.md`.
-- **Revisit the cycle-0 carve-out (no sd-proximity CTS confirmation on any cycle 0)** — **DECIDE**; raised by the
-  user 2026-10-26 with "WVMI back on the chart": "yes we do need to add line to revisit this. I need to better
-  understand the original carve out logic. A decision from May was also quite a long time ago and a lot of things
-  have changed since then … We can come back to it in more detail later". The rule: MARKET_STRUCTURE_SPEC "Cycle-0
-  carve-out (proximity disabled)" + LANDMINES "Dual CTS Proximity Confirmation — Cycle-0 + Rule 1 Are BOTH Required"
-  (both gates kept by the user's 2026-05-12 decision). The user's concerns: it reads as built for the main sid 0
-  cycle 0 (other cycle 0s come from the engine's own structure logic and triggers); single-cycle unique subs must
-  all confirm by a pullback pattern. Case: confluence sub 7 cycle 0 (a 57-pip gap) sat at its POI from 4071 and
-  confirmed only at 4157. Detail + facts: `engine_v2/plans/qa_chart_edits_inputs/user_spec_20261024_wvmi_on_chart.md`
-  rounds 6–7.
 - **Per-LP WVMI rows for COLLAPSED records** — not now; the user 2026-10-26 (before "WVMI back on the chart" step 4):
   "for now collapsed records don't need to get per-LP rows. I may change my mind later". So `*_wvmi_lps.csv` = one
   row per dot (the non-collapsed records' temporary + locked LPs), while `_wvmi.csv` keeps collapsed records with

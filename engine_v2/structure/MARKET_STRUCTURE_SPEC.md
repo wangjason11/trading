@@ -383,8 +383,9 @@ only when its pattern extreme IS a strict new extreme, see "CTS" above),
 not `_emit_cts_established` — keeping the same cycle alive rather than
 spawning a phantom cycle 1.
 
-> **Under review (parked 2026-10-26, the user):** this carve-out is to be revisited — register `IDEA_PARKING_LOT.md`
-> §G "Revisit the cycle-0 carve-out" (the user's concerns + the measured facts). It is unchanged until then.
+> **Under review (parked 2026-10-26; scheduled by the user 2026-10-27 as the NEXT session):** this carve-out is to be
+> revisited — register `IDEA_PARKING_LOT.md` §D SESSION ORDER item 5b "Revisit the cycle-0 carve-out" (the user's
+> concerns + the measured facts). It is unchanged until then.
 
 The proximity check picks the closest-to-current-price sd inner across
 BOS and POIs. POI inners are refreshed at `CTS_ESTABLISHED` (new cycle)

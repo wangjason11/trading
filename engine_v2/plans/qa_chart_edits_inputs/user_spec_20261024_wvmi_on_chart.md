@@ -800,6 +800,21 @@ dot's 2.5), so a circled dot reads as a bolder dot; a lone circle still reads as
 Decided: `wvmi.lp_dot.main.*` size 8 (final). The ring's inner edge 3.25 vs the dot's 2.5; the dot still wins the
 hover at the centre (0 vs 1 − 3 / 4 = 0.25). Go to commit, no push.
 
+## Round 15 — the user's browser check + the next sessions (2026-10-27, after step 5 landed, verbatim)
+
+> the browser circle surrounding sub dot looks good. If nothing is left outstanding in this session, we can end and
+> start a new session.
+>
+> But before that, I will give you a bit of a preview of what I'd like to work on in the next few sessions. First, I
+> want to revisit the cycle-0 carve-out that we discussed recently. Afterward that, we will complete the final parts
+> of charting updates, which will consist of 1) adding a toggle to hide parent (1H) chart overlay elements, and 2)
+> adding an ability to zoom into certain parts of the chart via a) a +/- switch or tool and b) allowing user to input
+> an idx for the chart to zoom into. We can discuss in details those things when we get to them.
+
+Decided: the circled-dot hover (the dot at the centre, the circle on its ring) checked by the user in the browser —
+the last open item of this edit, closed. The next sessions in the user's order (canonical: the register §D SESSION
+ORDER): the cycle-0 carve-out revisit, then item 5's final part — a toggle to hide the parent (1H) overlay, chart zoom.
+
 ## Step 5 — the dots + hovers on the three charts (2026-10-26)
 
 - **Design (from the code, `2c4ccf2`; canonical CHARTING_SPEC §13):** one mark per `lp_rows` entry of every
