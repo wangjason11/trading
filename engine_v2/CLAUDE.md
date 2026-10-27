@@ -43,7 +43,8 @@ design settled 2026-10-26, five landings, step 1 landed 2026-10-26: `first_count
 proximity trigger, not the WVMI records; step 2 landed 2026-10-26: the H1 WVMI without its gate, every H1 cycle with a
 CTS_CONFIRMED has a record, attributed to its first sd trigger; step 3 landed 2026-10-26: the WVMI temporary LP =
 the furthest qualified close in the pullback direction, its first one by how the CTS confirmed — a pullback
-CTS_CONFIRMED carries `pattern_anchor_idx`),
+CTS_CONFIRMED carries `pattern_anchor_idx`; step 4 landed 2026-10-26: every LP a record has had is kept as a
+per-LP row, exported one row per dot to `*_wvmi_lps.csv` — 30 CSVs per replay; next, step 5: the dots + hovers),
 then item 3, zone size adjustments),
 Part 2 entry decisions, Part 3 other decisions.
 

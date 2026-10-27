@@ -445,7 +445,7 @@ Per-entity CSV outputs cover **H1.main**, **M15.counter**, and
 | `*_imbalance_instances.csv` |
 | `*_fib_lifecycle.csv` — no `fib_mode` column since PLAN_I S6 (2026-10-09): against an older save (S_J `20261009_013718_708a8d9` and before) diff the 3 fib CSVs with `engine_v2/plans/plan_i_inputs/cmp_s6_fib_mode.py BASE CUR` (positional `cmp_save.py` shifts the `meta` cell); the `ic_ref_*` meta keys since PLAN_K landing A |
 | `*_wvmi.csv` |
-| `*_wvmi_lps.csv` — the per-LP WVMI rows, one per dot ("WVMI back on the chart" step 4, 2026-10-26 — `debug/export_wvmi.export_wvmi_lps`; collapsed records none; WVMI_SPEC "Per-LP rows"); NEW since step 4's save — against an older save it is `NEW (no baseline)` |
+| `*_wvmi_lps.csv` — the per-LP WVMI rows, one per dot ("WVMI back on the chart" step 4, 2026-10-26 — `debug/export_wvmi.export_wvmi_lps`; collapsed records none; WVMI_SPEC "Per-LP rows"); NEW since step 4 — S_lp_rows `20261026_220225_588014a` is the first save with it; against an older save it is `NEW (no baseline)` |
 
 **Save-format boundary — PLAN_K landing A (2026-10-09; S_K_A `20261009_112137_02e9381` is the first save with it):** a save up to S_S6
 `20261009_020650_5f6bae3` lacks the IP CSVs' `ic_ref_reason` column, the fib meta's `ic_ref_price` / `ic_ref_source` /
@@ -732,8 +732,19 @@ counter `_wvmi.csv` unchanged. `cmp_events_pattern_anchor.py` (new, `plans/qa_ch
 charts unchanged (`fig_named_diff.py`: 81/234, 154/136, 302/307). Skip grep 23 → 33 (the 10 WARNING lines above —
 predicted 2: the prediction deduplicated tracker runs by content). `[wvmi] total=5, locked=3`; the same 3
 `[uc1_trigger]` lines. S_lp_furthest `20261026_192655_f63df34` (source `f63df34`, save `e8583de`, trunk `5d055ba`;
-= `LATEST_<branch>` from 2026-10-26; the save replay = the compared replay, 27 / 27 CSVs byte-equal). Next (step 4,
-the per-LP rows + `*_wvmi_lps.csv`): 27 → 30 CSVs; ask the user first whether collapsed records keep flagged rows.
+= `LATEST_<branch>` until S_lp_rows, below; the save replay = the compared replay, 27 / 27 CSVs byte-equal).
+**WVMI back on the chart, step 4: the per-LP rows + `*_wvmi_lps.csv` (2026-10-26, the same design file "Step 4") — 3
+NEW CSVs, nothing else:** every LP a WVMI record has had is kept as a row (`WVMIRecord.lp_rows`; statuses `temporary` /
+`locked` / `open` / `unlocked` with their why / when) and exported one row per dot — collapsed records none (the user,
+round 10), an LP before its sub's `start_idx` with `relative_dir = NA (before start_idx)` (round 11). = the prediction
+in every cell (scratchpad `step4_check.py` vs `wvmi_asof.py`'s sequences + locks + lifecycle ends): H1 57 rows,
+counter 74, confluence 185 (`temporary` 54 / 68 / 171, `locked` 1 / 3 / 7, `unlocked` 1 / 3 / 7, `open` 1 / 0 / 0);
+each record's last row = its `_wvmi.csv` LP. 27 / 27 old CSVs byte-equal + the 3 new (27 → 30: against an older
+save `cmp_fig_full.py` lists them `NEW (no baseline)`); the three charts unchanged (`fig_named_diff.py`); skip grep
+33 (the same lines); `[wvmi] total=5, locked=3`; the same 3 `[uc1_trigger]` lines. Suite 2012; mutants 29 / 29.
+S_lp_rows `20261026_220225_588014a` (source `588014a`, save `04d2f0a`, trunk `fef0135`; = `LATEST_<branch>` from
+2026-10-26; the save replay = the compared replay). Next: step 5, the dots + hovers on the three charts (a rendered
+example and the user's look before the commit; `fig_named_diff.py` — traces are added).
 
 **M15.counter** and **M15.confluence** (9 files each — 7 per-lens debug CSVs
 with the same filename suffixes prefixed `*_M15_counter_` /

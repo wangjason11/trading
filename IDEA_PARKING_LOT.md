@@ -188,10 +188,11 @@ zone size adjustments.** Verbatim: "I was simply saying that we may come back to
    the prediction (6 records' final LP + pullback momentum move, the structure-events CSVs gain the key — a
    save-format boundary; the warning prints 10 times for one collapsed record, predicted 2; source `f63df34`, save
    S_lp_furthest `20261026_192655_f63df34` = `LATEST_<branch>`); **4** the per-LP rows +
-   `*_wvmi_lps.csv` — BUILT 2026-10-26, = the prediction (one row per dot: H1 57 / counter 74 / confluence 185;
+   `*_wvmi_lps.csv` — LANDED 2026-10-26, = the prediction (one row per dot: H1 57 / counter 74 / confluence 185;
    collapsed records get none — the user, "I may change my mind later", §G; an LP before its sub's `start_idx` keeps
    its row with `relative_dir = NA (before start_idx)` — the user, round 11; 27 → 30 CSVs, the 27 byte-equal, charts
-   unchanged); **5** the dots + hovers on the three charts (a rendered example first) — NEXT.
+   unchanged; source `588014a`, save S_lp_rows `20261026_220225_588014a` = `LATEST_<branch>`); **5** the dots +
+   hovers on the three charts (a rendered example first) — NEXT.
 6. **Zone size adjustments** — D.1 item 3 below (the user's spec).
 
 **D.1 — Ordered (the heavy items):**

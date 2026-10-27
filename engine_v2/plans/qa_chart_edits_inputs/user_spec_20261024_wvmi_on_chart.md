@@ -756,6 +756,10 @@ start_idx)` — the value the BOS / CTS dot hover gives (one helper for the CSV 
   "per-LP row"; PART4 §16.5's WVMI row; CHARTING_SPEC (the helper's new home); the `/compare` skill (H1 11 + 2 × 9 + 1
   = 30 CSVs, both file tables), WORKFLOWS, `review_scripts/README.md`. The `/commit-save` skill holds no CSV count or
   file table (it copies every `*.csv` newer than the run's `*_raw.csv`) — nothing to change there.
+- **LANDED 2026-10-26** (the user: "sounds good go ahead"): source `588014a`, save S_lp_rows
+  `20261026_220225_588014a` (save `04d2f0a`, trunk `fef0135`) = `LATEST_<branch>` — the save replay = the compared
+  replay (fetch gate PASS, 62.5 s wall; 27 / 27 CSVs byte-equal to S_lp_furthest, the 3 new = the prediction, the
+  charts unchanged, skip grep 33). No existing CSV changes format; an older save simply lacks the 3 files.
 
 ## Build notes for steps 2–5 (written at the session close 2026-10-26 — read with the decisions above)
 
