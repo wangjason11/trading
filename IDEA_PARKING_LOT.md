@@ -583,7 +583,8 @@ First, I want to revisit the cycle-0 carve-out that we discussed recently. After
 - **The cycle-0 carve-out revisit** (§D 5b; raised by the user 2026-10-26, scheduled 2026-10-27) — CLOSED 2026-10-27
   by PLAN_T in two landings: T1 `453f227` (the first_confluence probe's MS reads what its sub reads; zero change; save
   S_T1 `20261027_131836_453f227`) and T2 (the carve-out kept on the main sid 0 + the sub its cycle-0 first_confluence
-  creates only; subs 4, 7, 8 confirm cycle 0 by proximity — commit + save in PLAN_T §5). Every round verbatim:
+  creates only; subs 4, 7, 8 confirm cycle 0 by proximity — `017c920`, save S_T2 `20261027_140757_017c920`). Every
+  round verbatim:
   `engine_v2/plans/qa_cycle0_carveout_inputs/user_spec_20261027_cycle0_carveout.md`.
 - **WVMI back on the chart** (§G; deferred 2026-05-28 `e64556a`, un-tabled by the user 2026-10-24) — CLOSED 2026-10-26
   in five landings (`257f8ba`, `76b5a17`, `f63df34`, `588014a`, `2dc9e5d`; save S_wvmi_marks

@@ -1,7 +1,7 @@
 # PLAN_T — the first_confluence probe reads what its sub reads + the cycle-0 carve-out on the main sid 0 and its first_confluence sub only (the user's carve-out revisit, 2026-10-27)
 
 **Status: COMPLETE 2026-10-27 — T1 LANDED (`453f227`, save S_T1 `20261027_131836_453f227`, = §2.3 exactly); T2 LANDED
-(= §3.3 exactly; §5).** Baseline **S_wvmi_marks**
+(`017c920`, save S_T2 `20261027_140757_017c920`, = §3.3 exactly; §5).** Baseline **S_wvmi_marks**
 `artifacts/commits/week9-entries-decisions/20261026_230619_2dc9e5d` (source `2dc9e5d`; HEAD at drafting `3f2a29c`, code =
 `2dc9e5d`); suite 2039. Session order item 5b (register `IDEA_PARKING_LOT.md` §D "SESSION ORDER"). TWO landings, in the
 user's order ("Probe first"), each with its own measured prediction, `/compare` and chart look: §2 T1 the probe → §3 T2
@@ -316,6 +316,8 @@ call at the look (not in this plan).
   PASS, skip grep 33, the tripwire silent, **30 / 30 CSVs byte-equal, the three charts equal** — 65.3 s.
 
 ### T2 — LANDED 2026-10-27 (the user: "Looks good, commit T2"; a confirmation mark on the M15 charts: "Not needed")
+— source `017c920`, save **S_T2** `20261027_140757_017c920` (save commit `c0153a9`, trunk `1564ccd`; =
+`LATEST_week9-entries-decisions`)
 
 - **Code (= §3.2):** `MarketStructure(cycle0_proximity_blocked=True)` + the gate `st.cts_cycle_id > 0 or not
   self.cycle0_proximity_blocked`; REQUIRED at `_make_market_structure`, `build_or_get_geometry` (None on a pool hit,

@@ -778,6 +778,19 @@ confirmation; the probe reads nothing after cycle 0's confirmation); on the wind
 (FC (0,0), whose limit is none = today's). Not a save-format boundary. Suite 2065; mutants 26 / 26. S_T1
 `20261027_131836_453f227` (source `453f227`, save `4d7318c`, trunk `1d7a6a0`; = `LATEST_<branch>` from 2026-10-27; the
 save replay = 30 / 30 CSVs byte-equal to S_wvmi_marks again).
+**PLAN_T T2 (2026-10-27, the cycle-0 carve-out kept only on the main sid 0 and the sub its cycle-0 first_confluence
+creates, + that trigger's probe) — BEHAVIOUR, 6 CSVs, subs 4, 7, 8 only:** = the measured prediction (PLAN_T §3.3;
+30 / 30 CSVs equal to the variant `c0T2`). Vs S_T1: the two M15 `structure_events` (sub 8 on both lenses, subs 4 / 7
+on confluence: the cycle-0 CTS_CONFIRMED moves to its proximity candle 4098 / 3336 / 4071 `sd_zone_proximity`, the old
+pattern candle 4103 / 3489 / 4157 becomes CTS_RECONFIRMED — counter 591 → 592, confluence 1388 → 1391 events), the
+two M15 `fib_lifecycle` (`meta.locked_at` on those cycle-0 fibs), the two M15 `wvmi_lps` (counter 74 → 76, confluence
+185 → 216: the temporary LPs from the proximity confirmation on); H1, triggers, subs, KL / POI / IC, `_wvmi.csv`
+unchanged. Charts (`fig_named_diff.py`): H1 equal; counter `M15 WVMI LP buy` (+2 marks); confluence `M15 WVMI LP buy`
+(+16) + `sell` (+15); shapes + layouts equal. Skip grep 33 (both new tripwires silent: the probe/sub one and `the
+cycle-0 carve-out's first_confluence … did not create its sub`). Not a save-format boundary (same columns;
+positional `cmp_save` fine — diff the events keyed with `qa_cycle0_carveout_inputs/c0_evdiff.py BASE CUR`). Suite
+2096; mutants 36 / 36. S_T2 `20261027_140757_017c920` (source `017c920`, save `c0153a9`, trunk `1564ccd`; =
+`LATEST_<branch>` from 2026-10-27; the save = the compared replay, reused).
 
 **M15.counter** and **M15.confluence** (9 files each — 7 per-lens debug CSVs
 with the same filename suffixes prefixed `*_M15_counter_` /
