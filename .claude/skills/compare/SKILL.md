@@ -775,7 +775,9 @@ THE formula, called on a probe-cache miss); + the log-only probe/sub consistency
 (`fig_named_diff.py`), the probe's log lines identical, skip grep 33, the tripwire silent. Byte-identical BY
 CONSTRUCTION while the cycle-0 carve-out blocks every cycle 0 (the two values are read only by the proximity
 confirmation; the probe reads nothing after cycle 0's confirmation); on the window the probe's Phase 2 MS runs once
-(FC (0,0), whose limit is none = today's). Not a save-format boundary. Suite 2065; mutants 26 / 26.
+(FC (0,0), whose limit is none = today's). Not a save-format boundary. Suite 2065; mutants 26 / 26. S_T1
+`20261027_131836_453f227` (source `453f227`, save `4d7318c`, trunk `1d7a6a0`; = `LATEST_<branch>` from 2026-10-27; the
+save replay = 30 / 30 CSVs byte-equal to S_wvmi_marks again).
 
 **M15.counter** and **M15.confluence** (9 files each — 7 per-lens debug CSVs
 with the same filename suffixes prefixed `*_M15_counter_` /

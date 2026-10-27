@@ -1,6 +1,6 @@
 # PLAN_T — the first_confluence probe reads what its sub reads + the cycle-0 carve-out on the main sid 0 and its first_confluence sub only (the user's carve-out revisit, 2026-10-27)
 
-**Status: REVISED 2026-10-27 after the cold review (§4) — awaiting the user's go for T1.** Baseline **S_wvmi_marks**
+**Status: T1 LANDED 2026-10-27 (`453f227`, save S_T1 `20261027_131836_453f227`, = §2.3 exactly); T2 next.** Baseline **S_wvmi_marks**
 `artifacts/commits/week9-entries-decisions/20261026_230619_2dc9e5d` (source `2dc9e5d`; HEAD at drafting `3f2a29c`, code =
 `2dc9e5d`); suite 2039. Session order item 5b (register `IDEA_PARKING_LOT.md` §D "SESSION ORDER"). TWO landings, in the
 user's order ("Probe first"), each with its own measured prediction, `/compare` and chart look: §2 T1 the probe → §3 T2
@@ -269,7 +269,8 @@ call at the look (not in this plan).
 
 ## 5. Build log
 
-### T1 — BUILT 2026-10-27 (the user: "Yes, build T1"; uncommitted until the user's go)
+### T1 — LANDED 2026-10-27 (the user: "Yes, build T1", then "Commit + save, then T2") — source `453f227`, save **S_T1**
+`20261027_131836_453f227` (save commit `4d7318c`, trunk `1d7a6a0`; = `LATEST_week9-entries-decisions`)
 
 - **Code:** `unified_probe._run_phase2` (keyword-only `timeframe` / `pip_size` / `cross_fib_limit`, REQUIRED) →
   `_make_market_structure(…, timeframe, pip_size, cross_fib_limit)`; `unified_probe(…, cross_fib_limit=None)`, asserted
