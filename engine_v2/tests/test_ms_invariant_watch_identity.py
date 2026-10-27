@@ -43,7 +43,7 @@ from engine_v2.tests._cross_fib_limits import NO_P
 # Constructed rows: invariant 4 alone, on a clean run's df (no watch anywhere) with two rows set by hand.
 def _clean_ms():
     with redirect_stdout(io.StringIO()):
-        ms = _make_market_structure(_prepare_df(_make_multicycle_data()), struct_direction=1, start_idx=0, cross_fib_limit=NO_P)
+        ms = _make_market_structure(_prepare_df(_make_multicycle_data()), struct_direction=1, start_idx=0, cycle0_proximity_blocked=True, cross_fib_limit=NO_P)
         ms.run()
     assert not ms.df["reversal_watch_active"].astype(bool).any()
     return ms

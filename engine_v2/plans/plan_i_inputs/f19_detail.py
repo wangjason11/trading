@@ -15,7 +15,7 @@ src = pd.read_csv(os.path.join(os.environ["TEMP"], "pi", "f14", f"NZD_USD_{tf}_2
 sl = src.iloc[off:off + length].reset_index(drop=True)
 T = lambda i: str(sl["time"][int(i)])[5:16]
 df = _prepare_df(sl[["o", "h", "l", "c"]].to_dict("records"))
-ms = _make_market_structure(df, cross_fib_limit=CrossFibLimit(None, "none"), struct_direction=sd, start_idx=start,
+ms = _make_market_structure(df, cycle0_proximity_blocked=True, cross_fib_limit=CrossFibLimit(None, "none"), struct_direction=sd, start_idx=start,
                             structure_id=0, timeframe=tf, pip_size=_pip_size_from_pair(df))
 with contextlib.redirect_stdout(io.StringIO()):
     try:

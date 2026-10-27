@@ -313,7 +313,7 @@ After `CTS_ESTABLISHED`, the engine watches for both:
 1. **A valid pullback pattern** (existing path, all cycles)
 2. **First sd zone proximity hit** (uses the BOS inner + the cycle's POI inner — the IC pick of the representative fib, read with no POI activation gate; see "The proximity check picks the closest…" below) — gated by **both**:
    - **Rule 1 (narrow-gap gate):** `|cts_price − bos_threshold| ≥ min_gap_threshold` (per-TF table)
-   - **Cycle-0 carve-out:** `cts_cycle_id > 0` (BOS_0's "initial_prior_extreme" status makes it semantically suspect regardless of gap magnitude)
+   - **Cycle-0 carve-out — on two structures only since PLAN_T T2 (2026-10-27):** `cts_cycle_id > 0 or not cycle0_proximity_blocked` — a cycle-0 CTS cannot confirm by proximity on the main sid 0 and on the sub the main sid 0 cycle 0's first_confluence creates (+ that trigger's probe); every other cycle 0 is guarded by Rule 1 alone, like every cycle k > 0
 
    Both gates must pass for sd-proximity to be eligible to confirm CTS. See "Rule 1: narrow-gap gate" and "Cycle-0 carve-out" sections below for the rationale of each.
 
@@ -362,30 +362,48 @@ proximity confirmed post-crossing before pullback.
 "Option B" range seeding (see below) only fires when proximity confirms
 CTS, which after Rule 1 is restricted to wide cycles / post-crossing.
 
-### Cycle-0 carve-out (proximity disabled)
+### Cycle-0 carve-out (proximity disabled) — the main sid 0 and its first_confluence sub only
 
-The proximity confirmation path is **skipped on cycle 0** of every
-structure_id. Cycle 0's `BOS_0` is the swing extreme that existed
-*before* the structure began (`source: "initial_prior_extreme"`), so the
-`BOS_0`–`CTS_0` gap is unconstrained — it can be arbitrarily small.
-When that gap is smaller than ~2× `proximity_pips`, the sd-inner
-proximity buffer overlaps the `CTS_0` price level and the very first
-candle after `CTS_ESTABLISHED` trivially fires the trigger, producing a
-premature `CTS_CONFIRMED` and a spurious cycle-1 `BOS_CONFIRMED` at the
-narrow proximity-only retracement window. Cycles k>0 don't have this
-pathology because `BOS_k` is the pullback extreme from cycle k-1, which
-guarantees a structurally meaningful gap.
+**The rule (PLAN_T T2, the user 2026-10-27):** sd-proximity cannot confirm a cycle-0 CTS on exactly two structures —
+the **main sid 0** (`compute_structure`, `structure_id == 0`) and **the sub the first_confluence of the main sid 0
+cycle 0 creates** (`multitf/lifecycle_sweep.cycle0_proximity_blocked_for`: trigger type `first_confluence`, parent
+cycle (0, 0), parent path `H1.main` — keyed on what the sub IS, not on `sub_id == 0`) **and that trigger's probe**
+(its Phase 2 MS; probe and sub must agree on the 2nd CTS). Every other cycle 0 — a main reversal's, every other sub's
+— is guarded by the narrow-gap gate alone, like every cycle k > 0. In code: `MarketStructure(cycle0_proximity_blocked=)`
+(REQUIRED at `structure_engine._make_market_structure`; MS's own default True = the pre-PLAN_T rule, for direct
+construction); the gate reads `cts_cycle_id > 0 or not cycle0_proximity_blocked`.
 
-Cycle 0 therefore relies on **pullback confirmation only**. If no
-pullback pattern fires before a same-direction breakout, the breakout
-calls `_emit_cts_updated` (extending cycle 0's CTS to the new extreme —
-only when its pattern extreme IS a strict new extreme, see "CTS" above),
-not `_emit_cts_established` — keeping the same cycle alive rather than
-spawning a phantom cycle 1.
+**Why those two.** BOS_0 is the extreme between the structure's START and its CTS_0 anchor
+(`_initial_bos_before_first_cts`: the lowest low for an up-structure, the highest high for a down one — the base of
+the first breakout, inside the structure's span), labelled `source: "initial_prior_extreme"` on every structure.
+What differs is where the START comes from: the main sid 0's from Scenario 1's pick over the data (the trading open —
+no structural reference, no probe, no retrace resets); every other structure's from a probe over a structural
+reference (a prior CTS, a sibling lens's CTS, the parent BOS anchor) with retrace resets (the true-first-breakout
+cycle-0 redesign, 2026-06). The first_confluence of the main sid 0 cycle 0 probes from the main sid 0's own BOS_0
+anchor, so its cycle 0 sits on the same trading-open BOS_0 — it keeps the carve-out with it.
 
-> **Under review (parked 2026-10-26; scheduled by the user 2026-10-27 as the NEXT session):** this carve-out is to be
-> revisited — register `IDEA_PARKING_LOT.md` §D SESSION ORDER item 5b "Revisit the cycle-0 carve-out" (the user's
-> concerns + the measured facts). It is unchanged until then.
+**History.** The carve-out landed 2026-05-11 (`47e7532`) for every cycle 0, the day before the narrow-gap gate
+(`fa93e0a`, 2026-05-12; both kept by the user that day). Its two reasons: (1) geometric — the BOS_0–CTS_0 gap is
+uncontrolled; a small one lets the proximity buffer overlap the CTS level and the candle right after CTS_ESTABLISHED
+fire (the May cases, H1 sid 0 c0 and sid 1 c0) — the narrow-gap gate now covers this on every cycle (on the
+reference window the same first-candle hit still occurs on H1 sid 0 at 116, sub 7 at 3787 and sub 8 at 4032 — all
+blocked by the narrow-gap gate); (2) semantic — "BOS_0 is a weaker anchor than BOS_k", the one reason that outlived
+the narrow-gap gate, and since the true-first-breakout redesign it holds only where the start has no structural
+reference. Detail + every measurement: `plans/qa_cycle0_carveout_inputs/user_spec_20261027_cycle0_carveout.md`.
+
+**What the narrowing changes.** A cycle 0 whose gap passes the floor can now confirm by proximity when price first
+reaches its POI / BOS inner — a pullback pattern later in the cycle then emits `CTS_RECONFIRMED`. On the reference
+window: subs 4, 7, 8 (confirmations 3489 → 3336, 4157 → 4071, 4103 → 4098; PLAN_T §3.3); H1 unchanged. In general
+(not on the window) an earlier cycle-0 confirmation also (i) shrinks an unblocked first_confluence probe's retrace
+window (`[CTS_0 moment + 1, the confirmation's CTS anchor − 1]`) and moves its `no_retrace` finalize → can move a
+sub's start and lifecycle start; (ii) on a main reversal sid N ≥ 1, moves FC (N, 0)'s `parent_cts_anchor_idx` → that
+probe's end.
+
+On a blocked structure, cycle 0 relies on **pullback confirmation only**. On any structure, while cycle 0 is not
+yet confirmed (no pullback pattern, and — where allowed — no proximity hit), a same-direction breakout calls
+`_emit_cts_updated` (extending cycle 0's CTS to the new extreme — only when
+its pattern extreme IS a strict new extreme, see "CTS" above), not `_emit_cts_established` — keeping the same cycle
+alive rather than spawning a phantom cycle 1.
 
 The proximity check picks the closest-to-current-price sd inner across
 BOS and POIs. POI inners are refreshed at `CTS_ESTABLISHED` (new cycle)
@@ -410,8 +428,9 @@ fib or no IC (no IC candidate / every candidate a pinbar) → the BOS inner alon
 the read takes the frame's candle stamp first on every refresh and re-raises
 anything as `ICSelectionError`; a tracker error arrives as
 `EmbeddedFibTrackerError` (both `RuntimeError`s). The snapshot is per-cycle in
-`MarketStructureState.poi_inners_for_cycle`. Both refreshes still run on
-cycle 0 (cheap), but the per-candle check is gated off. The snapshot's ONLY
+`MarketStructureState.poi_inners_for_cycle`. Both refreshes run on cycle 0 too
+(cheap); the per-candle check is gated off there only on a blocked structure (the
+cycle-0 carve-out, PLAN_T T2). The snapshot's ONLY
 reader is that check (`_maybe_confirm_cts_via_proximity` →
 `_check_proximity_at_candle`). At the end of every run MS calls the tracker's
 `check_processing_order()`: it raises `FibEventOrderError` when the emission

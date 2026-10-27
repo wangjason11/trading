@@ -22,7 +22,7 @@ for seed, ts in sorted(targets.items()):
         if t not in want:
             continue
         df = rts._prepare_df(rows)
-        ms = rts._make_market_structure(df, cross_fib_limit=rts._NO_P, struct_direction=sd, start_idx=0, structure_id=0, timeframe=tf, pip_size=rts._pip_size_from_pair(df))
+        ms = rts._make_market_structure(df, cycle0_proximity_blocked=True, cross_fib_limit=rts._NO_P, struct_direction=sd, start_idx=0, structure_id=0, timeframe=tf, pip_size=rts._pip_size_from_pair(df))
         with contextlib.redirect_stdout(io.StringIO()):
             rts._ms_run(ms)
         est = [(int(e.meta["cycle_id"]), int(e.idx), ef.cts_anchor_idx(e)) for e in ms.events if e.type == "CTS_ESTABLISHED"]

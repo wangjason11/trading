@@ -153,6 +153,7 @@ class TestMainReversalProbe:
             df, int(d0.start_idx), int(d0.struct_direction),
             enforce_cts0_new_extreme=ref0 is not None,
             bos0_inner=ref0.inner if ref0 is not None else None, cross_fib_limit=NO_P,
+            cycle0_proximity_blocked=True,      # sid 0, as compute_structure runs it (PLAN_T T2)
         )
         rev_mask = (
             (bounded0.df["market_state"].astype(str).str.lower() == "reversal")
@@ -181,6 +182,7 @@ class TestMainReversalProbe:
             df, s0, sd,
             enforce_cts0_new_extreme=ref0 is not None,
             bos0_inner=ref0.inner if ref0 is not None else None, cross_fib_limit=NO_P,
+            cycle0_proximity_blocked=True,      # sid 0, as compute_structure runs it (PLAN_T T2)
         )
         assert bounded0.reversal_idx is not None, "fixture did not reverse sid=0"
         rev_apply = int(bounded0.reversal_idx)

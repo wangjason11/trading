@@ -53,7 +53,7 @@ for it in json.load(open(sys.argv[1])):
     cur.clear(); rec = dict(name=it["name"])
     try:
         df = _prepare_df(it["rows"])
-        ms = _make_market_structure(df, cross_fib_limit=CrossFibLimit(None, "none"), struct_direction=it["sd"], start_idx=0, structure_id=0, timeframe="H1",
+        ms = _make_market_structure(df, cycle0_proximity_blocked=True, cross_fib_limit=CrossFibLimit(None, "none"), struct_direction=it["sd"], start_idx=0, structure_id=0, timeframe="H1",
                                     pip_size=_pip_size_from_pair(df), end_idx=it.get("end"))
         with redirect_stdout(io.StringIO()):
             ms.run()

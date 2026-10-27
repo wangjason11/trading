@@ -49,7 +49,7 @@ _ROWS_301_572 = [
 
 def _run():
     df = _prepare_df([dict(o=o, h=h, l=l, c=c) for o, h, l, c in _ROWS_301_572])
-    ms = _make_market_structure(df, cross_fib_limit=NO_P, struct_direction=-1, start_idx=0, structure_id=0,
+    ms = _make_market_structure(df, cycle0_proximity_blocked=True, cross_fib_limit=NO_P, struct_direction=-1, start_idx=0, structure_id=0,
                                 timeframe="H1", pip_size=_pip_size_from_pair(df))
     with contextlib.redirect_stdout(io.StringIO()):
         ms.run()

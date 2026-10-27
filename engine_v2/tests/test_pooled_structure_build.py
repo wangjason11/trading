@@ -117,7 +117,7 @@ def _build_geometry(df):
     built = build_or_get_geometry(
         pool, df,
         parent_path=_PARENT_PATH, sd=_SD, start_abs=_START,
-        bos0_inner=None, cross_fib_limit=NO_LIMIT, timeframe="M15",
+        bos0_inner=None, cross_fib_limit=NO_LIMIT, cycle0_proximity_blocked=False, timeframe="M15",
     )
     assert built is not None, "geometry build must succeed on the reversing fixture"
     return pool, built
@@ -222,7 +222,8 @@ def test_build_or_get_geometry_creates_pool_entry_with_natural_end(
     again = build_or_get_geometry(
         pool, reversing_df,
         parent_path=_PARENT_PATH, sd=_SD, start_abs=_START,
-        bos0_inner=None, cross_fib_limit=None, timeframe="M15",      # a hit: the sub keeps its own limit
+        bos0_inner=None, cross_fib_limit=None, cycle0_proximity_blocked=None,   # a hit: the sub keeps its own
+        timeframe="M15",
     )
     assert again is not None
     sub2, created2 = again

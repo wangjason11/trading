@@ -853,7 +853,8 @@ class TestPhase2EarlyStop:
         ref = _ref_zone_uptrend()
         pip = 0.0001
         kw = dict(reset_tol=DEFAULT_PROBE_RESET_PIPS["H1"] * pip,
-                  wick_cap=DEFAULT_PROBE_RESET_WICK["H1"] * pip, max_iterations=10, timeframe="H1", pip_size=0.0001, cross_fib_limit=CrossFibLimit(None, "none"))
+                  wick_cap=DEFAULT_PROBE_RESET_WICK["H1"] * pip, max_iterations=10, timeframe="H1", pip_size=0.0001, cross_fib_limit=CrossFibLimit(None, "none"),
+                  cycle0_proximity_blocked=True)
 
         retained_on = self._retain(monkeypatch, disable_stop=False)
         on = _run_phase2(df, 0, ref.inner, ref.outer, 1, ref, probe_end_idx, **kw)
@@ -933,7 +934,7 @@ class TestPlanCRenames:
         wick_cap=float(DEFAULT_PROBE_RESET_WICK["H1"]) * _pip,
         max_iterations=10,
     )
-    _kw2 = dict(_kw, timeframe="H1", pip_size=0.0001, cross_fib_limit=CrossFibLimit(None, "none"))   # Phase 2's own keywords (PLAN_T T1)
+    _kw2 = dict(_kw, timeframe="H1", pip_size=0.0001, cross_fib_limit=CrossFibLimit(None, "none"), cycle0_proximity_blocked=True)   # Phase 2's own keywords (PLAN_T T1 / T2)
 
     def test_probe_result_starting_idx_is_the_only_spelling(self):
         ref = _ref_zone_uptrend()
@@ -1113,7 +1114,8 @@ class TestFinalizeIdxTable:
         # The reversal at 14 does not make this `reversal_in_probe`: n_cts = 2 at the exit.
         retained = _retain_phase2_ms(monkeypatch)
         df = _prepare_df(_make_second_cts_moment_after_anchor_data())
-        res = unified_probe(df, 0, 1, _ref_zone_uptrend(), 17, "H1", enable_phase2=True, cross_fib_limit=CrossFibLimit(None, "none"))
+        res = unified_probe(df, 0, 1, _ref_zone_uptrend(), 17, "H1", enable_phase2=True, cross_fib_limit=CrossFibLimit(None, "none"),
+                            cycle0_proximity_blocked=True)   # = `full` below (PLAN_T T2)
         assert res.status == "finalized"
         assert res.finalize_condition == "second_cts_reached"
         cts_est = [e for e in retained[-1].events if e.type == "CTS_ESTABLISHED"]
@@ -1129,7 +1131,7 @@ class TestFinalizeIdxTable:
         import contextlib
         import io
         from engine_v2.structure.structure_engine import _make_market_structure, _pip_size_from_pair
-        full = _make_market_structure(df.copy(), cross_fib_limit=NO_P, struct_direction=1, start_idx=0, structure_id=0,
+        full = _make_market_structure(df.copy(), cycle0_proximity_blocked=True, cross_fib_limit=NO_P, struct_direction=1, start_idx=0, structure_id=0,
                                       timeframe="H1", pip_size=_pip_size_from_pair(df))
         with contextlib.redirect_stdout(io.StringIO()):
             full.run()
@@ -1302,6 +1304,6 @@ def test_phase2_retrace_window_opens_after_the_first_cts_moment(monkeypatch):
                         lambda d, lo, hi, direction: seen.append((lo, hi)) or None)
     ref = ReferenceZone(outer=0.5980, inner=0.5990, side="buy",
                         source="cts_confirmed", anchor_idx=0)
-    res = up._run_phase2(df, 0, 0.5990, 0.5980, 1, ref, 20, 0.0, 0.0, max_iterations=2, timeframe="H1", pip_size=0.0001, cross_fib_limit=CrossFibLimit(None, "none"))
+    res = up._run_phase2(df, 0, 0.5990, 0.5980, 1, ref, 20, 0.0, 0.0, max_iterations=2, timeframe="H1", pip_size=0.0001, cross_fib_limit=CrossFibLimit(None, "none"), cycle0_proximity_blocked=True)
     assert seen == [(13, 20)]
     assert res.finalize_condition == "no_retrace"

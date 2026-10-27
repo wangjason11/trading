@@ -151,7 +151,7 @@ _F16_ROWS = [
 def _f16_ms():
     df = _prepare_df([dict(o=o, h=h, l=l, c=c) for o, h, l, c in _F16_ROWS])
     return se._make_market_structure(df, struct_direction=-1, start_idx=11, structure_id=0, timeframe="M15",
-                                     pip_size=se._pip_size_from_pair(df), cross_fib_limit=NO_P)
+                                     pip_size=se._pip_size_from_pair(df), cycle0_proximity_blocked=True, cross_fib_limit=NO_P)
 
 
 def test_the_f16_candles_confirm_the_cts_known_at_the_confirmation():
@@ -229,7 +229,7 @@ def test_every_public_handler_records_its_event():
 def _geometry(df, inner, lim=NO_P):
     from engine_v2.multitf import entity_df_mutation as edm
     return _quiet(edm._build_geometry, df, sd=1, start_abs=0, run_cap_abs=len(df) - 1, bos0_inner=inner,
-                  timeframe="M15", cross_fib_limit=lim)
+                  timeframe="M15", cycle0_proximity_blocked=False, cross_fib_limit=lim)
 
 
 def _reversing():
@@ -311,7 +311,7 @@ def test_the_probe_passes_the_handed_limit_and_does_not_depend_on_the_read(monke
 def test_make_market_structure_builds_a_quiet_tracker_with_the_limit(embedded):
     df = _prepare_df(_rows(1))
     lim = limit(0.61, "parent_cts_threshold")
-    ms = se._make_market_structure(df, 1, structure_id=3, cross_fib_limit=lim)
+    ms = se._make_market_structure(df, 1, structure_id=3, cycle0_proximity_blocked=True, cross_fib_limit=lim)
     t, = embedded
     assert ms._fib_tracker is t and ms._poi_inner_for_fib is se.poi_inner_for_fib
     assert t._limits == {3: lim} and t._quiet
@@ -329,7 +329,7 @@ def test_the_limit_is_required_and_typed():
     with pytest.raises(TypeError, match="cross_fib_limit"):
         se.compute_bounded_structure(df, 0, 1)
     with pytest.raises(AssertionError, match="must be a CrossFibLimit"):
-        se._make_market_structure(df, 1, cross_fib_limit={"price": None})
+        se._make_market_structure(df, 1, cycle0_proximity_blocked=True, cross_fib_limit={"price": None})
 
 
 def test_one_fill_threshold():

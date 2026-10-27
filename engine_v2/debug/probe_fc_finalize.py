@@ -45,6 +45,7 @@ import engine_v2.multitf.entity_df_mutation as edm
 from engine_v2.structure import event_fields as ef
 from types import SimpleNamespace
 from engine_v2.multitf.cross_fib_limit import cross_fib_limit_for
+from engine_v2.multitf.lifecycle_sweep import cycle0_proximity_blocked_for
 
 # ---- H1 parent frame + events (from the saved replay) -----------------------
 final_path = glob.glob("artifacts/debug/*_final.csv")[0]
@@ -140,7 +141,9 @@ for t in trigs:
                 "first_confluence", (t.parent_sid, t.parent_cycle_id), t.parent_sd, 0, h1_events=events,
                 parent_tables=SimpleNamespace(parent_sd={t.parent_sid: t.parent_sd}), reversing_sub=None,
                 prev_sub=None)
-            out = edm._resolve_first_confluence_via_unified_probe(mt, h1, m15, pool=None, cross_fib_limit=_lim)
+            out = edm._resolve_first_confluence_via_unified_probe(
+                mt, h1, m15, pool=None, cross_fib_limit=_lim,
+                cycle0_proximity_blocked=cycle0_proximity_blocked_for("first_confluence", key, "H1.main"))
         except AssertionError as exc:  # Plan A post-run assert: show it, keep going
             ms_error = str(exc)
             out = None

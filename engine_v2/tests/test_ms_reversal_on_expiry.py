@@ -273,7 +273,7 @@ def test_a_reversal_winner_before_the_pending_leaves_no_pending_on_its_row(sd, t
 # same — not proven that it cannot differ.
 def _ms(sd: int = 1):
     with redirect_stdout(io.StringIO()):
-        ms = _make_market_structure(_prepare_df(_p3_rows()), struct_direction=sd, start_idx=0, cross_fib_limit=NO_P)
+        ms = _make_market_structure(_prepare_df(_p3_rows()), struct_direction=sd, start_idx=0, cycle0_proximity_blocked=True, cross_fib_limit=NO_P)
     ms._init_output_arrays(len(ms.df))
     return ms
 

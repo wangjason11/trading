@@ -310,6 +310,9 @@ class PooledStructure:
     # is filled when the sweep numbers the subs. Set by the geometry builder on creation — never left None for
     # a built sub (`render_sub_projection` asserts it).
     cross_fib_limit: Any = None
+    # The cycle-0 carve-out flag its geometry ran with (PLAN_T T2; set by `build_or_get_geometry` on creation from
+    # its creating trigger — True only for the sub the main sid 0 cycle 0's first_confluence creates). Not exported.
+    cycle0_proximity_blocked: bool = False
     records: List[TriggerRecord] = field(default_factory=list)
     # lifecycle (real-time; set once)
     start_idx: Optional[int] = None

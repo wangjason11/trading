@@ -773,7 +773,7 @@ default 8 / 50), the pair's pip size and its sub's cross-fib limit (`cross_fib_l
 THE formula, called on a probe-cache miss); + the log-only probe/sub consistency tripwire above. = the prediction
 (PLAN_T §2.3 / §2.6): 30 / 30 CSVs byte-equal to S_wvmi_marks, the three charts equal by trace name
 (`fig_named_diff.py`), the probe's log lines identical, skip grep 33, the tripwire silent. Byte-identical BY
-CONSTRUCTION while the cycle-0 carve-out blocks every cycle 0 (the two values are read only by the proximity
+CONSTRUCTION while the cycle-0 carve-out blocks every cycle 0 (true at T1, before T2 narrowed it; the two values are read only by the proximity
 confirmation; the probe reads nothing after cycle 0's confirmation); on the window the probe's Phase 2 MS runs once
 (FC (0,0), whose limit is none = today's). Not a save-format boundary. Suite 2065; mutants 26 / 26. S_T1
 `20261027_131836_453f227` (source `453f227`, save `4d7318c`, trunk `1d7a6a0`; = `LATEST_<branch>` from 2026-10-27; the

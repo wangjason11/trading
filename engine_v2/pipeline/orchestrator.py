@@ -1143,7 +1143,7 @@ def _run_multi_tf_dual(
     # --- 4. The sweep (§17.6) ---
     sub_pool = SubStructurePool()
 
-    def _resolve_start(t: SweepTrigger, hi: int):
+    def _resolve_start(t: SweepTrigger, hi: int, *, cycle0_proximity_blocked: bool):
         # The sibling window's raw-frame fallback must not reach before the parent cycle (PLAN_R §2):
         # bounded at the cycle's CTS-established MOMENT on M15 — not the real-time floor, which a
         # retroactive cycle's triggers precede (the user, 2026-10-20).
@@ -1153,14 +1153,15 @@ def _run_multi_tf_dual(
         return _resolve_trigger_m15_start(
             t.source, h1_df, m15, pool=sub_pool, hi=hi,
             m15_parent_cts_established_idx=_loh(tables.cts_moment[t.cycle]), parent_path=parent_path,
-            cross_fib_limit=fc_limit,
+            cross_fib_limit=fc_limit, cycle0_proximity_blocked=cycle0_proximity_blocked,
         )
 
-    def _build_geometry(key, bos0_inner, cross_fib_limit):
+    def _build_geometry(key, bos0_inner, cross_fib_limit, *, cycle0_proximity_blocked):
         return build_or_get_geometry(
             sub_pool, m15, parent_path=key.parent_path, sd=key.direction,
             start_abs=key.starting_idx, bos0_inner=bos0_inner,
-            cross_fib_limit=cross_fib_limit, timeframe=key.sub_tf,
+            cross_fib_limit=cross_fib_limit, cycle0_proximity_blocked=cycle0_proximity_blocked,
+            timeframe=key.sub_tf,
         )
 
     def _resolve_cross_fib_limit(t: SweepTrigger, record_start: int, reversing_sub):

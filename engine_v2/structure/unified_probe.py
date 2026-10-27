@@ -477,12 +477,14 @@ def _run_phase2(
     timeframe: str,
     pip_size: float,
     cross_fib_limit: CrossFibLimit,
+    cycle0_proximity_blocked: bool,
 ) -> _DetResult:
     """Phase 2 — MS-based, called only by first_confluence (per spec).
 
     Its MS reads what the sub's own MS reads (PLAN_T T1): the caller's `timeframe` (the proximity + narrow-gap
     values), the pair's `pip_size` and the sub's cross-fib limit (`cross_fib_limit_for`, handed in by the
-    first_confluence resolver).
+    first_confluence resolver) — and, since PLAN_T T2, its cycle-0 carve-out flag (True only for the
+    first_confluence of the main sid 0 cycle 0, whose sub keeps the carve-out).
 
     Runs MS from `current_start` in **pre-CTS_0 scan-from-start mode**
     (`enforce_cts0_new_extreme=True` + the handed `bos0_inner`), so MS
@@ -559,6 +561,7 @@ def _run_phase2(
             timeframe=timeframe,
             pip_size=pip_size,
             cross_fib_limit=cross_fib_limit,
+            cycle0_proximity_blocked=cycle0_proximity_blocked,
         )
         ms.debug = True
         df_probe, probe_events, _ = ms.run()
@@ -721,6 +724,7 @@ def unified_probe(
     max_iterations: int = 10,
     enable_phase2: bool = False,
     cross_fib_limit: Optional[CrossFibLimit] = None,
+    cycle0_proximity_blocked: bool = False,
 ) -> ProbeResult:
     """Iteratively validate / refine `input_idx` against `reference_zone`.
 
@@ -774,6 +778,10 @@ def unified_probe(
     cross_fib_limit : CrossFibLimit, optional
         The sub's cross-fib limit for Phase 2's MS (PLAN_T T1) — REQUIRED
         when `enable_phase2`, unused otherwise (no MS runs).
+    cycle0_proximity_blocked : bool
+        Phase 2's MS cycle-0 carve-out (PLAN_T T2) — the same flag as the sub
+        it decides; False (the default) = every probe but the main sid 0
+        cycle 0's first_confluence. Unused without Phase 2.
     """
     _validate_input(df)
     if direction not in (1, -1):
@@ -834,6 +842,7 @@ def unified_probe(
         reset_tol, wick_cap,
         max_iterations=max_iterations, timeframe=timeframe, pip_size=pip_size,
         cross_fib_limit=cross_fib_limit,
+        cycle0_proximity_blocked=cycle0_proximity_blocked,
     )
 
     notes = (

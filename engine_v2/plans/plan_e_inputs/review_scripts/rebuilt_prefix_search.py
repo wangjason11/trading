@@ -26,8 +26,8 @@ with open(out, "w") as f:
             df = _prepare_df(rows)
             kw = dict(struct_direction=sd, start_idx=0, structure_id=0, timeframe="H1", pip_size=_pip_size_from_pair(df), end_idx=end_idx)
             with redirect_stdout(io.StringIO()):
-                full = _make_market_structure(df, cross_fib_limit=CrossFibLimit(None, "none"), **kw); full.run()
-                st = _make_market_structure(df, cross_fib_limit=CrossFibLimit(None, "none"), stop_after_cts_established=2, **kw); st.run()
+                full = _make_market_structure(df, cycle0_proximity_blocked=True, cross_fib_limit=CrossFibLimit(None, "none"), **kw); full.run()
+                st = _make_market_structure(df, cycle0_proximity_blocked=True, cross_fib_limit=CrossFibLimit(None, "none"), stop_after_cts_established=2, **kw); st.run()
         except Exception as e:  # noqa
             continue
         if st.early_stop_idx is not None and est(full)[:2] != est(st)[:2]:

@@ -231,16 +231,23 @@ def test_the_orchestrator_hands_a_first_confluence_its_limit_and_the_sweep_its_c
     class _Stop(Exception):
         pass
 
-    seen = []
+    seen, flags, built = [], [], []
 
     def _fake_resolve(trigger, _h1, _m15, *, pool, hi, m15_parent_cts_established_idx, parent_path,
-                      cross_fib_limit):
+                      cross_fib_limit, cycle0_proximity_blocked):
         seen.append(cross_fib_limit)
+        flags.append(cycle0_proximity_blocked)
 
-    def _sweep(triggers, *, resolve_start, check_probe_sub_consistency, **_kw):
+    def _fake_bog(pool, m15, **k):
+        built.append(k["cycle0_proximity_blocked"])
+
+    def _sweep(triggers, *, resolve_start, build_geometry, check_probe_sub_consistency, **_kw):
         assert check_probe_sub_consistency is the_check
-        for t in triggers:
-            resolve_start(t, int(t.trigger_idx))
+        for i, t in enumerate(triggers):          # PLAN_T T2: the sweep's one evaluation, passed through as handed
+            resolve_start(t, int(t.trigger_idx), cycle0_proximity_blocked=(i == 0))
+        key = SimpleNamespace(parent_path="H1.main", sub_tf="M15", direction=1, starting_idx=7)
+        for flag in (True, False, None):
+            build_geometry(key, None, NO_LIMIT, cycle0_proximity_blocked=flag)
         raise _Stop
 
     monkeypatch.setattr("engine_v2.multitf.first_confluence_pipeline.to_multi_tf_trigger",
@@ -256,6 +263,7 @@ def test_the_orchestrator_hands_a_first_confluence_its_limit_and_the_sweep_its_c
                         lambda p, _h1, _m15: 4 * int(p) + 3)
     monkeypatch.setattr("engine_v2.multitf.entity_df_mutation._resolve_trigger_m15_start", _fake_resolve)
     monkeypatch.setattr("engine_v2.multitf.lifecycle_sweep.run_lifecycle_sweep", _sweep)
+    monkeypatch.setattr("engine_v2.multitf.entity_df_mutation.build_or_get_geometry", _fake_bog)
 
     h1 = pd.DataFrame({"time": pd.date_range("2025-11-17", periods=40, freq="h", tz="UTC")})
     v1 = SimpleNamespace(parent_sid=0, parent_cycle_id=0, trigger_event_idx=10, input_idx=5, status="finalized")
@@ -270,6 +278,7 @@ def test_the_orchestrator_hands_a_first_confluence_its_limit_and_the_sweep_its_c
     assert callable(limit0) and limit0() == NO_LIMIT       # parent cycle 0: no limit, by THE formula
     lim = limit1()                                          # parent cycle 1: read from the events handed in
     assert (lim.price, lim.source, lim.ref_anchor_price) == (0.6100, "parent_cts_threshold", 0.6080)
+    assert flags == [True, False] and built == [True, False, None]   # PLAN_T T2's flag, as the sweep handed it
 
 
 def test_the_dispatcher_and_the_fc_resolver_pass_the_limit_to_the_probe_cache(monkeypatch):

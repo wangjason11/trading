@@ -287,7 +287,7 @@ def run(out, seed, n, lo=None, hi=None):
             ms = None
             try:
                 df = _prepare_df(rows)
-                ms = _make_market_structure(df, cross_fib_limit=_NO_P, struct_direction=sd, start_idx=0, structure_id=0, timeframe="H1",
+                ms = _make_market_structure(df, cycle0_proximity_blocked=True, cross_fib_limit=_NO_P, struct_direction=sd, start_idx=0, structure_id=0, timeframe="H1",
                                             pip_size=_pip_size_from_pair(df), end_idx=end_idx,
                                             stop_after_cts_established=stop_n, debug_invariants=not NOINV)
                 _ms_run(ms)
@@ -385,7 +385,7 @@ def waves(out, seed, n):
             rec = dict(t=t, sd=sd, tf=tf, base=base, n=len(rows_), w=n_waves)
             try:
                 df = _prepare_df(rows_)
-                ms = _make_market_structure(df, cross_fib_limit=_NO_P, struct_direction=sd, start_idx=0, structure_id=0, timeframe=tf,
+                ms = _make_market_structure(df, cycle0_proximity_blocked=True, cross_fib_limit=_NO_P, struct_direction=sd, start_idx=0, structure_id=0, timeframe=tf,
                                             pip_size=_pip_size_from_pair(df), debug_invariants=not NOINV)
                 _ms_run(ms)
                 rec["trip"] = getattr(ms, "_rts_tripwire", None)
@@ -444,7 +444,7 @@ def real(out, seed, n):
             rec = dict(t=t, sd=sd, tf=tf, off=off, start=start, n=length, jit=jit)
             try:
                 df = _prepare_df(rows_)
-                ms = _make_market_structure(df, cross_fib_limit=_NO_P, struct_direction=sd, start_idx=start, structure_id=0, timeframe=tf,
+                ms = _make_market_structure(df, cycle0_proximity_blocked=True, cross_fib_limit=_NO_P, struct_direction=sd, start_idx=start, structure_id=0, timeframe=tf,
                                             pip_size=_pip_size_from_pair(df), debug_invariants=not NOINV)
                 _ms_run(ms)
                 rec["trip"] = getattr(ms, "_rts_tripwire", None)

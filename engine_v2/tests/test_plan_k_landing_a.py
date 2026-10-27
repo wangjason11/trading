@@ -721,7 +721,7 @@ def test_the_geometry_hands_its_tracker_the_slice_local_limit(embedded):  # noqa
     lim = CrossFibLimit(math.inf, "reversal_bos_frozen", ref_anchor_price=math.inf, break_pattern_anchor_idx=100,
                         break_confirmed_idx=105)
     _quiet(edm._build_geometry, df, sd=1, start_abs=60, run_cap_abs=len(df) - 1, bos0_inner=None,
-           timeframe="M15", cross_fib_limit=lim)
+           timeframe="M15", cycle0_proximity_blocked=False, cross_fib_limit=lim)
     t, = embedded
     assert t._limits == {0: dataclasses.replace(lim, break_pattern_anchor_idx=90, break_confirmed_idx=95)}
 

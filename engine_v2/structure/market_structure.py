@@ -284,6 +284,7 @@ class MarketStructure:
         stop_after_cts_established: Optional[int] = None,
         fib_tracker: Optional[Any] = None,
         poi_inner_for_fib: Optional[PoiInnerForFib] = None,
+        cycle0_proximity_blocked: bool = True,
     ):
         if struct_direction not in (1, -1):
             raise ValueError(f"[market_structure] struct_direction must be 1 or -1, got {struct_direction}")
@@ -408,6 +409,11 @@ class MarketStructure:
             "[market_structure] fib_tracker and poi_inner_for_fib come together (PLAN_I D5)")
         self._fib_tracker = fib_tracker
         self._poi_inner_for_fib = poi_inner_for_fib
+        # The cycle-0 carve-out (PLAN_T T2): True = sd-proximity cannot confirm a cycle-0 CTS (the main sid 0 and
+        # the sub its cycle-0 first_confluence creates); False = cycle 0 is guarded by the narrow-gap gate alone,
+        # like every cycle k > 0. Production builds pass it (`_make_market_structure`, REQUIRED); the default =
+        # the pre-PLAN_T rule, for direct construction.
+        self.cycle0_proximity_blocked = bool(cycle0_proximity_blocked)
 
         self._ensure_output_cols()
 
@@ -1898,7 +1904,8 @@ class MarketStructure:
 
         Called from `_replay_step_no_patterns`, so it runs on every candle
         (anchor, back-fill, apply, fallthrough). Two gates are load-bearing —
-        see LANDMINES "Dual CTS Proximity Confirmation" (cycle-0 carve-out +
+        see LANDMINES "Dual CTS Proximity Confirmation" (the cycle-0 carve-out,
+        on the structures `cycle0_proximity_blocked` names since PLAN_T T2, +
         Rule 1 narrow-gap gate).
         """
         st = self.state
@@ -1915,7 +1922,7 @@ class MarketStructure:
         )
         if not (
             st.cts_phase == "EST_OR_UPD"
-            and st.cts_cycle_id > 0
+            and (st.cts_cycle_id > 0 or not self.cycle0_proximity_blocked)
             and cycle_gap_ok
             and st.bos_inner_for_cycle is not None
             and i > st.cts.idx

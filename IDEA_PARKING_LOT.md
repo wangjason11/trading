@@ -208,11 +208,14 @@ First, I want to revisit the cycle-0 carve-out that we discussed recently. After
    `Parent (<parent_path_id>)` toggling every parent overlay element (default ON), never built: no H1-overlay trace
    carries a `legendgroup` (only the M15 fibs' `m15_fib`, grep 2026-10-27); **(2) chart zoom** — (a) a +/- switch or
    tool, (b) an idx input the chart zooms to. Then item 6.
-5b. **Revisit the cycle-0 carve-out (no sd-proximity CTS confirmation on any cycle 0)** — **IN PROGRESS 2026-10-27:
-   DECIDED** — the carve-out stays on the main sid 0 and on the sub the first_confluence of the main sid 0 cycle 0
-   creates (+ its probe), dropped on every other cycle 0; the first_confluence probe's MS reads what its sub reads
-   (M15 5 / 30, pip size, the sub's cross-fib limit). **PLAN_T** (`engine_v2/plans/PLAN_T_probe_parity_and_cycle0_carveout.md`):
-   T1 the probe — LANDED 2026-10-27, zero change; T2 the carve-out rule — next (measured: subs 4, 7, 8 change). Every
+5b. ~~**Revisit the cycle-0 carve-out (no sd-proximity CTS confirmation on any cycle 0)**~~ — **DONE 2026-10-27**
+   (PLAN_T, `engine_v2/plans/PLAN_T_probe_parity_and_cycle0_carveout.md`): the carve-out stays on the main sid 0 and
+   on the sub the first_confluence of the main sid 0 cycle 0 creates (+ that trigger's probe), dropped on every other
+   cycle 0; the first_confluence probe's MS reads what its sub reads (M15 5 / 30, pip size, the sub's cross-fib
+   limit). T1 the probe — LANDED, zero change; T2 the carve-out rule — LANDED = its measured prediction (subs 4, 7, 8:
+   cycle-0 CTS confirmed by proximity at 3336 / 4071 / 4098; the user's look: "Looks good, commit T2"; no
+   confirmation mark on the M15 charts: "Not needed"). Canonical rule: MARKET_STRUCTURE_SPEC "Cycle-0 carve-out" +
+   LANDMINES "Dual CTS Proximity Confirmation — the Cycle-0 Carve-out (main sid 0 + its FC sub) + Rule 1". Every
    round verbatim + the measurements: `engine_v2/plans/qa_cycle0_carveout_inputs/user_spec_20261027_cycle0_carveout.md`.
    Was **NEXT** (inserted by the user
    2026-10-27 before item 5's final part; moved here from §G, where it was parked 2026-10-26). **DECIDE**; raised by the
@@ -220,7 +223,7 @@ First, I want to revisit the cycle-0 carve-out that we discussed recently. After
    understand the original carve out logic. A decision from May was also quite a long time ago and a lot of things
    have changed since then … We can come back to it in more detail later". The rule: MARKET_STRUCTURE_SPEC "Cycle-0
    carve-out (proximity disabled)" + LANDMINES "Dual CTS Proximity Confirmation — Cycle-0 + Rule 1 Are BOTH Required"
-   (both gates kept by the user's 2026-05-12 decision). The user's concerns: it reads as built for the main sid 0
+   (the titles then; both gates kept by the user's 2026-05-12 decision). The user's concerns: it reads as built for the main sid 0
    cycle 0 (other cycle 0s come from the engine's own structure logic and triggers); single-cycle unique subs must
    all confirm by a pullback pattern. Case: confluence sub 7 cycle 0 (a 57-pip gap) sat at its POI from 4071 and
    confirmed only at 4157. Detail + facts: `engine_v2/plans/qa_chart_edits_inputs/user_spec_20261024_wvmi_on_chart.md`
@@ -486,8 +489,9 @@ First, I want to revisit the cycle-0 carve-out that we discussed recently. After
   sd). Detail: `engine_v2/zones/POI_ZONES_SPEC.md` "POIs are always sd-direction (invariant)".
 - ~~**The start-candle probe's market structure runs at the H1 proximity values on M15**~~ — CLOSED 2026-10-27 by
   PLAN_T T1 (the first_confluence probe's MS gets the caller's timeframe values, pip size and its sub's cross-fib
-  limit — byte-identical on the window; the TRIGGER below fires with PLAN_T T2, which lets most cycle 0s confirm by
-  proximity; the user: "I do think that we need to update to 5/30 and be consistent"). Was: (8 pips and the 50-pip
+  limit — byte-identical on the window; the TRIGGER below fired with PLAN_T T2, which lets every cycle 0 but two
+  confirm by proximity; the user: "I do think that we need to update to 5/30 and be consistent"). Was: (8 pips and
+  the 50-pip
   narrow-cycle gap instead of 5 / 30): `unified_probe.py`'s Phase 2 builds it through
   `structure_engine._make_market_structure` without `timeframe` (that helper's docstring: "a deferred cleanup").
   INERT BY DESIGN — the probe's result reads two CTS_ESTABLISHED, cycle 0's CTS_CONFIRMED and a reversal, never a
@@ -576,6 +580,11 @@ First, I want to revisit the cycle-0 carve-out that we discussed recently. After
 
 ## Recently closed (history pointers)
 
+- **The cycle-0 carve-out revisit** (§D 5b; raised by the user 2026-10-26, scheduled 2026-10-27) — CLOSED 2026-10-27
+  by PLAN_T in two landings: T1 `453f227` (the first_confluence probe's MS reads what its sub reads; zero change; save
+  S_T1 `20261027_131836_453f227`) and T2 (the carve-out kept on the main sid 0 + the sub its cycle-0 first_confluence
+  creates only; subs 4, 7, 8 confirm cycle 0 by proximity — commit + save in PLAN_T §5). Every round verbatim:
+  `engine_v2/plans/qa_cycle0_carveout_inputs/user_spec_20261027_cycle0_carveout.md`.
 - **WVMI back on the chart** (§G; deferred 2026-05-28 `e64556a`, un-tabled by the user 2026-10-24) — CLOSED 2026-10-26
   in five landings (`257f8ba`, `76b5a17`, `f63df34`, `588014a`, `2dc9e5d`; save S_wvmi_marks
   `20261026_230619_2dc9e5d`): no H1 gate, the furthest-close LP rule, the per-LP rows + `*_wvmi_lps.csv`, and the

@@ -46,10 +46,10 @@ the furthest qualified close in the pullback direction, its first one by how the
 CTS_CONFIRMED carries `pattern_anchor_idx`; step 4 landed 2026-10-26: every LP a record has had is kept as a
 per-LP row, exported one row per dot to `*_wvmi_lps.csv` — 30 CSVs per replay; step 5 landed 2026-10-26: the WVMI LP
 marks above the volume bars, one per per-LP row (sub dots, H1 circles), CHARTING_SPEC §13 — the second edit COMPLETE;
-item 5 paused 2026-10-27 for the cycle-0 carve-out revisit (register §D 5b — decided 2026-10-27, PLAN_T: T1 the
-first_confluence probe's MS reads what its sub reads, landed zero-change; T2 the carve-out kept only on the main
-sid 0 + the sub its cycle-0 first_confluence creates, next), then item 5's final part: a toggle to hide the parent
-(1H) overlay, chart zoom),
+item 5 paused 2026-10-27 for the cycle-0 carve-out revisit (register §D 5b — DONE 2026-10-27, PLAN_T: T1 the
+first_confluence probe's MS reads what its sub reads, zero change; T2 the carve-out kept only on the main sid 0 +
+the sub its cycle-0 first_confluence creates — subs 4, 7, 8 confirm cycle 0 by proximity), NEXT item 5's final
+part: a toggle to hide the parent (1H) overlay, chart zoom),
 then item 3, zone size adjustments),
 Part 2 entry decisions, Part 3 other decisions.
 

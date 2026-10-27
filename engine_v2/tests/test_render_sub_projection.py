@@ -197,7 +197,7 @@ def geometry(m15_df) -> Tuple[SubStructurePool, PooledStructure]:
     pool = SubStructurePool()
     out = edm.build_or_get_geometry(
         pool, m15_df, parent_path=_PARENT, sd=1, start_abs=_STARTING_IDX,
-        bos0_inner=None, cross_fib_limit=NO_LIMIT, timeframe=_TF,
+        bos0_inner=None, cross_fib_limit=NO_LIMIT, cycle0_proximity_blocked=False, timeframe=_TF,
     )
     assert out is not None, "geometry build must succeed on the reversing fixture"
     sub, created = out

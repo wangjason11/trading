@@ -33,7 +33,7 @@ for t in range(n):
     start = int(np.argmin(ext))
     try:
         df = _prepare_df(rows)
-        ms = _make_market_structure(df, cross_fib_limit=CrossFibLimit(None, "none"), struct_direction=sd,
+        ms = _make_market_structure(df, cycle0_proximity_blocked=True, cross_fib_limit=CrossFibLimit(None, "none"), struct_direction=sd,
                                     start_idx=start, structure_id=0, timeframe=tf, pip_size=_pip_size_from_pair(df))
         import contextlib, io
         with contextlib.redirect_stdout(io.StringIO()):

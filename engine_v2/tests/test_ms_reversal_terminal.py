@@ -94,7 +94,10 @@ def _p1_df(sd: int):
 
 def _run(df, sd: int, **kw):
     with redirect_stdout(io.StringIO()):
-        return compute_bounded_structure(df, 0, sd, **{"cross_fib_limit": NO_P, **kw})
+        # The fixtures were built under the universal cycle-0 carve-out (before PLAN_T T2): keep it, so a cycle 0
+        # stays in BREAKOUT (unconfirmed by proximity) as each scenario below needs.
+        return compute_bounded_structure(df, 0, sd, **{"cross_fib_limit": NO_P, "cycle0_proximity_blocked": True,
+                                                       **kw})
 
 
 def _reversals(events):
@@ -268,7 +271,7 @@ def test_a_reversal_winner_keeps_its_own_apply_row_rewrite():
 # case), and the two tripwires.
 def _ms(sd: int = 1):
     with redirect_stdout(io.StringIO()):
-        return _make_market_structure(_prepare_df(_p1_rows()), struct_direction=sd, start_idx=0, cross_fib_limit=NO_P)
+        return _make_market_structure(_prepare_df(_p1_rows()), struct_direction=sd, start_idx=0, cycle0_proximity_blocked=True, cross_fib_limit=NO_P)
 
 
 def test_post_apply_range_backfill_stops_at_the_terminal(monkeypatch):

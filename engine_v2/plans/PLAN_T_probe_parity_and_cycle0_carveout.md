@@ -1,6 +1,7 @@
 # PLAN_T — the first_confluence probe reads what its sub reads + the cycle-0 carve-out on the main sid 0 and its first_confluence sub only (the user's carve-out revisit, 2026-10-27)
 
-**Status: T1 LANDED 2026-10-27 (`453f227`, save S_T1 `20261027_131836_453f227`, = §2.3 exactly); T2 next.** Baseline **S_wvmi_marks**
+**Status: COMPLETE 2026-10-27 — T1 LANDED (`453f227`, save S_T1 `20261027_131836_453f227`, = §2.3 exactly); T2 LANDED
+(= §3.3 exactly; §5).** Baseline **S_wvmi_marks**
 `artifacts/commits/week9-entries-decisions/20261026_230619_2dc9e5d` (source `2dc9e5d`; HEAD at drafting `3f2a29c`, code =
 `2dc9e5d`); suite 2039. Session order item 5b (register `IDEA_PARKING_LOT.md` §D "SESSION ORDER"). TWO landings, in the
 user's order ("Probe first"), each with its own measured prediction, `/compare` and chart look: §2 T1 the probe → §3 T2
@@ -313,3 +314,46 @@ call at the look (not in this plan).
 - **After the review fixes:** suite 2065, green (141 s); mutants **26 / 26 KILLED** (the file rewritten for the
   two-branch tripwire + the review's misses; `%TEMP%/mtT1b/results.json`); the replay on the final code: fetch gate
   PASS, skip grep 33, the tripwire silent, **30 / 30 CSVs byte-equal, the three charts equal** — 65.3 s.
+
+### T2 — LANDED 2026-10-27 (the user: "Looks good, commit T2"; a confirmation mark on the M15 charts: "Not needed")
+
+- **Code (= §3.2):** `MarketStructure(cycle0_proximity_blocked=True)` + the gate `st.cts_cycle_id > 0 or not
+  self.cycle0_proximity_blocked`; REQUIRED at `_make_market_structure`, `build_or_get_geometry` (None on a pool hit,
+  asserted) and the orchestrator's `_resolve_start`; `compute_structure` passes `structure_id == 0`; default False on
+  `compute_bounded_structure` / `unified_probe` / `_probe_with_cache` / the FC resolver / `_resolve_trigger_m15_start`
+  (+ an assert: only a first_confluence may carry True); the predicate `lifecycle_sweep.cycle0_proximity_blocked_for`
+  evaluated ONCE per trigger in `_resolve_and_record`, handed to the probe and (on a pool miss) the geometry; the
+  creator tripwire (`WARNING [sweep] the cycle-0 carve-out's first_confluence … did not create its sub`);
+  `PooledStructure.cycle0_proximity_blocked` (not exported); `debug/probe_fc_finalize.py` passes the predicate.
+- **Tests:** `tests/test_plan_t_t2_cycle0_carveout.py` — 31 pins (the gate × 4 rows, the exact narrow-gap boundary,
+  MS's default, the L5 cycle 0 blocked / unblocked, `_make_l4_watch_at_bound` on M15 × both sides — blocked: the pattern,
+  no CTS_RECONFIRMED; unblocked: proximity a candle earlier + CTS_RECONFIRMED at the pattern —, the bounded run's
+  default, `compute_structure` sid 0 vs the reversal (a construction spy), the builder's REQUIRED flag, the predicate × 7,
+  the sweep's one evaluation + the pool hit's None, the creator tripwire × 2, the pool builder × both values, the core →
+  the bounded run, Phase 2's MS × both values, the probe chain × both values, the sibling assert); the T1 orchestrator
+  pin extended (the flag reaches `_resolve_trigger_m15_start` and `build_or_get_geometry` as the sweep hands it). The
+  existing tests keep their pre-T2 meaning by passing `cycle0_proximity_blocked=True` where they build an MS directly
+  (18 `_make_market_structure` calls), a direct Phase 2, the `test_ms_reversal_terminal` fixtures (built under the
+  universal carve-out: unblocked, the L5 cycle 0 confirms by proximity and the range-back-fill scenario disappears),
+  the `test_main_reversal_probe` reconstructions of sid 0, and the probe-vs-full test in `test_unified_probe`; pool
+  builder calls pass False on a miss / None on a hit; the sweep fakes take the keyword. Suite 2065 → 2096, green.
+  **Descoped (§3.4):** an END-TO-END pin of an unblocked first_confluence probe confirming cycle 0 by proximity and
+  reaching its 2nd CTS where its sub does — no synthetic fixture makes the probe's own cycle 0 proximity-confirm (the
+  candidates either never establish on the downtrend side or confirm by the pattern, searched 2026-10-27); the
+  agreement holds by construction (one evaluation → the probe and its geometry; the same MS values since T1), each link
+  is pinned, the log tripwire is unit-pinned (T1), and the replay agrees on the window (FC (0,0): 1020 = 1020).
+- **Mutants:** 36 / 36 KILLED (`qa_cycle0_carveout_inputs/mutants_plan_t_t2.py`: 29 + the landing review's 7 —
+  the orchestrator's two pass-throughs, the hard-coded True on each hop).
+- **Replay (run mode, the final code):** fetch gate PASS; skip grep 33; both tripwires silent; **30 / 30 CSVs equal to
+  the measured prediction (`c0T2`)**; vs S_T1 the 6 predicted CSVs, the 3 predicted traces — = §3.3 exactly. 61.1 s.
+- **Docs:** MARKET_STRUCTURE_SPEC (the gate list; "Cycle-0 carve-out" rewritten — the rule, why the two, the history,
+  what the narrowing changes; the BOS_0 wording; the refresh-gating sentence; the CTS_UPDATED-on-cycle-0 scope);
+  LANDMINES (the entry retitled "Dual CTS Proximity Confirmation — the Cycle-0 Carve-out (main sid 0 + its FC sub) +
+  Rule 1", the re-measured May cases, the REQUIRED / default map); register (5b DONE + "Recently closed", the probe
+  line's trigger); `engine_v2/CLAUDE.md`; the `/compare` skill; 13 review scripts under `plans/` pass the old flag
+  (`variant_patch_i.py` left: its strings are anchors into an archived tree).
+- **Landing review** (1 read-only reviewer, 222k tokens / 64 tool uses): no BLOCKER; folded in — the orchestrator's
+  flag REQUIRED + its pass-through pinned, both flag values on the probe chain and the pool builder, the L4 behaviour
+  pin (the blocked branch "the pattern confirms later" was untested), the stale spec / register / skill lines, the
+  LANDMINES REQUIRED-vs-default map, the review scripts, the sweep's hints + docstring, the reconstructions' flag, the
+  parameter documented.

@@ -466,6 +466,6 @@ def test_the_geometry_hands_its_tracker_the_slice_local_moves(embedded):  # noqa
                         price_moves=((100, 3.0), (105, math.inf)))           # never reached: a no-op limit
     embedded.clear()
     _q(edm._build_geometry, df, sd=1, start_abs=60, run_cap_abs=len(df) - 1, bos0_inner=None,
-       timeframe="M15", cross_fib_limit=lim)
+       timeframe="M15", cycle0_proximity_blocked=False, cross_fib_limit=lim)
     t, = embedded
     assert t._limits == {0: dataclasses.replace(lim, price_moves=((90, 3.0), (95, math.inf)))}

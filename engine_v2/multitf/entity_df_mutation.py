@@ -591,6 +591,7 @@ def _probe_with_cache(
     timeframe: str,
     label: str,
     cross_fib_limit: Optional[Callable[[], Any]] = None,
+    cycle0_proximity_blocked: bool = False,
 ) -> Tuple[int, int, str, Optional[float], str, bool]:
     """Run `unified_probe` behind the §17.8 probe cache.
 
@@ -612,7 +613,7 @@ def _probe_with_cache(
 
     `cross_fib_limit` (PLAN_T T1): a zero-argument callable giving the sub's cross-fib limit for Phase 2's MS,
     called on a MISS only (a hit runs no probe) — the first_confluence resolver's; None for the Phase-1-only
-    callers.
+    callers. `cycle0_proximity_blocked` (PLAN_T T2): Phase 2's MS carve-out flag, = its sub's.
     """
     from engine_v2.structure.unified_probe import unified_probe
 
@@ -649,6 +650,7 @@ def _probe_with_cache(
         timeframe=timeframe,
         enable_phase2=enable_phase2,
         cross_fib_limit=(cross_fib_limit() if cross_fib_limit is not None else None),
+        cycle0_proximity_blocked=cycle0_proximity_blocked,
     )
     print(
         f"[entity_compute] unified_probe ({label}): m15_input={input_idx} "
@@ -688,6 +690,7 @@ def _resolve_first_confluence_via_unified_probe(
     pool: Optional[SubStructurePool] = None,
     parent_path: str = "H1.main",
     cross_fib_limit: Optional[Callable[[], Any]] = None,
+    cycle0_proximity_blocked: bool = False,
 ):
     """Unified-probe path for `first_confluence` (the one variation that
     anchors on its OWN ad-hoc BOS_0, not a sibling). Phase 2 (MS-based) runs
@@ -758,6 +761,7 @@ def _resolve_first_confluence_via_unified_probe(
         reference_zone=ref_zone, probe_end_idx=int(m15_probe_end_idx),
         enable_phase2=True, timeframe=trigger.lower_tf, label=label,
         cross_fib_limit=cross_fib_limit,   # the sub's limit for Phase 2's MS (PLAN_T T1), lazy
+        cycle0_proximity_blocked=cycle0_proximity_blocked,   # = its sub's carve-out flag (PLAN_T T2)
     )
     if status == "pending":
         print(f"[entity_compute] PENDING: unified_probe did not finalize for {label}; skipping M15 build")
@@ -960,6 +964,7 @@ def _resolve_trigger_m15_start(
     m15_parent_cts_established_idx: int,
     parent_path: str = "H1.main",
     cross_fib_limit: Optional[Callable[[], Any]] = None,
+    cycle0_proximity_blocked: bool = False,
 ):
     """Resolve a trigger's M15 `starting_idx` (entity-absolute) — dispatcher.
 
@@ -974,7 +979,8 @@ def _resolve_trigger_m15_start(
     parent cycle's CTS-established moment (`ParentTables.cts_moment`): the
     sibling window's `lo` never reaches below it (`_sibling_cts_idx_window`).
     `first_confluence` does not read it. `cross_fib_limit` (PLAN_T T1) — the first_confluence probe's
-    lazy limit for its Phase 2 MS — is read by `first_confluence` only.
+    lazy limit for its Phase 2 MS — is read by `first_confluence` only, like `cycle0_proximity_blocked` (PLAN_T
+    T2, the sweep's one evaluation of `cycle0_proximity_blocked_for`; the other types run no MS).
 
     Returns a `ResolvedStart` or a `ProbeFailure`.
     """
@@ -982,7 +988,9 @@ def _resolve_trigger_m15_start(
     if uc in _FIRST_CONFLUENCE_USE_CASES:
         return _resolve_first_confluence_via_unified_probe(
             trigger, parent_df, m15_df, pool=pool, parent_path=parent_path, cross_fib_limit=cross_fib_limit,
+            cycle0_proximity_blocked=cycle0_proximity_blocked,
         )
+    assert not cycle0_proximity_blocked, f"[entity_compute] {uc}: only a first_confluence keeps the carve-out"
     if uc in _SIBLING_CTS_USE_CASES:
         assert pool is not None and hi is not None, (
             f"[entity_compute] {uc} needs pool + hi"
@@ -1172,6 +1180,7 @@ def _build_geometry(
     bos0_inner: Optional[float],
     timeframe: str,
     cross_fib_limit: Any,
+    cycle0_proximity_blocked: bool,
 ) -> Optional[Tuple[Any, int]]:
     """Pool-free core of the geometry build: slice `[start-50, run_cap]`,
     preprocess (compute_imbalance + drop inherited structure cols + re-derive
@@ -1227,6 +1236,7 @@ def _build_geometry(
             # entity-absolute → the slice's coordinates: the limit's break indices (PLAN_K §3.5) and each move's
             # `known_at` (PLAN_M §7.1)
             cross_fib_limit=cross_fib_limit.localized(slice_begin),
+            cycle0_proximity_blocked=cycle0_proximity_blocked,   # PLAN_T T2 — the creating trigger's
         )
     except (ValueError, IndexError):
         # The documented geometry failure (LANDMINES "Lower-TF Pipeline Steps May
@@ -1250,6 +1260,7 @@ def build_or_get_geometry(
     start_abs: int,
     bos0_inner: Optional[float],
     cross_fib_limit: Any,
+    cycle0_proximity_blocked: Optional[bool],
     timeframe: str = "M15",
 ) -> Optional[Tuple[PooledStructure, bool]]:
     """Build — or reuse from the pool — the natural-end geometry for a unique sub
@@ -1272,13 +1283,17 @@ def build_or_get_geometry(
     cached = pool.get(key)
     if cached is not None and cached.geometry is not None:
         assert cross_fib_limit is None, f"[entity_compute] a cross-fib limit handed in on a pool hit {tuple(key)}"
+        assert cycle0_proximity_blocked is None, (
+            f"[entity_compute] a cycle-0 carve-out flag handed in on a pool hit {tuple(key)}")
         return cached, False
     assert cross_fib_limit is not None, f"[entity_compute] no cross-fib limit for the new sub {tuple(key)}"
+    assert cycle0_proximity_blocked is not None, f"[entity_compute] no cycle-0 carve-out flag for the new sub {tuple(key)}"
     assert cached is None, f"[entity_compute] pool entry {tuple(key)} without geometry"
 
     geom = _build_geometry(
         m15_df, sd=int(sd), start_abs=int(start_abs), run_cap_abs=len(m15_df) - 1,
         bos0_inner=bos0_inner, timeframe=timeframe, cross_fib_limit=cross_fib_limit,
+        cycle0_proximity_blocked=bool(cycle0_proximity_blocked),
     )
     if geom is None:
         print(
@@ -1295,6 +1310,7 @@ def build_or_get_geometry(
     )
     sub.bos0_inner = bos0_inner
     sub.cross_fib_limit = cross_fib_limit
+    sub.cycle0_proximity_blocked = bool(cycle0_proximity_blocked)
     print(
         f"[entity_compute] geometry built pool#{sub.pool_idx} key={tuple(key)} "
         f"slice_begin={slice_begin} run_cap={len(m15_df) - 1} "

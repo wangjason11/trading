@@ -289,3 +289,15 @@ Plan A — it reads nothing past its bound), so near its bound it can differ fro
 **The plan: `engine_v2/plans/PLAN_T_probe_parity_and_cycle0_carveout.md`** (2026-10-27) — T1 the probe, T2 the
 carve-out; their measured predictions (variants `c0T1`, `c0T2`, `make_variant_rule_c_sub0.py` in this folder) live
 there (§2.6, §3.3).
+
+## Round 6 — the chart look of T2 + the confirmation mark (2026-10-27, verbatim)
+
+T1 landed (`453f227`, S_T1 `20261027_131836_453f227`, zero change). T2 built = its measured prediction (PLAN_T §3.3);
+zoomed before / after renders of subs 7 (3990–4165) and 4 (3295–3495) on the M15 confluence chart shown.
+
+> [the chart look] Looks good, commit T2
+>
+> [should the M15 charts also SHOW when / how a sub's CTS confirmed — a mark at the proximity confirmation, the
+> CTS_RECONFIRMED at the later pattern?] Not needed
+
+Decided: T2's look accepted; no confirmation mark on the M15 charts (the LP marks + the structure lines are enough).

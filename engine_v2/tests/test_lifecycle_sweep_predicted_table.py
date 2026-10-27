@@ -311,7 +311,7 @@ def _key(direction: int, starting_idx: int) -> StructureKey:
 
 
 def _make_stubs(pool: SubStructurePool, calls: Dict[str, list]):
-    def resolve_start(trigger: SweepTrigger, hi: int):
+    def resolve_start(trigger: SweepTrigger, hi: int, *, cycle0_proximity_blocked: bool = False):
         k = (trigger.trigger_type, trigger.parent_sid, trigger.parent_cycle_id)
         calls["resolve_start"].append((k, trigger.trigger_idx, hi))
         if k not in _PROBE:
@@ -334,7 +334,8 @@ def _make_stubs(pool: SubStructurePool, calls: Dict[str, list]):
             cache_hit=False,
         )
 
-    def build_geometry(key: StructureKey, bos0_inner: Optional[float], cross_fib_limit):
+    def build_geometry(key: StructureKey, bos0_inner: Optional[float], cross_fib_limit, *,
+                       cycle0_proximity_blocked=None):
         calls["build_geometry"].append((key, bos0_inner))
         assert key.parent_path == PARENT and key.sub_tf == SUB_TF, key
         if key.starting_idx not in _NAT_REV or key.starting_idx in (2803, 2915, 3230):
@@ -993,7 +994,7 @@ def _make_cache_hit_stubs(pool: SubStructurePool, calls: Dict[str, list]):
     `cache_hit=True`; everything else is `_make_stubs` verbatim."""
     base_start, build_geometry, base_reversal = _make_stubs(pool, calls)
 
-    def resolve_start(trigger: SweepTrigger, hi: int):
+    def resolve_start(trigger: SweepTrigger, hi: int, *, cycle0_proximity_blocked: bool = False):
         res = base_start(trigger, hi)
         k = (trigger.trigger_type, trigger.parent_sid, trigger.parent_cycle_id)
         if k in _CACHE_HIT_START:

@@ -101,7 +101,7 @@ def _f14_1_run():
     with contextlib.redirect_stdout(out):
         df = _prepare_df(rows)
         ms = _make_market_structure(df, struct_direction=-1, start_idx=0, structure_id=0, timeframe="M15",
-                                    pip_size=_pip_size_from_pair(df), cross_fib_limit=NO_P)
+                                    pip_size=_pip_size_from_pair(df), cycle0_proximity_blocked=True, cross_fib_limit=NO_P)
         ms.run()
     return ms, ms.df, out.getvalue()
 

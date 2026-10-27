@@ -107,7 +107,7 @@ def _no_ic_reference(self, fib_state, df, *, evaluated_at):
 
 def _run(rows, sd, tf="H1", hook=None, *, neutral_ic_reference=False):
     df = _prepare_df([dict(o=o, h=h, l=l, c=c) for o, h, l, c in rows])
-    ms = _make_market_structure(df, cross_fib_limit=NO_P, struct_direction=sd, start_idx=0, structure_id=0,
+    ms = _make_market_structure(df, cycle0_proximity_blocked=True, cross_fib_limit=NO_P, struct_direction=sd, start_idx=0, structure_id=0,
                                 timeframe=tf, pip_size=_pip_size_from_pair(df))
     if hook is not None:
         hook(ms)
@@ -166,7 +166,7 @@ def test_snapshot_restore_round_trip():
     the kept ones the same objects), the embedded tracker (in place, its handled events kept by identity) and the
     output rows come back exactly."""
     df = _prepare_df(_make_multicycle_data())
-    ms = _make_market_structure(df, cross_fib_limit=NO_P, struct_direction=1, start_idx=0, structure_id=0,
+    ms = _make_market_structure(df, cycle0_proximity_blocked=True, cross_fib_limit=NO_P, struct_direction=1, start_idx=0, structure_id=0,
                                 timeframe="M15", pip_size=_pip_size_from_pair(df))
     with contextlib.redirect_stdout(io.StringIO()):
         ms.run()

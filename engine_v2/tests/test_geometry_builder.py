@@ -167,7 +167,8 @@ def _build(pool, df, *, sd=1, start_abs=0, bos0_inner=None):
     hit = pool.get(StructureKey(_PARENT, _TF, int(sd), int(start_abs))) is not None
     return edm.build_or_get_geometry(
         pool, df, parent_path=_PARENT, sd=sd, start_abs=start_abs,
-        bos0_inner=bos0_inner, cross_fib_limit=None if hit else NO_LIMIT, timeframe=_TF,
+        bos0_inner=bos0_inner, cross_fib_limit=None if hit else NO_LIMIT,
+        cycle0_proximity_blocked=None if hit else False, timeframe=_TF,
     )
 
 
@@ -396,7 +397,7 @@ def test_build_geometry_core_matches_pool_builder(reversing_df, uptrend_df):
     inner = float(build_ad_hoc_bos0_reference_zone(reversing_df, 0, 1).inner)
     core = edm._build_geometry(
         reversing_df, sd=1, start_abs=0, run_cap_abs=len(reversing_df) - 1,
-        bos0_inner=inner, timeframe=_TF, cross_fib_limit=NO_P,
+        bos0_inner=inner, timeframe=_TF, cross_fib_limit=NO_P, cycle0_proximity_blocked=False,
     )
     assert core is not None
     bounded, slice_begin = core
@@ -418,7 +419,7 @@ def test_build_geometry_core_matches_pool_builder(reversing_df, uptrend_df):
     # Same values with a non-zero slice_begin (uptrend, start 60 → 10, cap 69).
     core2 = edm._build_geometry(
         uptrend_df, sd=1, start_abs=60, run_cap_abs=len(uptrend_df) - 1,
-        bos0_inner=None, timeframe=_TF, cross_fib_limit=NO_P,
+        bos0_inner=None, timeframe=_TF, cycle0_proximity_blocked=False, cross_fib_limit=NO_P,
     )
     assert core2 is not None
     b2, sb2 = core2
@@ -427,9 +428,9 @@ def test_build_geometry_core_matches_pool_builder(reversing_df, uptrend_df):
     # The core has the same guards and creates nothing (no pool to create in).
     assert edm._build_geometry(
         uptrend_df, sd=1, start_abs=len(uptrend_df), run_cap_abs=len(uptrend_df) - 1,
-        bos0_inner=None, timeframe=_TF, cross_fib_limit=NO_P,
+        bos0_inner=None, timeframe=_TF, cycle0_proximity_blocked=False, cross_fib_limit=NO_P,
     ) is None
     assert edm._build_geometry(
         uptrend_df, sd=1, start_abs=len(uptrend_df) - 4, run_cap_abs=len(uptrend_df) - 1,
-        bos0_inner=None, timeframe=_TF, cross_fib_limit=NO_P,
+        bos0_inner=None, timeframe=_TF, cycle0_proximity_blocked=False, cross_fib_limit=NO_P,
     ) is None

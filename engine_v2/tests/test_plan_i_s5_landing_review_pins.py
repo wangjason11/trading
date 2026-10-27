@@ -28,7 +28,7 @@ def test_the_read_asks_for_this_runs_sid(monkeypatch):
         return real(df, fib, ft, **kw)
 
     monkeypatch.setattr(se, "poi_inner_for_fib", spy)
-    ms = se._make_market_structure(_prepare_df(_rows(1)), 1, structure_id=3, cross_fib_limit=NO_P)
+    ms = se._make_market_structure(_prepare_df(_rows(1)), 1, structure_id=3, cycle0_proximity_blocked=True, cross_fib_limit=NO_P)
     _quiet(ms.run)
     fibs = [f for f in seen if f is not None]
     assert fibs and {f.structure_id for f in fibs} == {3}
@@ -45,7 +45,7 @@ def test_the_geometry_hands_its_limit_to_the_embedded_tracker(embedded, via):
         assert _geometry(df, inner, lim) is not None
     else:
         assert _quiet(edm.build_or_get_geometry, SubStructurePool(), df, parent_path="H1.main", sd=1, start_abs=0,
-                      bos0_inner=inner, cross_fib_limit=lim, timeframe="M15") is not None
+                      bos0_inner=inner, cycle0_proximity_blocked=False, cross_fib_limit=lim, timeframe="M15") is not None
     t, = embedded
     assert t._limits == {0: lim}
 

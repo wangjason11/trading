@@ -257,7 +257,7 @@ def test_an_ip_error_inside_a_sub_geometry_propagates(monkeypatch):
     monkeypatch.setattr(poi_zones, "select_ic", lambda *a, **k: calls.append(1) or real(*a, **k))
     with contextlib.redirect_stdout(io.StringIO()):
         assert edm._build_geometry(df, sd=1, start_abs=0, run_cap_abs=len(df) - 1, bos0_inner=inner,
-                                   timeframe="M15", cross_fib_limit=NO_P) is not None
+                                   timeframe="M15", cycle0_proximity_blocked=False, cross_fib_limit=NO_P) is not None
     assert calls, "the fixture's MS run reads the resolver"
 
     def boom(*a, **k):
@@ -265,7 +265,7 @@ def test_an_ip_error_inside_a_sub_geometry_propagates(monkeypatch):
 
     monkeypatch.setattr(poi_zones, "select_ic", boom)
     with contextlib.redirect_stdout(io.StringIO()), pytest.raises(ICSelectionError):
-        edm._build_geometry(df, sd=1, start_abs=0, run_cap_abs=len(df) - 1, bos0_inner=inner, timeframe="M15", cross_fib_limit=NO_P)
+        edm._build_geometry(df, sd=1, start_abs=0, run_cap_abs=len(df) - 1, bos0_inner=inner, timeframe="M15", cycle0_proximity_blocked=False, cross_fib_limit=NO_P)
 
 
 def test_ms_on_an_unstamped_frame_raises():

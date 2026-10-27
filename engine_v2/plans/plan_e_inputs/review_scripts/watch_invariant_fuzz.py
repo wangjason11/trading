@@ -67,7 +67,7 @@ for t, name, sd, rows, end_idx, stop_n in rts.trials(seed, lo, hi):
     cur.clear(); cur.update(t=t, base=name, sd=sd, end=end_idx)
     try:
         df = _prepare_df(rows)
-        ms = _make_market_structure(df, cross_fib_limit=CrossFibLimit(None, "none"), struct_direction=sd, start_idx=0, structure_id=0, timeframe="H1",
+        ms = _make_market_structure(df, cycle0_proximity_blocked=True, cross_fib_limit=CrossFibLimit(None, "none"), struct_direction=sd, start_idx=0, structure_id=0, timeframe="H1",
                                     pip_size=_pip_size_from_pair(df), end_idx=end_idx,
                                     stop_after_cts_established=stop_n)
         with redirect_stdout(io.StringIO()):

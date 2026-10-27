@@ -50,6 +50,7 @@ def _make_market_structure(
     *,
     timeframe: str = "H1",
     cross_fib_limit: CrossFibLimit,
+    cycle0_proximity_blocked: bool,
     **kwargs,
 ) -> MarketStructure:
     """Construct MarketStructure with proximity resolvers + TF-defaulted
@@ -65,6 +66,10 @@ def _make_market_structure(
     (`compute_bounded_structure` ← the pool's `P`), the probe's Phase 2
     (`unified_probe`: its sub's limit, handed in by the first_confluence resolver —
     PLAN_T T1; until then an explicit `CrossFibLimit(None, "none")`, PLAN_I F7).
+
+    `cycle0_proximity_blocked` (REQUIRED, PLAN_T T2): the cycle-0 carve-out —
+    True = sd-proximity cannot confirm a cycle-0 CTS (the main sid 0, the sub its
+    cycle-0 first_confluence creates, and that trigger's probe).
 
     Every caller passes its `timeframe` (the proximity + narrow-gap values) and
     `pip_size` — the probe's Phase 2 since PLAN_T T1 (until then it built here
@@ -87,6 +92,7 @@ def _make_market_structure(
         df,
         struct_direction=struct_direction,
         timeframe=timeframe,
+        cycle0_proximity_blocked=bool(cycle0_proximity_blocked),
         **kwargs,
     )
 
@@ -199,6 +205,10 @@ def compute_structure(df: pd.DataFrame, *, timeframe: str = "H1") -> StructureEn
             # This sid's cross-fib limit from the sids before it (sid 0: start trading, no `P`; sid N: sid N−1's
             # reversal `bos_frozen`) — the same helper the downstream's `compute_main_cross_fib_limits` maps.
             cross_fib_limit=compute_main_cross_fib_limit(all_events, structure_id),
+            # The cycle-0 carve-out (PLAN_T T2): the main sid 0 only — the trading-open structure, whose start is
+            # Scenario 1's pick with no structural reference and no probe; a reversal's cycle 0 starts from its
+            # probe (narrow-gap gate alone).
+            cycle0_proximity_blocked=(structure_id == 0),
         )
         ms.debug = True
         df2, ms_events, levels = ms.run()
@@ -338,6 +348,7 @@ def compute_bounded_structure(
     enforce_cts0_new_extreme: bool = False,
     bos0_inner: Optional[float] = None,
     cross_fib_limit: CrossFibLimit,
+    cycle0_proximity_blocked: bool = False,
 ) -> BoundedStructureResult:
     """Run a bounded SINGLE directional structure and stop at its first reversal.
 
@@ -365,6 +376,10 @@ def compute_bounded_structure(
         +1 or -1. The single structure's direction for its whole run.
     timeframe : str
         TF for proximity-pips lookup (H1/M15/M5).
+    cycle0_proximity_blocked : bool (keyword-only, default False)
+        The cycle-0 carve-out (PLAN_T T2) — False = the rule for every sub but
+        the one the main sid 0 cycle 0's first_confluence creates; the pool's
+        builder (`build_or_get_geometry`, where the flag is REQUIRED) passes it.
     cross_fib_limit : CrossFibLimit (keyword-only, REQUIRED)
         The structure's cross-fib limit for MarketStructure's embedded fib
         tracker (PLAN_I S5 / D5): a sub's geometry passes the pool's `P`
@@ -399,6 +414,9 @@ def compute_bounded_structure(
         enforce_cts0_new_extreme=enforce_cts0_new_extreme,
         bos0_inner=bos0_inner,
         cross_fib_limit=cross_fib_limit,
+        # False = the rule for every sub but the one the main sid 0 cycle 0's first_confluence creates (PLAN_T T2;
+        # the pool's builder passes it explicitly).
+        cycle0_proximity_blocked=cycle0_proximity_blocked,
     )
     ms.debug = True
     df2, events, levels = ms.run()

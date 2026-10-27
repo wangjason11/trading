@@ -137,6 +137,15 @@ _TYPE_RANK = {
 }
 
 
+def cycle0_proximity_blocked_for(trigger_type: str, parent_cycle: Tuple[int, int], parent_path: str) -> bool:
+    """The cycle-0 carve-out's sub (PLAN_T T2, the user 2026-10-27): True ONLY for the first_confluence of the
+    main sid 0 cycle 0 — its probe input is the main sid 0's BOS_0 anchor, the trading-open BOS_0 the main sid 0
+    keeps the carve-out for; its probe and the sub it creates then never confirm cycle 0 by proximity. Every other
+    trigger's cycle 0 is guarded by the narrow-gap gate alone. Keyed on what the sub IS, not on `sub_id == 0`."""
+    return (trigger_type == "first_confluence" and tuple(parent_cycle) == (0, 0)
+            and parent_path == "H1.main")
+
+
 def _fire_order_key(t: SweepTrigger) -> Tuple[int, int, int]:
     return (
         _LENS_RANK.get(t.lens, 9),
@@ -153,8 +162,9 @@ class _Sweep:
         *,
         pool: SubStructurePool,
         tables: ParentTables,
-        resolve_start: Callable[[SweepTrigger, int], Any],
-        build_geometry: Callable[[StructureKey, Optional[float], Any], Optional[Tuple[PooledStructure, bool]]],
+        resolve_start: Callable[..., Any],            # (trigger, hi, *, cycle0_proximity_blocked)
+        build_geometry: Callable[..., Optional[Tuple[PooledStructure, bool]]],
+        # (key, bos0_inner, cross_fib_limit, *, cycle0_proximity_blocked)
         resolve_reversal: Callable[[PooledStructure, int, int], Any],
         resolve_cross_fib_limit: Callable[[SweepTrigger, int, Optional[PooledStructure]], Any],
         synth_reversal_trigger: Callable[[Any, int, int], Any],
@@ -305,12 +315,14 @@ class _Sweep:
                 f"floor {self.tables.floor(S, C)} >= end {self.tables.end(S, C)}",
             )
             return
+        # The cycle-0 carve-out flag (PLAN_T T2): evaluated ONCE here, handed to the probe and to the geometry.
+        blocked = cycle0_proximity_blocked_for(t.trigger_type, t.cycle, self.parent_path)
         # 2. probe (the cache lives inside the resolver).
         if t.trigger_type == "reversal":
             assert reversing_sub is not None
             res = self.resolve_reversal(reversing_sub, int(idx), int(t.direction))
         else:
-            res = self.resolve_start(t, int(t.trigger_idx))
+            res = self.resolve_start(t, int(t.trigger_idx), cycle0_proximity_blocked=blocked)
         if res is None:
             self._unresolved(t, "probe_failed", "resolver returned None")
             return
@@ -333,14 +345,21 @@ class _Sweep:
         #    computed first, from THIS trigger at its record's start (PLAN_I R6-2 (a)): the sub's MS run
         #    happens here, at its first trigger's fire.
         key = StructureKey(self.parent_path, self.sub_tf, int(t.direction), int(res.starting_idx))
-        limit = (self.resolve_cross_fib_limit(t, record_start, reversing_sub)
-                 if self.pool.get(key) is None else None)
-        built = self.build_geometry(key, res.bos0_inner, limit)
+        miss = self.pool.get(key) is None
+        limit = self.resolve_cross_fib_limit(t, record_start, reversing_sub) if miss else None
+        built = self.build_geometry(key, res.bos0_inner, limit,
+                                    cycle0_proximity_blocked=(blocked if miss else None))
         if built is None:
             self._unresolved(t, "geometry_failed", f"no geometry for key {tuple(key)}",
                              res.probe_input_idx)
             return
         sub, created = built
+        if blocked and (res.cache_hit or not created):
+            # The premise: the main's earliest trigger creates the carve-out's sub with its own probe (PLAN_T §3.2).
+            self.log(
+                f"WARNING [sweep] the cycle-0 carve-out's first_confluence {t.cycle}@{t.trigger_idx} did not create "
+                f"its sub: cache_hit={res.cache_hit} created={created} pool#{sub.pool_idx} key={tuple(key)}"
+            )
         if created:
             assert sub.cross_fib_limit is limit and limit is not None, (
                 f"[sweep] pool#{sub.pool_idx} built without its cross-fib limit")
@@ -667,8 +686,9 @@ def run_lifecycle_sweep(
     *,
     pool: SubStructurePool,
     tables: ParentTables,
-    resolve_start: Callable[[SweepTrigger, int], Any],
-    build_geometry: Callable[[StructureKey, Optional[float], Any], Optional[Tuple[PooledStructure, bool]]],
+    resolve_start: Callable[..., Any],                # (trigger, hi, *, cycle0_proximity_blocked)
+    build_geometry: Callable[..., Optional[Tuple[PooledStructure, bool]]],
+    # (key, bos0_inner, cross_fib_limit, *, cycle0_proximity_blocked)
     resolve_reversal: Callable[[PooledStructure, int, int], Any],
     resolve_cross_fib_limit: Callable[[SweepTrigger, int, Optional[PooledStructure]], Any],
     synth_reversal_trigger: Optional[Callable[[Any, int, int], Any]] = None,
@@ -680,12 +700,14 @@ def run_lifecycle_sweep(
 ) -> SweepResult:
     """Run the §17.6 sweep over `triggers` and populate `pool` in place.
 
-    - `resolve_start(trigger, hi)` → `ResolvedStart` | `ProbeFailure` | None for
+    - `resolve_start(trigger, hi, *, cycle0_proximity_blocked)` → `ResolvedStart` | `ProbeFailure` | None for
       the four H1 types (`hi` = the trigger's `trigger_idx`, the sibling window's
-      inclusive upper edge).
-    - `build_geometry(key, bos0_inner, cross_fib_limit)` → `(sub, created)` or
+      inclusive upper edge; the flag = `cycle0_proximity_blocked_for`, PLAN_T T2, evaluated once per trigger
+      and handed to the probe and the geometry alike).
+    - `build_geometry(key, bos0_inner, cross_fib_limit, *, cycle0_proximity_blocked)` → `(sub, created)` or
       None (the §5.4 builder: MS first, pool entry only on success; on a
-      creation it stores `cross_fib_limit` on the sub — None on a hit).
+      creation it stores `cross_fib_limit` + the flag on the sub; on a hit the sweep hands both as None —
+      the sub keeps its creator's).
     - `resolve_cross_fib_limit(trigger, record_start, reversing_sub)` → the
       sub's `CrossFibLimit`, called on a geometry MISS before the build (PLAN_I
       R6-2 (a); `multitf/cross_fib_limit.py`).

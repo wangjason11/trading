@@ -135,7 +135,7 @@ def _resolver(mapping: Dict[Any, Any]):
     every call on `.calls` as `(trigger, hi)`."""
     calls: List[Tuple[SweepTrigger, int]] = []
 
-    def resolve_start(trigger: SweepTrigger, hi: int):
+    def resolve_start(trigger: SweepTrigger, hi: int, *, cycle0_proximity_blocked: bool = False):
         calls.append((trigger, hi))
         key = (trigger.lens, trigger.trigger_idx)
         if key in mapping:
@@ -160,7 +160,8 @@ def _geom(
     calls: List[Tuple[StructureKey, Optional[float]]] = []
     failing = set(fail_once or ())
 
-    def build_geometry(key: StructureKey, bos0_inner: Optional[float], cross_fib_limit):
+    def build_geometry(key: StructureKey, bos0_inner: Optional[float], cross_fib_limit, *,
+                       cycle0_proximity_blocked=None):
         calls.append((key, bos0_inner))
         dk = (key.direction, key.starting_idx)
         if dk in failing:
@@ -1496,7 +1497,7 @@ def _resolver_by_event_idx(mapping: Dict[int, Any]):
     resolve to DIFFERENT subs. Records every call on `.calls`."""
     calls: List[Tuple[SweepTrigger, int]] = []
 
-    def resolve_start(trigger: SweepTrigger, hi: int):
+    def resolve_start(trigger: SweepTrigger, hi: int, *, cycle0_proximity_blocked: bool = False):
         calls.append((trigger, hi))
         return mapping[trigger.trigger_event_idx]
 
@@ -1523,7 +1524,7 @@ def test_reversal_spawn_sorts_before_trigger_fire_at_the_same_idx():
     snapshots: Dict[Tuple[str, str], List[Tuple[int, int]]] = {}
     answers = {(CONF, 63): _rs(100, 120), (CTR, 303): _rs(280, 303)}
 
-    def resolve(trigger: SweepTrigger, hi: int):
+    def resolve(trigger: SweepTrigger, hi: int, *, cycle0_proximity_blocked: bool = False):
         snapshots[(trigger.lens, trigger.trigger_type)] = [
             (s.direction, s.starting_idx) for s in pool.all()]
         return answers[(trigger.lens, trigger.trigger_idx)]
@@ -1973,13 +1974,13 @@ def test_orchestrator_resolve_start_passes_the_parent_cycles_cts_established_mom
     seen: List[tuple] = []
 
     def _fake_resolve(trigger, _h1, _m15, *, pool, hi, m15_parent_cts_established_idx, parent_path,
-                      cross_fib_limit):
+                      cross_fib_limit, cycle0_proximity_blocked):
         assert cross_fib_limit is None          # only a first_confluence's probe gets a limit (PLAN_T T1)
         seen.append(((trigger.parent_sid, trigger.parent_cycle_id), hi, m15_parent_cts_established_idx))
 
     def _sweep(triggers, *, resolve_start, **_kw):
         for t in triggers:
-            resolve_start(t, int(t.trigger_idx))
+            resolve_start(t, int(t.trigger_idx), cycle0_proximity_blocked=False)
         raise _Stop
 
     def _mt(sid, cyc):
