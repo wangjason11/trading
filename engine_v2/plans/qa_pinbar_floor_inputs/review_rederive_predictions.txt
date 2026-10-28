@@ -1,0 +1,48 @@
+## H1: frame 1058 candles, first 2025-11-16 22:00:00+00:00, last 2026-01-19 23:00:00+00:00
+   step 1: fetched 255 rows (0 at/after the frame's first), kept 255, first 2025-10-31 06:00:00+00:00, body-% pinbars 100
+   step 2: fetched 559 rows (0 at/after the frame's first), kept 559, first 2025-10-14 14:00:00+00:00, body-% pinbars 232
+   step 3: fetched 840 rows (0 at/after the frame's first), kept 840, first 2025-09-28 21:00:00+00:00, body-% pinbars 355
+   step 4: fetched 1119 rows (0 at/after the frame's first), kept 1119, first 2025-09-11 06:00:00+00:00, body-% pinbars 478
+   step 5: fetched 1423 rows (0 at/after the frame's first), kept 1423, first 2025-08-25 14:00:00+00:00, body-% pinbars 601
+   step 6: fetched 1680 rows (0 at/after the frame's first), kept 1680, first 2025-08-10 21:00:00+00:00, body-% pinbars 712
+   step 7: fetched 1983 rows (0 at/after the frame's first), kept 1983, first 2025-07-23 06:00:00+00:00, body-% pinbars 844
+   step 8: fetched 2280 rows (0 at/after the frame's first), kept 2280, first 2025-07-06 21:00:00+00:00, body-% pinbars 970
+   guard stops at step 2: 559 candles, 232 pinbars
+   natural: guard seed vs 60d seed: types differ on 0, floors differ on 0
+   final: guard seed vs 60d seed: types differ on 0, floors differ on 0
+   today: floor pinbars 40 (maru 7, normal 33)
+   today->U2: 74 change (74 become, 0 stop); maru 15 normal 59; pin dir 6
+   U2->U3: 15 change (1 become, 14 stop); maru 5 normal 10; pin dir 1
+   today->U3: 61 change (61 become, 0 stop); maru 10 normal 51; pin dir 5
+   today types maru/normal/pinbar: 289/233/536
+   U2 types maru/normal/pinbar: 274/174/610
+   U3 types maru/normal/pinbar: 279/182/597
+   U2 floor min 2.3000, U3 floor min 2.3100
+   special marus demoted U2 18, today 5
+   U2: maru/normal with body within 1e-9 of the floor: 3; of those body<floor raw (no EPS): 1
+   U3: maru/normal with body within 1e-9 of the floor: 4; of those body<floor raw (no EPS): 2
+
+## M15: frame 4228 candles, first 2025-11-16 22:00:00+00:00, last 2026-01-19 22:45:00+00:00
+   step 1: fetched 208 rows (0 at/after the frame's first), kept 208, first 2025-11-12 18:00:00+00:00, body-% pinbars 82
+   step 2: fetched 480 rows (0 at/after the frame's first), kept 480, first 2025-11-09 22:00:00+00:00, body-% pinbars 189
+   step 3: fetched 816 rows (0 at/after the frame's first), kept 816, first 2025-11-04 10:00:00+00:00, body-% pinbars 310
+   step 4: fetched 1020 rows (0 at/after the frame's first), kept 1020, first 2025-10-31 06:00:00+00:00, body-% pinbars 397
+   step 5: fetched 1420 rows (0 at/after the frame's first), kept 1420, first 2025-10-27 02:00:00+00:00, body-% pinbars 538
+   step 6: fetched 1628 rows (0 at/after the frame's first), kept 1628, first 2025-10-22 22:00:00+00:00, body-% pinbars 626
+   step 7: fetched 1920 rows (0 at/after the frame's first), kept 1920, first 2025-10-19 21:00:00+00:00, body-% pinbars 757
+   step 8: fetched 2236 rows (0 at/after the frame's first), kept 2236, first 2025-10-14 14:00:00+00:00, body-% pinbars 885
+   guard stops at step 2: 480 candles, 189 pinbars
+   natural: guard seed vs 60d seed: types differ on 0, floors differ on 0
+   final: guard seed vs 60d seed: types differ on 0, floors differ on 0
+   today: floor pinbars 142 (maru 34, normal 108)
+   today->U2: 294 change (294 become, 0 stop); maru 91 normal 203; pin dir 31
+   U2->U3: 64 change (19 become, 45 stop); maru 27 normal 37; pin dir 5
+   today->U3: 268 change (268 become, 0 stop); maru 78 normal 190; pin dir 26
+   today types maru/normal/pinbar: 1358/920/1950
+   U2 types maru/normal/pinbar: 1267/717/2244
+   U3 types maru/normal/pinbar: 1280/730/2218
+   U2 floor min 1.0200, U3 floor min 1.0000
+   special marus demoted U2 87, today 25
+   U2: maru/normal with body within 1e-9 of the floor: 48; of those body<floor raw (no EPS): 12
+   U3: maru/normal with body within 1e-9 of the floor: 55; of those body<floor raw (no EPS): 17
+

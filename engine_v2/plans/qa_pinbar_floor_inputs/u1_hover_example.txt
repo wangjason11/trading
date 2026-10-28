@@ -1,0 +1,109 @@
+     A      B      d  element / (parent_sid,parent_cycle,sub_id)
+--- _H1 trace OHLC (plain):
+    TF=1H
+    idx=0
+    time=2025-11-16 22:00:00+00:00
+    O=0.56794
+    H=0.56808
+    L=0.56784
+    C=0.56801
+    candle_type=pinbar
+    pinbar_body_floor=0.000220
+    body_len=0.00007
+    candle_len=0.00024
+    body_pct=29.17%
+    mid_price=0.56796
+    big_normal=False  big_maru=False  big_ratio=0.00
+    range_break_frac=None
+    vol_spike_ratio=1.00
+--- _H1 trace OHLC (floor):
+    TF=1H
+    idx=35
+    time=2025-11-18 09:00:00+00:00
+    O=0.56636
+    H=0.56677
+    L=0.56626
+    C=0.56657
+    candle_type=pinbar
+    pinbar_body_floor=0.000220 | candle_type_before_floor=normal
+    body_len=0.00021
+    candle_len=0.00051
+    body_pct=41.18%
+    mid_price=0.56651
+    big_normal=False  big_maru=False  big_ratio=0.43
+    range_break_frac=None
+    vol_spike_ratio=1.03
+--- _H1 trace OHLC (floor):
+    TF=1H
+    idx=212
+    time=2025-11-27 18:00:00+00:00
+    O=0.57235
+    H=0.5724
+    L=0.5722
+    C=0.5722
+    candle_type=pinbar
+    pinbar_body_floor=0.000220 | candle_type_before_floor=maru
+    body_len=0.00015
+    candle_len=0.00020
+    body_pct=75.00%
+    mid_price=0.57230
+    big_normal=False  big_maru=False  big_ratio=0.19
+    range_break_frac=None
+    vol_spike_ratio=0.15
+--- _M15_counter trace OHLC (floor):
+    TF=15M
+    idx=0
+    time=2025-11-16 22:00:00+00:00
+    idx_1H=0
+    time_1H=2025-11-16 22:00:00+00:00
+    O=0.56794
+    H=0.56794
+    L=0.56784
+    C=0.56787
+    candle_type=pinbar
+    pinbar_body_floor=0.000100 | candle_type_before_floor=maru
+    body_len=0.00007
+    candle_len=0.00010
+    body_pct=70.00%
+    mid_price=0.56789
+    big_normal=False  big_maru=False  big_ratio=0.00
+    range_break_frac=None
+    vol_spike_ratio=1.00
+--- _M15_counter trace OHLC (floor):
+    TF=15M
+    idx=1
+    time=2025-11-16 22:15:00+00:00
+    idx_1H=0
+    time_1H=2025-11-16 22:00:00+00:00
+    O=0.56788
+    H=0.56796
+    L=0.56784
+    C=0.56795
+    candle_type=pinbar
+    pinbar_body_floor=0.000100 | candle_type_before_floor=maru
+    body_len=0.00007
+    candle_len=0.00012
+    body_pct=58.33%
+    mid_price=0.56790
+    big_normal=False  big_maru=False  big_ratio=0.00
+    range_break_frac=None
+    vol_spike_ratio=2.52
+--- _M15_counter trace OHLC (plain):
+    TF=15M
+    idx=2
+    time=2025-11-16 22:30:00+00:00
+    idx_1H=0
+    time_1H=2025-11-16 22:00:00+00:00
+    O=0.56792
+    H=0.56802
+    L=0.56784
+    C=0.56802
+    candle_type=maru
+    pinbar_body_floor=0.000100
+    body_len=0.00010
+    candle_len=0.00018
+    body_pct=55.56%
+    mid_price=0.56793
+    big_normal=False  big_maru=False  big_ratio=0.00
+    range_break_frac=None
+    vol_spike_ratio=4.34

@@ -14,7 +14,11 @@ Inputs (`qa_pinbar_floor_inputs/`, run from the repo root with `PYTHONIOENCODING
 (canonical in `features/CANDLE_BODY_FLOOR_NOTES.md` "Measured distribution") — `deciles.py`,
 `rolling_pinbar_percentiles.py`, `rolling_floor_demotions.py`, `current_floor_demotions.py`,
 `floor_history_from_saves.py`, `window_natural_vs_final.py`; THIS plan's prediction `plan_u_prediction.py` (+ `.txt`:
-the per-candle list).
+the per-candle list); the seed guard's step counts `seed_guard_steps.py` (H1 2 steps = 559 candles / 232 body-%
+pinbars, M15 2 steps = 480 / 189); the cold review's independent re-derivation `review_rederive_predictions.py` (its
+own floor loop + the literal guard; = every §5.2 / §6 count — the oracle for U2 / U3: the engine's types must equal
+its U2 / U3 columns); U1's checks `u1_landing_check.py`, `m15_hover_floor_count.py`, `u1_hover_example.py` (the
+rendered hover example); each with its `.txt` where it prints one.
 
 ---
 

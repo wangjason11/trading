@@ -1,0 +1,11 @@
+[auto_extend] iter=1 too_early raw_start_idx=34 min_history=50 => extending start by 4 days 2025-12-01 00:00:00+00:00 -> 2025-11-27 00:00:00+00:00
+[auto_extend] iter=2 too_early raw_start_idx=35 min_history=50 => extending start by 4 days 2025-11-27 00:00:00+00:00 -> 2025-11-23 00:00:00+00:00
+[auto_extend] iter=3 too_early raw_start_idx=37 min_history=50 => extending start by 4 days 2025-11-23 00:00:00+00:00 -> 2025-11-19 00:00:00+00:00
+[auto_extend] iter=4 too_early raw_start_idx=46 min_history=50 => extending start by 4 days 2025-11-19 00:00:00+00:00 -> 2025-11-15 00:00:00+00:00
+[data_bridge] Fetched 4228 M15 candles for NZD_USD in 5 chunks
+[data_bridge] Fetched 1007 H1 candles for NZD_USD in 5 chunks
+H1 step 1 back 2025-10-31 06:00:00+00:00 candles 255 natural pinbars 100
+H1 step 2 back 2025-10-14 14:00:00+00:00 candles 559 natural pinbars 232
+[data_bridge] Fetched 4028 M15 candles for NZD_USD in 5 chunks
+M15 step 1 back 2025-11-12 18:00:00+00:00 candles 208 natural pinbars 82
+M15 step 2 back 2025-11-08 14:00:00+00:00 candles 480 natural pinbars 189
