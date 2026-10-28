@@ -380,7 +380,8 @@ You can debug **confluence vs non-confluence** trades visually.
 >   SESSION ORDER items 7–8, §D.3). **2026-10-28:** item 7 (the pinbar floor, PLAN_U) DONE; the user scoped item 8
 >   (the §A hygiene trio, the replacement-chain `ended_by` fix, the agreed direction for wave candles + WVMI) and
 >   moved the candle-direction / rejection confirmation at a zone touch, zone strength scoring and the M5 layer to
->   Parts 2 / 3 (register §D SESSION ORDER item 8, §D.3).
+>   Parts 2 / 3 (register §D SESSION ORDER item 8, §D.3). Item 8 DONE 2026-10-28 (PLAN_V 8a / 8b / 8c) — **Part 1
+>   COMPLETE 2026-10-28**.
 > - **Part 2 — Entry decision build & logic** — the original Week 9 plan below, + the entry confirmation candle
 >   patterns (moved here from Part 1 by the user 2026-10-27) and the zone size at entry and stop-loss (below); + since
 >   2026-10-28 the candle-direction / rejection confirmation at a zone touch (an entry condition, next to the

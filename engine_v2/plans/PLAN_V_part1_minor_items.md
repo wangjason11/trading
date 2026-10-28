@@ -3,7 +3,9 @@
 **Status: 2026-10-28 — 8a LANDED (`955489b`, = its prediction, §1.5), 8b LANDED (`01f5282`, = its prediction, §2.4);
 one save after both (the user: "Two commits, one save"): S_V8b `20261028_141322_245620c` (source `245620c`, save
 `67c4d05`, trunk `29276a0`; = S_U3b byte for byte; the new `/compare` baseline). 8c MEASURED + DECIDED (§3.1–3.2);
-8c LANDED = the variant byte for byte (§3.3; the user's chart look: "looks good go ahead") — item 8 DONE, Week 9 Part 1 complete.** Baseline **S_U3b**
+8c LANDED (`1318c82`) = the variant byte for byte (§3.3; the user's chart look: "looks good go ahead"), saved:
+S_V8c `20261028_153518_1318c82` (save `fb6fb81`, trunk `8e6a53a`; = `LATEST_<branch>`) — item 8 DONE, Week 9 Part 1
+complete.** Baseline **S_U3b**
 `artifacts/commits/week9-entries-decisions/20261028_130713_9c3949d` (source `9c3949d`; HEAD at drafting `409c8ac`, code
 = `9c3949d`); suite 2154. The scope is the user's (register `IDEA_PARKING_LOT.md` §D "SESSION ORDER" item 8, 2026-10-28):
 three landings in the order 8a → 8b → 8c, one cause per `/compare` (the two zero-change landings first, so 8c's

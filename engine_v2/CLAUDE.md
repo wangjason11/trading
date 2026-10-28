@@ -56,12 +56,13 @@ adjustments MOVED to Parts 2 / 3 (applied to the entry price and stop loss, the 
 pinbar body-pip floor calibration (the last major Part 1 item) DONE 2026-10-28 — PLAN_U, a rolling floor: U1 the
 per-candle plumbing + columns + hover, U2 the rolling floor (natural window), U3 the final window — the user's pick
 after seeing both, natural kept as a switch — and U3b, the floor seed guard steps back until final mode converges,
-all landed 2026-10-28; NOW the remaining minor
-pre-Part-2 items (register §D SESSION ORDER item 8, scoped by the user 2026-10-28: 8a the §A hygiene trio, 8b the
-replacement-chain `ended_by` fix — both DONE 2026-10-28, `plans/PLAN_V_part1_minor_items.md`, zero change — 8c the
-agreed direction for wave candles + WVMI (measured; the user: apply it); the candle-direction confirmation,
-zone strength scoring and the M5 layer moved to Parts 2 / 3), which complete Part 1),
-Part 2 entry decisions, Part 3 other decisions.
+all landed 2026-10-28; the remaining minor
+pre-Part-2 items DONE 2026-10-28 (register §D SESSION ORDER item 8, scoped by the user 2026-10-28;
+`plans/PLAN_V_part1_minor_items.md`: 8a the §A hygiene trio and 8b the replacement-chain `ended_by` fix, both zero
+change; 8c the agreed direction for wave candles + WVMI — a volume-only doji qualifies, a direction-0 wave candle is
+drawn in its `vol_dir` colour; the candle-direction confirmation, zone strength scoring and the M5 layer moved to
+Parts 2 / 3) — **Part 1 COMPLETE 2026-10-28**); NEXT Part 2 entry decisions (+ the entry confirmation candle
+patterns, zone size at entry / stop — register §D.3), Part 3 other decisions.
 
 **Pre-Week 8 fix:** Exception 2 probe relaxed from CTS_CONFIRMED to CTS_ESTABLISHED (`bbb6d32`).
 

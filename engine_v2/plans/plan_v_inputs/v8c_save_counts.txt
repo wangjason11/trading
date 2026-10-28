@@ -1,0 +1,2 @@
+confluence: *_wvmi_lps.csv lines S_V8b 215 -> S_V8c 218; 'M15 WVMI LP sell' traces 1/1, dots 112 -> 115; new x ['2025-12-30T04:45:00+00:00', '2025-12-30T06:15:00+00:00', '2026-01-05T19:00:00+00:00']
+counter: *_wvmi_lps.csv lines S_V8b 77 -> S_V8c 80; 'M15 WVMI LP sell' traces 1/1, dots 47 -> 50; new x ['2025-12-30T04:45:00+00:00', '2025-12-30T06:15:00+00:00', '2026-01-05T19:00:00+00:00']

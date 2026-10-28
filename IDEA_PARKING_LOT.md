@@ -286,8 +286,9 @@ SYLLABUS Week 9 Part 2 "Zone size at entry and stop-loss".
    and 8b DONE (`01f5282`, zero change) — the user: "Two commits, one save" (S_V8b `20261028_141322_245620c` = S_U3b
    byte for byte); 8c MEASURED (PLAN_V §3.1: 0 of 53 wave
    candles move, sub 3's temporary-LP history gains three volume-only dojis) and DECIDED: "Apply it" + a
-   direction-0 wave candle drawn in its `vol_dir` colour ("Draw it in its vol_dir colour"); 8c LANDED (= the variant
-   byte for byte, PLAN_V §3.3; the user's chart look: "looks good go ahead"). **Item 8 DONE — Week 9 Part 1 complete.**
+   direction-0 wave candle drawn in its `vol_dir` colour ("Draw it in its vol_dir colour"); 8c LANDED `1318c82` (= the
+   variant byte for byte, PLAN_V §3.3; the user's chart look: "looks good go ahead"), save S_V8c
+   `20261028_153518_1318c82`. **Item 8 DONE — Week 9 Part 1 complete.**
 
 **D.1 — Ordered (the heavy items):**
 1. **One POI per cycle** (redefine the IC & POI zone logic) — B landed; its chart debugging PAUSED for item 2 (user

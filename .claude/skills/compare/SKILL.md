@@ -905,9 +905,16 @@ landings, one save:** 8a the §A hygiene trio (`955489b`: the chart styles read 
 equal (`cmp_fig_full.py`), the PNGs byte-equal, chart counts unchanged (79 / 232, 154 / 134, 302 / 305), the
 `[floor_seed]` lines + skip grep 33 unchanged (`plan_v_inputs/v8a_compare.txt`, `v8b_compare.txt`). Not a save-format
 boundary. Suite 2166; mutants 15 / 15 + 4 / 4. S_V8b `20261028_141322_245620c` (source `245620c`, save `67c4d05`,
-trunk `29276a0`; = `LATEST_<branch>` from 2026-10-28; run mode, the save = S_U3b byte for byte). 8c (the agreed
-direction for wave candles + WVMI) is next — measured (PLAN_V §3.1): it adds sub 3's three volume-only-doji
-temporary LPs (+3 rows per lens `*_wvmi_lps.csv`, +3 'M15 WVMI LP sell' dots per M15 chart), nothing else.
+trunk `29276a0`; = `LATEST_<branch>` until S_V8c, below; run mode, the save = S_U3b byte for byte).
+**PLAN_V 8c (2026-10-28; PLAN_V §3) — a volume-only doji qualifies:** `1318c82` — `wave_candles._is_qualified` = the
+agreed direction (WVMI's rule); a wave candle on a direction-0 candle is drawn in its `vol_dir` colour (0 on the
+window). = the variant replay byte for byte. vs S_V8b: DIFF only the two lens `*_wvmi_lps.csv` (+3 rows each — sub
+3's temporary LPs at M15 2907 / 2913 / 3252; confluence 215 → 218 lines, counter 77 → 80) and one trace per M15
+chart, 'M15 WVMI LP sell' (confluence 112 → 115 dots, counter 47 → 50) + the two M15 PNGs; the H1 chart + PNG, the
+other 28 CSVs, the trace counts (79, 302, 154), the `[floor_seed]` lines and skip grep 33 unchanged
+(`plan_v_inputs/v8c_landing_compare.txt`, `v8c_save_counts.txt`). Not a save-format boundary. Suite 2172; mutants
+4 / 4. S_V8c `20261028_153518_1318c82` (source `1318c82`, save `fb6fb81`, trunk `8e6a53a`; = `LATEST_<branch>` from
+2026-10-28; run mode, the save = the variant byte for byte). PLAN_V is complete — Week 9 Part 1 complete.
 
 **M15.counter** and **M15.confluence** (9 files each — 7 per-lens debug CSVs
 with the same filename suffixes prefixed `*_M15_counter_` /
