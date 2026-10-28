@@ -1,0 +1,4 @@
+commit_hash=b64b10a
+timestamp=20261028_090632
+branch=week9-entries-decisions
+commit_message=PLAN_U U1: the per-candle pinbar body floor plumbing + 3 columns + the candle hover, on the fixed floor (format only)
