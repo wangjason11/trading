@@ -54,7 +54,7 @@ The open lines below carry over (fold in when their files are next touched); D a
 
 ## C. Part 4 closure — DONE 2026-09-30 (all three items in "Recently closed"; Part 4 is complete)
 
-## D. Week 9 Part 1 — Entry prerequisites (before Entries)
+## D. Week 9 Part 1 — Entry prerequisites (before Entries) — COMPLETE 2026-10-28 (SESSION ORDER items 1–9, "Recently closed"; D.2's not-picked entries stay open / parked, D.3 = the items moved to Parts 2 / 3)
 
 **Week 9 = "Entries & Decisions"** (renamed by the user 2026-09-30), in three parts: **Part 1** Entry prerequisite
 items (this bucket), **Part 2** the actual Entry decision build & logic, **Part 3** Other decisions build & logic
@@ -755,6 +755,12 @@ SYLLABUS Week 9 Part 2 "Zone size at entry and stop-loss".
 
 ## Recently closed (history pointers)
 
+- **Week 9 Part 1 — the entry prerequisites** (§D) — CLOSED 2026-10-28 with SESSION ORDER item 9 (PLAN_W:
+  `35e827e` the fill checks require a 0..n−1 frame, `aff21f8` the POI record gate `active OR locked`, `321667a` a sub
+  probe's reference = its derived CTS zone as of the read, `538cd2f` the sub CTS KL zones exported + drawn hidden
+  behind the M15 `Sub CTS zones` button; saves S_W9b `20261028_165600_aff21f8`, S_W9c `20261028_180228_538cd2f`).
+  Items 1–8 and their plans (PLAN_H … PLAN_V): §D "SESSION ORDER" + memory `project_session_order_status.md`. Not
+  pushed at closing (198 commits ahead; the user's call). Next: Part 2 (§D.3, SYLLABUS Week 9).
 - **The cycle-0 carve-out revisit** (§D 5b; raised by the user 2026-10-26, scheduled 2026-10-27) — CLOSED 2026-10-27
   by PLAN_T in two landings: T1 `453f227` (the first_confluence probe's MS reads what its sub reads; zero change; save
   S_T1 `20261027_131836_453f227`) and T2 (the carve-out kept on the main sid 0 + the sub its cycle-0 first_confluence
