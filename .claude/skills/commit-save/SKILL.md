@@ -180,7 +180,10 @@ the floor seeds since PLAN_U U2, 2026-10-28, `[floor_seed] …` — their exact
 lines are checked in every completed branch, `FAIL - do NOT save (floor seed)`
 otherwise); the gate ties the log to the outputs and checks the exact candle
 count. The full rationale, the N/A cases and the canonical expected value are
-in the `/compare` skill §2b "Fetch-completeness gate". Keep the snippet below
+in the `/compare` skill §2b "Fetch-completeness gate". **Run the snippet as written — never extract it from
+this file with a `sed` range** (2026-10-28: `sed -n '/^RAW=/,/^fi$/p'` also matched the Step 5 reuse snippet, which
+has no `fi`, so bash ran the REST OF THIS FILE — a save commit with no outputs, its cherry-pick, a branch
+round-trip; undone by moving both refs back). Keep the snippet below
 identical to the one there (only the FAIL messages differ), including the
 `EXPECTED_FETCH` and `EXPECTED_SEED_H1` / `_M15` values.
 

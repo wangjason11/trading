@@ -1,8 +1,9 @@
 # PLAN_U — the rolling pinbar body floor: p90 of the 90 most recent pinbars, the history fetched before the frame (the user's floor calibration, 2026-10-27 / 28)
 
 **Status: U1 LANDED 2026-10-28 (= §4.2; source `b64b10a`, save **S_U1** `20261028_090632_b64b10a`, U2's `/compare`
-baseline; §9); the cold review DONE (§8 — no blocker; its U2 amendments carried, §9 "U2"); U2 BUILT 2026-10-28 (= §5.2
-exactly; the `/compare` vs S_U1 done, the user's chart look pending, then `/commit-save`; §9 "U2"), then U3.** U1's baseline **S_controls**
+baseline; §9); the cold review DONE (§8 — no blocker; its U2 amendments carried, §9 "U2"); U2 LANDED 2026-10-28 (= §5.2
+exactly; source `84fbbc6`, save **S_U2** `20261028_113834_84fbbc6` = the new `LATEST_<branch>`, U3's `/compare`
+baseline; §9 "U2"); U3 NEXT (§6).** U1's baseline **S_controls**
 `artifacts/commits/week9-entries-decisions/20261027_164527_5dfb5b3` (`LATEST_week9-entries-decisions` until S_U1; source
 `5dfb5b3`, HEAD at drafting `4914f31`, code = `5dfb5b3`); suite 2108. Session order item 7 (register
 `IDEA_PARKING_LOT.md` §D "SESSION ORDER" = §D.1 item 4). THREE landings, one cause per `/compare`, each with its own
@@ -345,7 +346,7 @@ each lands:
   S_controls; the PNGs byte-equal). Suite 2121. S_U1 is U2's `/compare` baseline; its `*_final.csv` has the 3 columns,
   so U2's diff of that file is positional-safe (same columns).
 
-### U2 — BUILT 2026-10-28, = §5.2 exactly (the `/compare` vs S_U1 done; the user's chart look pending)
+### U2 — LANDED 2026-10-28, = §5.2 exactly (the user's look: "charts look good, go ahead and commit-save")
 - **Code:** new `features/pinbar_body_floor.py` (`rolling_pinbar_body_floor` → `(floor, demoted)`,
   `pinbar_body_floor_for_frame`; the seed asserted strictly before the frame); `candles_v2.floor_demotes` = the ONE
   predicate (step 4 + the final window; §8 A1) — `fixed_body_floor`, `_pip_size` and the params-floor raise removed;
@@ -413,4 +414,10 @@ each lands:
   `u2_function_no_eps` SURVIVED: its pin used a frame whose float bodies (c − o) put the maru exactly AT its floor, so
   the EPS never mattered; re-pinned on exact arrays + a new pin for the agreement assert (`u2_assert_dropped`, now a
   killable mutant) — the re-run 2 / 2 KILLED (`mutants_u2_rerun.txt`): **30 / 30 in all**, each by its sketched pin.
-
+- **Landed:** source `84fbbc6`, save `ca25478`, trunk `562d237` = **S_U2** `20261028_113834_84fbbc6` (run mode on
+  the final code: FETCH GATE PASS + both seed lines, skip grep 33, timing total 110.30 s; `u2_compare.py` on the save
+  = the compared replay's output, identical). Suite 2146. At the look the user asked which percentile and whether
+  the demoted pinbars fill the window (p90 of 90; natural — they do not, that is U3) and whether any default pip floor
+  is left (none in the engine; only the test fixtures pass 2.2 / 1.0 pips through the `body_floor=` seam). One
+  procedural slip, undone before the save: the commit-save gate was extracted with a `sed` range that also ran the rest
+  of the skill (a bogus save commit + its cherry-pick; both refs moved back) — the skill now says so.

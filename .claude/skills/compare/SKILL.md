@@ -845,6 +845,24 @@ M15 slot 14; M15 4228 candles at 0.000100, 142 floor pinbars = 34 / 108 on both 
 PNGs byte-equal. Skip grep 33. Suite 2121; mutants 17 / 17. S_U1 `20261028_090632_b64b10a` (source `b64b10a`, save
 `60b2d7e`, trunk `53090ea`; = `LATEST_<branch>` from 2026-10-28; run mode, the save replay = `u1_landing_check.py` ALL
 AS PREDICTED vs S_controls, the PNGs byte-equal). U2 (the rolling floor) is the behaviour change.
+**PLAN_U U2 (2026-10-28, the rolling pinbar body floor, natural window — the p90 of the 90 most recent body-% pinbars
+before the candle, the history before the frame fetched as a seed) — BEHAVIOUR, no format change** (same columns as
+S_U1; positional `cmp_save` is fine, but diff the structure events / zones KEYED — `plans/qa_pinbar_floor_inputs/
+u2_compare.py BASE CUR`, its causes `u2_causes.py`). = the prediction (`plans/PLAN_U_rolling_pinbar_body_floor.md`
+§5.2, `plan_u_prediction.txt` candle by candle): H1 74 candles become pinbars, 0 stop (15 marus / 59 normals), types
+289 / 233 / 536 → 274 / 174 / 610, `is_floor_pinbar` 114; M15 294, 1358 / 920 / 1950 → 1267 / 717 / 2244,
+`is_floor_pinbar` 436 on both lens hovers (`m15_hover_floor_count.py`); every candle has a floor. Vs S_U1 21 / 30 CSVs
+differ; subs, triggers, unresolved, the H1 + confluence POI zones, imbalances and raw byte-equal — no sub, trigger,
+POI or IC pick moves. H1 sid 0 cycle 0 CTS_CONFIRMED 439 → 485 (anchor 430 → 448; its CTS KL zone, fib, WVMI (0,0)
+follow); counter sub 6 cycle 0 CTS_ESTABLISHED / BOS 3656 → 3657; confluence sub 0 (the pattern CTS_UPDATEDs, cycle 3
+CTS_CONFIRMED 1748 → 1751) and sub 1 (cycle 0 1818 → 1833, cycle 1 reconfirm 1904 → 1903, cycle 4 via
+`double_maru`); sub 3 cycle 2 the BOS KL base 2914 → 2915 + WVMI (3,1) / (3,2); H1 WVMI LP rows 57 → 54, confluence
+216 → 214. Charts (`fig_named_diff.py`): H1 83 / 234 → 79 / 232, counter 158 / 136 → 154 / 134, confluence 306 / 307
+→ 302 / 305 (the H1 CTS zone's 2 fewer bounds steps, on H1 + both overlays; the moved dots / labels / wave candles /
+WVMI marks; every candle hover's floor). The fetch gate checks the two `[floor_seed]` lines (§2b) — H1 559 / 232, M15
+480 / 189. Skip grep 33 (the same lines). Suite 2146; mutants 30 / 30. S_U2 `20261028_113834_84fbbc6` (source
+`84fbbc6`, save `ca25478`, trunk `562d237`; = `LATEST_<branch>` from 2026-10-28; run mode, the save replay =
+`u2_compare.py` output identical to the compared replay's). U3 (the final window) is the next flip.
 
 **M15.counter** and **M15.confluence** (9 files each — 7 per-lens debug CSVs
 with the same filename suffixes prefixed `*_M15_counter_` /
@@ -1001,6 +1019,11 @@ older values in **History** below):
 - `H1` chart: traces=81, shapes=234
 - `M15.counter` chart: traces=154, shapes=136
 - `M15.confluence` chart: traces=302, shapes=307
+
+(Re-measured 2026-10-28 on S_U2 `20261028_113834_84fbbc6`: H1 79 / 232, counter 154 / 134, confluence 302 / 305 —
+the WVMI LP marks (step 5) had moved the block's values to 83 / 234, 158 / 136, 306 / 307 by S_U1; PLAN_U U2 then
+removed the H1 (0,0) CTS zone's 2 bounds steps, −4 traces / −2 shapes on each chart. Each `/compare` checks its
+baseline save's counts.)
 
 (Before the 2026-10-09 re-baseline the block listed the 2026-09-24 Plan F values — H1
 85/245, counter 151/124, confluence 294/233; landings between re-baselines are not
