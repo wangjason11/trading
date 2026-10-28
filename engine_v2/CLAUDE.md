@@ -66,7 +66,10 @@ register §D SESSION ORDER item 9; `plans/PLAN_W_part1_last_items.md`): 9a the f
 0..n−1, 9b the POI record gate `active OR locked` (a cycle that ends before its fib locks gets its POI), 9c-2 a sub
 probe's reference reads its derived CTS zone as of the read and 9c-1 the sub CTS KL zones exported + drawn hidden
 behind the M15 control bar's `Sub CTS zones` button — all DONE 2026-10-28, the first three zero change on the
-reference window) — **Week 9 Part 1 COMPLETE 2026-10-28**; NEXT (after the push, when the user says) Part 2 entry decisions (+ the entry confirmation candle
+reference window; + every KL zone hover's `kind=BOS / CTS`, PLAN_W §4); NOW item 10, the LAST Part 1 item (the user
+2026-10-28): a sweep of every parked / deferred item across the docs, listed with a short description (minus the
+items agreed for Parts 2 / 3), then the user picks what to cover before Part 2 — "make sure our overall MS is totally
+solid" (register §D SESSION ORDER item 10); then Part 1 closes); NEXT Part 2 entry decisions (+ the entry confirmation candle
 patterns, zone size at entry / stop — register §D.3), Part 3 other decisions.
 
 **Pre-Week 8 fix:** Exception 2 probe relaxed from CTS_CONFIRMED to CTS_ESTABLISHED (`bbb6d32`).

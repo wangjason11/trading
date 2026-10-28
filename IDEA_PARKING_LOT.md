@@ -54,7 +54,7 @@ The open lines below carry over (fold in when their files are next touched); D a
 
 ## C. Part 4 closure — DONE 2026-09-30 (all three items in "Recently closed"; Part 4 is complete)
 
-## D. Week 9 Part 1 — Entry prerequisites (before Entries) — COMPLETE 2026-10-28 (SESSION ORDER items 1–9, "Recently closed"; D.2's not-picked entries stay open / parked, D.3 = the items moved to Parts 2 / 3)
+## D. Week 9 Part 1 — Entry prerequisites (before Entries) — SESSION ORDER items 1–9 DONE 2026-10-28; Part 1 stays OPEN for item 10, the sweep of every parked / deferred item (the user 2026-10-28); D.3 = the items moved to Parts 2 / 3
 
 **Week 9 = "Entries & Decisions"** (renamed by the user 2026-09-30), in three parts: **Part 1** Entry prerequisite
 items (this bucket), **Part 2** the actual Entry decision build & logic, **Part 3** Other decisions build & logic
@@ -341,8 +341,26 @@ SYLLABUS Week 9 Part 2 "Zone size at entry and stop-loss".
    "Derived, as of the read" (9c-2); 9c-2 BUILT = its prediction (zero change — the one sub reference that differs,
    +2.1 pips outer at 3819, moves no start; PLAN_W §3.5); 9c-1 BUILT = its prediction (the lens KL CSVs + their CTS
    rows, the M15 charts + the hidden `sub_cts_zones` group and its `Sub CTS zones` button; PLAN_W §3.7; the user's
-   look: "thank you this look good. please proceed"); one save after both: S_W9c `20261028_180228_538cd2f`. **Item 9
-   DONE — Week 9 Part 1 COMPLETE 2026-10-28.** NEXT: the push (when the user says) → Part 2.
+   look: "thank you this look good. please proceed"); one save after both: S_W9c `20261028_180228_538cd2f`. After
+   it, the user's KL-hover follow-up: every KL zone hover (main + subs) shows `kind=BOS` / `kind=CTS` (PLAN_W §4
+   `7c9477e`, S_W9d `20261028_182318_7c9477e`). **Item 9 DONE.** Part 1 NOT closed yet — item 10 (below).
+10. **The parked / deferred items revisit — a sweep, then the user's pick** (the user 2026-10-28, after item 9, at
+   the session's close, verbatim): "Before ending this session and also declaring W9 part 1 closed, for the next
+   session I actually want to make another revisit on the parked items. In the next session, I want to start with a
+   sweep of all parked and deferred items we've noted across all our documentation. I want them listed out with a
+   short description of what they are. Please exclude any items that we've already agreed would be covered in Part
+   2 & 3 of Week 9. After you provide the list, I will decide if there are anything else I want to cover before
+   moving forward to Part 2 of Week 9. Part 2 is an important delineation from Part 1, so I want to make sure our
+   overall MS is totally solid before moving on to Part 2." So: (1) SWEEP every parked / deferred / open /
+   "revisit later" item — this register's buckets A, D.1, D.2, E, F, G, H, I (+ the open lines of A) as the spine,
+   cross-checked against every repo `.md` (specs, GOTCHAS, LANDMINES, plans' "deferred / parked / follow-up / not
+   folded" notes), the memory files and code TODO / FIXME — anything found that is not in this register gets its
+   line here (the register is the ONE list); (2) EXCLUDE what is agreed for Week 9 Parts 2 / 3 (D.3 + SYLLABUS
+   Week 9 Parts 2 / 3); (3) LIST each remaining item with a short description (what it is, where it was parked and
+   why, its trigger / target, its detail pointer) grouped by area, marking the ones that touch market-structure /
+   zone correctness (the user: "make sure our overall MS is totally solid") and the ones scheduled for Week 10 —
+   saved with its script into the plan's inputs folder; (4) the user picks what to cover before Part 2. Part 1
+   closes after that. The push stays the user's call ("no need to push yet", 2026-10-28).
 
 **D.1 — Ordered (the heavy items):**
 1. **One POI per cycle** (redefine the IC & POI zone logic) — B landed; its chart debugging PAUSED for item 2 (user
@@ -755,12 +773,13 @@ SYLLABUS Week 9 Part 2 "Zone size at entry and stop-loss".
 
 ## Recently closed (history pointers)
 
-- **Week 9 Part 1 — the entry prerequisites** (§D) — CLOSED 2026-10-28 with SESSION ORDER item 9 (PLAN_W:
+- **SESSION ORDER item 9 — the last Part 1 backlog picks** (§D) — CLOSED 2026-10-28 (PLAN_W:
   `35e827e` the fill checks require a 0..n−1 frame, `aff21f8` the POI record gate `active OR locked`, `321667a` a sub
   probe's reference = its derived CTS zone as of the read, `538cd2f` the sub CTS KL zones exported + drawn hidden
   behind the M15 `Sub CTS zones` button; saves S_W9b `20261028_165600_aff21f8`, S_W9c `20261028_180228_538cd2f`).
-  Items 1–8 and their plans (PLAN_H … PLAN_V): §D "SESSION ORDER" + memory `project_session_order_status.md`. Not
-  pushed at closing (198 commits ahead; the user's call). Next: Part 2 (§D.3, SYLLABUS Week 9).
+  Items 1–8 and their plans (PLAN_H … PLAN_V): §D "SESSION ORDER" + memory `project_session_order_status.md`; + the
+  KL hover's `kind=` line (PLAN_W §4, S_W9d). Week 9 Part 1 itself stays OPEN for item 10 (the parked-items sweep,
+  the user 2026-10-28). Not pushed (the user's call).
 - **The cycle-0 carve-out revisit** (§D 5b; raised by the user 2026-10-26, scheduled 2026-10-27) — CLOSED 2026-10-27
   by PLAN_T in two landings: T1 `453f227` (the first_confluence probe's MS reads what its sub reads; zero change; save
   S_T1 `20261027_131836_453f227`) and T2 (the carve-out kept on the main sid 0 + the sub its cycle-0 first_confluence

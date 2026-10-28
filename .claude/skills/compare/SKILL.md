@@ -943,8 +943,8 @@ S_W9b exactly the two lens `*_kl_zones.csv` differ, rows ADDED only (confluence 
 `w9c_variant_replay.py`) or `qa_chart_edits_inputs/fig_named_diff.py`; the button: `w9c1_headless_check.py`. Skip
 grep 33; the gate lines unchanged. Suite 2172; mutants 7 / 7 + 6 / 6 + 8 / 8 (the control bar's re-anchored).
 S_W9c `20261028_180228_538cd2f` (source `538cd2f`, save `bfe9f93`, trunk `58e5cb5`; = `LATEST_<branch>` until S_W9d,
-below; run mode, the save = `w9c1_landing_check.py` ALL AS PREDICTED). SESSION ORDER item 9 DONE — **Week 9
-Part 1 COMPLETE.**
+below; run mode, the save = `w9c1_landing_check.py` ALL AS PREDICTED). SESSION ORDER item 9 DONE (Part 1 stays open
+for item 10, the user's parked-items sweep).
 **PLAN_W §4 (2026-10-28, after item 9 — the user: "yes we should add that to KL zone hovers. For consistency it
 should be done for both main and subs") — FIGURE-ONLY, a hover-format boundary:** every KL zone hover gains
 `kind=BOS` / `kind=CTS` right after `KL Zone` (`_zone_render.kl_zone_hovertemplate` + `kl_zone_customdata` slot 10 —

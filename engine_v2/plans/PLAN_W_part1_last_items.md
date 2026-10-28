@@ -6,7 +6,8 @@ look: "charts look good, go ahead and commit-save"); one save after both (the us
 S_W9b `20261028_165600_aff21f8` (save `1ac3e12`, trunk `f798f9e`; = S_V8c byte for byte; = `LATEST_<branch>`). 9c
 MEASURED + DECIDED (§3.2–3.3: "Export + chart, toggle off"; "Derived, as of the read"); 9c-2 BUILT = its prediction
 (zero change, §3.5; committed `321667a` — the user: "Commit now, save after 9c-1"); 9c-1 BUILT = its prediction
-(§3.7; the user's look: "thank you this look good. please proceed"). **Item 9 DONE — Week 9 Part 1 COMPLETE.**
+(§3.7; the user's look: "thank you this look good. please proceed"). **Item 9 DONE** (+ §4, the KL hover's
+`kind=` line, S_W9d). Week 9 Part 1 stays OPEN: the user added item 10, the parked-items sweep (register §D).
 One save after 9c-2 + 9c-1: S_W9c `20261028_180228_538cd2f` (source `538cd2f`, save `bfe9f93`, trunk
 `58e5cb5`; = `LATEST_<branch>`; the save = `w9c1_landing_check.py` ALL AS PREDICTED vs S_W9b).** Baseline **S_V8c** `artifacts/commits/week9-entries-decisions/20261028_153518_1318c82`
 (source `1318c82`, save `fb6fb81`, trunk `8e6a53a`; HEAD at drafting `6312819`, code = `1318c82`); suite 2172 at the

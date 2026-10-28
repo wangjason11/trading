@@ -381,8 +381,10 @@ You can debug **confluence vs non-confluence** trades visually.
 >   (the §A hygiene trio, the replacement-chain `ended_by` fix, the agreed direction for wave candles + WVMI) and
 >   moved the candle-direction / rejection confirmation at a zone touch, zone strength scoring and the M5 layer to
 >   Parts 2 / 3 (register §D SESSION ORDER item 8, §D.3). Item 8 DONE 2026-10-28 (PLAN_V 8a / 8b / 8c); the user then
->   added item 9 (three of item 8's not-picked backlog entries) — DONE 2026-10-28 (PLAN_W 9a / 9b / 9c-2 / 9c-1):
->   **Week 9 Part 1 COMPLETE 2026-10-28.**
+>   added item 9 (three of item 8's not-picked backlog entries) — DONE 2026-10-28 (PLAN_W 9a / 9b / 9c-2 / 9c-1);
+>   then item 10 (the user 2026-10-28): a sweep of every parked / deferred item (minus the Parts 2 / 3 ones), the user
+>   picks what to cover before Part 2 — "Part 2 is an important delineation from Part 1, so I want to make sure our
+>   overall MS is totally solid before moving on to Part 2". Part 1 closes after it.
 > - **Part 2 — Entry decision build & logic** — the original Week 9 plan below, + the entry confirmation candle
 >   patterns (moved here from Part 1 by the user 2026-10-27) and the zone size at entry and stop-loss (below); + since
 >   2026-10-28 the candle-direction / rejection confirmation at a zone touch (an entry condition, next to the
