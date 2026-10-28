@@ -1,0 +1,17 @@
+STALE engine_v2/plans\qa_chart_edits_inputs\mutants_chart_controls.py trace_slice_plus1 (engine_v2/charting/export_m15_chart.py): 1 -> 2
+      anchor: 'for tr in fig.data[first_trace:]:'
+STALE engine_v2/plans\qa_chart_edits_inputs\mutants_chart_controls.py trace_slice_minus1 (engine_v2/charting/export_m15_chart.py): 1 -> 2
+      anchor: 'for tr in fig.data[first_trace:]:'
+STALE engine_v2/plans\qa_chart_edits_inputs\mutants_chart_controls.py shape_slice_plus1 (engine_v2/charting/export_m15_chart.py): 1 -> 2
+      anchor: 'for shape in fig.layout.shapes[first_shape:]:'
+STALE engine_v2/plans\qa_chart_edits_inputs\mutants_chart_controls.py shape_slice_minus1 (engine_v2/charting/export_m15_chart.py): 1 -> 2
+      anchor: 'for shape in fig.layout.shapes[first_shape:]:'
+STALE engine_v2/plans\qa_chart_edits_inputs\mutants_chart_controls.py m15_no_parent_group (engine_v2/charting/export_m15_chart.py): 1 -> 0
+      anchor: 'parent_group=PARENT_OVERLAY_GROUP))'
+STALE engine_v2/plans\qa_chart_edits_inputs\mutants_chart_controls.py m15_not_injected (engine_v2/charting/export_m15_chart.py): 1 -> 0
+      anchor: '_inject_chart_controls_js(html_path, _chart_controls_cfg(\n        dfx, tf="15M", idx_1h=idx_1h_col, parent_tf="1H", parent_group=PARENT_OVERLAY_GROUP)'
+STALE engine_v2/plans\qa_chart_edits_inputs\mutants_chart_controls.py m15_before_volume_js (engine_v2/charting/export_m15_chart.py): 1 -> 0
+      anchor: 'if volume_enabled:\n        _inject_volume_autoscale_js(html_path)\n    _inject_chart_controls_js(html_path, _chart_controls_cfg(\n        dfx, tf="15M",'
+STALE engine_v2/plans\qa_chart_edits_inputs\mutants_chart_controls.py m15_only_with_volume (engine_v2/charting/export_m15_chart.py): 1 -> 0
+      anchor: 'if volume_enabled:\n        _inject_volume_autoscale_js(html_path)\n    _inject_chart_controls_js(html_path, _chart_controls_cfg(\n        dfx, tf="15M",'
+8 stale of 285 anchors that matched once at the base (54 mutants files read)

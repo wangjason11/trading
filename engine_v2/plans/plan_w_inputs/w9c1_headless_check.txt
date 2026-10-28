@@ -1,0 +1,7 @@
+initial       {"sub_cts_button":"Sub CTS zones: hidden [off]","parent_button":"Parent (1H): shown","sub_cts":{"traces_hidden":"122/122","shapes_hidden":"67/67"},"parent":{"traces_hidden":"0/56","shapes_hidden":"0/38"}}
+shot C:\Users\wangj\AppData\Local\Temp/pw9c/shots\1_hidden.png
+click subcts  {"sub_cts_button":"Sub CTS zones: shown []","parent_button":"Parent (1H): shown","sub_cts":{"traces_hidden":"0/122","shapes_hidden":"0/67"},"parent":{"traces_hidden":"0/56","shapes_hidden":"0/38"}}
+shot C:\Users\wangj\AppData\Local\Temp/pw9c/shots\2_shown.png
+click subcts  {"sub_cts_button":"Sub CTS zones: hidden [off]","parent_button":"Parent (1H): shown","sub_cts":{"traces_hidden":"122/122","shapes_hidden":"67/67"},"parent":{"traces_hidden":"0/56","shapes_hidden":"0/38"}}
+shot C:\Users\wangj\AppData\Local\Temp/pw9c/shots\3_hidden_again.png
+click parent  {"sub_cts_button":"Sub CTS zones: hidden [off]","parent_button":"Parent (1H): hidden","sub_cts":{"traces_hidden":"122/122","shapes_hidden":"67/67"},"parent":{"traces_hidden":"56/56","shapes_hidden":"38/38"}}

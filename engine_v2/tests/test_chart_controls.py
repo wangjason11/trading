@@ -159,7 +159,7 @@ def test_cfg_candle_table_and_knobs():
     knobs = {"half": st["idx_half_window"], "pricePad": st["price_pad"], "minCandles": st["min_candles"],
              "wheelStep": st["wheel_step"], "markColor": st["idx_mark_color"]}
     assert _chart_controls_cfg(dfx, tf="1H") == {
-        "tf": "1H", "parentTf": None, "parentGroup": None, **knobs,
+        "tf": "1H", "parentTf": None, "parentGroup": None, "subCtsGroup": None, **knobs,      # (PLAN_W 9c-1)
         "candles": [[3, "2026-01-05 21:00:00", 0.5, 0.51], [4, "2026-01-05 22:00:00", 0.6, 0.61],
                     [7, "2026-01-05 23:00:00", 0.7, 0.71]]}
     cfg = _chart_controls_cfg(dfx, tf="15M", idx_1h=["", 5, 6], parent_tf="1H", parent_group=GROUP)

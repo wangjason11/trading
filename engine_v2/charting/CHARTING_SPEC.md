@@ -160,6 +160,13 @@ To change any visual element:
 - **Fill (Item 5)**: only the active stretch is filled. KL has at most ONE active stretch `[confirmed_idx, end_idx]` (KL has no per-candle deactivation). Pre-activation region renders as outline only. End at `end_idx`.
 - Stepwise bounds from `meta["bounds_steps"]` still drive per-step (top, bottom) — the fill within the active stretch is intersected with each step's x-range so each step's y-bounds apply. A step's x is `kl_zones_v1.bounds_step_draw_idx(step)`: the INIT step's `base_idx`, an expansion's `expanded_idx` (PLAN_N N1; `start_idx` on both until then).
 - Single vertical confirm line at `confirmed_idx`.
+- **A sub's CTS KL zones (M15 charts; PLAN_W 9c-1, the user 2026-10-28: "Export + chart, toggle off"):** drawn exactly
+  like its BOS zones (style, tier, fills, outline, confirm line, hover — `KL Zone`, `side=`, as the H1 chart's CTS
+  zones; no BOS / CTS label on any chart) but HIDDEN on load: every trace / shape a CTS zone adds is in the legend
+  group `sub_cts_zones` (`export_m15_chart.SUB_CTS_GROUP`, `_tag_sub_cts_zone`, `visible=False`), shown by the control
+  bar's `Sub CTS zones` button (§14). The PNGs never show them. Until 9c-1 a sub's projection returned its BOS zones
+  only (the CTS ones fed only its CTS wave candles). On the reference window: counter 7, confluence 20 (4 of them on
+  collapsed cycles, not drawn).
 - **Collapsed-cycle zones (2026-09-20):** a KL zone whose cycle COLLAPSED under its structure's lifecycle floor (`status == "inactive"`, known `end_idx`, clamped `confirmed_idx >= end_idx` — `_zone_render.is_collapsed_cycle_zone`) is not drawn, on the H1 chart, the M15 charts and the H1 overlay; it existed geometrically but was never active in real time (on H1: sid 1's retroactive cycles (1,0)/(1,1), the "collapsed parent cycles" of `ParentTables`; on a sub: its forming-phase cycles). The rows stay in the CSVs. A zone inactive for any other reason is still drawn as an outline.
 - **Hover** (one per bounds step; ONE template, `_zone_render.kl_zone_hovertemplate(tf)` + `kl_zone_customdata`, on
   the H1 chart, the M15 charts' H1 overlay and the sub zones — the user's spec 2026-10-23,
@@ -502,7 +509,7 @@ user_spec_20261027_parent_toggle_and_zoom.md`. A bar of HTML controls above each
 unchanged), one script `charting/chart_controls.js`, appended after the volume zoom JS by
 `export_plotly._inject_chart_controls_js` with its config `_chart_controls_cfg` (both exporters; with or without the
 volume panel):
-`[Parent (1H): shown | hidden]` (M15 charts only) `|` `−` `+` `|` `Box zoom` `Pan` `|` `idx [ ]` `[15M | 1H]` (M15
+`[Parent (1H): shown | hidden]` `[Sub CTS zones: hidden | shown]` (M15 charts only) `|` `−` `+` `|` `Box zoom` `Pan` `|` `idx [ ]` `[15M | 1H]` (M15
 charts only) `Go`.
 - **Parent (1H)** — an on-chart button (the user's round 1; PART4 §16.4's legend group was not built) that hides /
   shows every element `_render_h1_overlay` draws: the H1 swing + PB→BOS lines, CTS / BOS / PB dots, "bo" and
@@ -511,6 +518,10 @@ charts only) `Go`.
   `legendgroup = "parent_overlay"` (`export_m15_chart.PARENT_OVERLAY_GROUP`, set by `_tag_parent_overlay` on whatever
   that call drew; no legend entry shows it). NOT covered (the user: "All except both"): the H1 zone-proximity trigger
   markers (§12 — they keep their own legend entry) and the H1 WVMI LP circles (§13). Shown on load.
+- **Sub CTS zones** (PLAN_W 9c-1, 2026-10-28) — the same mechanism for the group `sub_cts_zones` (the subs' CTS KL
+  zones, §5): HIDDEN on load (`Sub CTS zones: hidden`, the dark `off` style), a click shows them. One shared toggle in
+  `chart_controls.js` (`groupToggle`); `_chart_controls_cfg(..., sub_cts_group=)` → `subCtsGroup` (None on H1: no
+  button). AUTHOR'S DEFAULTS — the label and the place — confirmed by the user's look.
 - **− / +** — the TIME axis only: double / halve the visible candles about the centre (at least
   `chart.controls.min_candles` 10). **The wheel** over the plot area does the same about the cursor
   (`wheel_step` 1.2 per notch; outside the plot area the page scrolls). Plotly's own toolbar +/− (both axes about

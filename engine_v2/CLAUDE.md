@@ -63,9 +63,10 @@ change; 8c the agreed direction for wave candles + WVMI — a volume-only doji q
 drawn in its `vol_dir` colour; the candle-direction confirmation, zone strength scoring and the M5 layer moved to
 Parts 2 / 3); item 9, the last Part 1 items (the user 2026-10-28, three of item 8's not-picked backlog entries —
 register §D SESSION ORDER item 9; `plans/PLAN_W_part1_last_items.md`): 9a the fill checks require a frame indexed
-0..n−1 and 9b the POI record gate `active OR locked` (a cycle that ends before its fib locks gets its POI) DONE
-2026-10-28, both zero change on the reference window; NOW 9c, the sub CTS KL zones as the probe reference
-(discussion first), then Part 1 is complete); NEXT Part 2 entry decisions (+ the entry confirmation candle
+0..n−1, 9b the POI record gate `active OR locked` (a cycle that ends before its fib locks gets its POI), 9c-2 a sub
+probe's reference reads its derived CTS zone as of the read and 9c-1 the sub CTS KL zones exported + drawn hidden
+behind the M15 control bar's `Sub CTS zones` button — all DONE 2026-10-28, the first three zero change on the
+reference window) — **Week 9 Part 1 COMPLETE 2026-10-28**; NEXT (after the push, when the user says) Part 2 entry decisions (+ the entry confirmation candle
 patterns, zone size at entry / stop — register §D.3), Part 3 other decisions.
 
 **Pre-Week 8 fix:** Exception 2 probe relaxed from CTS_CONFIRMED to CTS_ESTABLISHED (`bbb6d32`).

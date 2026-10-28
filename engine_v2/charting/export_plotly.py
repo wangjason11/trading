@@ -244,12 +244,14 @@ def _add_wvmi_lp_traces(fig, marks: list, *, kind: str, name_prefix: str) -> int
 
 
 def _chart_controls_cfg(dfx: pd.DataFrame, *, tf: str, idx_1h: Optional[list] = None,
-                        parent_tf: Optional[str] = None, parent_group: Optional[str] = None) -> dict:
+                        parent_tf: Optional[str] = None, parent_group: Optional[str] = None,
+                        sub_cts_group: Optional[str] = None) -> dict:
     """The chart control bar's config (`chart_controls.js`; CHARTING_SPEC §14 — item 5's final part, 2026-10-27).
     `candles` = one `[idx, time, low, high]` row per candle of the DRAWN frame `dfx` in time order — `time` the UTC
     wall clock the figure's x carries — plus the candle hover's `idx_1H` on an M15 chart (`idx_1h`, aligned with
-    `dfx`; `""` = unmapped → None). An M15 chart also passes its parent's TF label (the idx selector) and the parent
-    overlay's group (the Parent button flips it). The knobs: `chart.controls`."""
+    `dfx`; `""` = unmapped → None). An M15 chart also passes its parent's TF label (the idx selector), the parent
+    overlay's group (the Parent button flips it) and the sub CTS zones' group (the `Sub CTS zones` button, hidden on
+    load — PLAN_W 9c-1). The knobs: `chart.controls`."""
     times = pd.to_datetime(dfx[COL_TIME], utc=True)
     assert times.is_monotonic_increasing, "[chart] the control bar's candle table needs the frame in time order"
     candles = [[int(i), t, float(lo), float(hi)]
@@ -258,7 +260,8 @@ def _chart_controls_cfg(dfx: pd.DataFrame, *, tf: str, idx_1h: Optional[list] = 
         assert len(idx_1h) == len(candles), "[chart] idx_1h must align with the frame"
         candles = [row + [None if h in ("", None) else int(h)] for row, h in zip(candles, idx_1h)]
     st = _style("chart.controls")
-    return {"tf": tf, "parentTf": parent_tf, "parentGroup": parent_group, "candles": candles,
+    return {"tf": tf, "parentTf": parent_tf, "parentGroup": parent_group, "subCtsGroup": sub_cts_group,
+            "candles": candles,
             "half": int(st["idx_half_window"]), "pricePad": float(st["price_pad"]),
             "minCandles": int(st["min_candles"]), "wheelStep": float(st["wheel_step"]),
             "markColor": str(st["idx_mark_color"])}

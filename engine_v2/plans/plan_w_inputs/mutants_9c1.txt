@@ -1,0 +1,7 @@
+KILLED    v9c1_bos_only                      1 failing: test_the_projection_returns_the_sub_cts_kl_zones_too
+KILLED    v9c1_not_hidden                    1 failing: test_the_m15_chart_hides_exactly_the_sub_cts_zones
+KILLED    v9c1_shapes_untagged               1 failing: test_the_m15_chart_hides_exactly_the_sub_cts_zones
+KILLED    v9c1_tags_bos_too                  1 failing: test_the_m15_chart_hides_exactly_the_sub_cts_zones
+KILLED    v9c1_no_button_cfg                 1 failing: test_the_m15_html_carries_the_group
+KILLED    v9c1_cfg_drops_group               2 failing: test_the_control_bar_carries_the_sub_cts_button_on_the_m15_c, test_the_m15_html_carries_the_group
+6/6 KILLED  (results: C:/Users/wangj/AppData/Local/Temp/mr9c1\results.json)

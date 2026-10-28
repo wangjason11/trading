@@ -268,9 +268,11 @@ def _run_downstream_pipeline(
     # (CTS wave candles come from the CTS zone — see WVMITracker.on_cts_confirmed).
     # So derive the full set internally; the caller's `source_kinds` filter only
     # narrows what gets RETURNED (and charted). For the H1 main caller
-    # `source_kinds=None` ⇒ filter is a no-op. For sub callers
-    # `source_kinds=["BOS"]` ⇒ chart sees BOS-only zones, but wave-candles
-    # internally still see both kinds (Part 4 §8.3 / §8.4 requirement).
+    # `source_kinds=None` ⇒ filter is a no-op. A sub's lens projection passes
+    # `("BOS", "CTS")` since PLAN_W 9c-1 (the CTS zones drawn hidden behind the
+    # M15 control bar's `Sub CTS zones` button; `["BOS"]` until then); the
+    # proximity overlay's views keep `("BOS",)`. Wave candles always see both
+    # kinds (Part 4 §8.3 / §8.4 requirement).
     all_kl_zones = derive_kl_zones_v1(
         df,
         events,

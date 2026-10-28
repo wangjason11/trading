@@ -2203,7 +2203,7 @@ between every step:
         `sid=new_sid_id` attribution and append to
         `entity_df.attrs["events"]`.
      5. Runs the downstream pipeline (`_run_downstream_pipeline` with
-        `source_kinds=["BOS"]`, `fib_mode="cross_cycle"` (the parameter is gone since PLAN_I S4 — one FibTracker logic),
+        `source_kinds=["BOS"]` (BOS + CTS since PLAN_W 9c-1), `fib_mode="cross_cycle"` (the parameter is gone since PLAN_I S4 — one FibTracker logic),
         `skip_wvmi=True`) on the new sid's events, appending the
         resulting kl_zones / poi_zones / fib_states / wave_candles to
         `entity_df.attrs[...]` keyed by `sid + cycle_id` meta.

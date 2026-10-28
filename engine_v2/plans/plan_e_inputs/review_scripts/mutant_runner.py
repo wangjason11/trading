@@ -14,6 +14,10 @@ name (Windows path length: a long mutant id as the folder name broke `copytree` 
 `python -m pytest engine_v2/tests -q -p no:cacheprovider` with the OANDA smoke test deselected (it needs `oanda.cfg`)
 and PYTHONPATH = that copy, in parallel (default jobs = min(#mutants, cpu - 2)).
 
+A `new` that empties a whole block body (e.g. both lines of a loop) is a SyntaxError: every test module importing the
+file fails and the mutant reads KILLED with no test showing the harm — write `pass` instead (PLAN_W 9c-1, 2026-10-28:
+`v9c1_shapes_untagged` first "killed" by 3 import failures). A KILLED row naming whole test FILES is that sign.
+
 Prints one row per mutant — KILLED (n failing tests + the first few) / SURVIVED / BAD — and writes `results.json` into
 the output dir (default: the temp dir `mutant_runner/`). Exit 1 if any mutant SURVIVED or is BAD. The trees are deleted
 unless `--keep`. The working tree is never modified. Mutants in the same file are independent (each is applied alone).

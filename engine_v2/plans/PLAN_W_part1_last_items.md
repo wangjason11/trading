@@ -5,7 +5,9 @@ prediction: zero change on the reference window, sub 2 cycle 1's POI on 2025-08-
 look: "charts look good, go ahead and commit-save"); one save after both (the user: "Commit now, save after 9b"):
 S_W9b `20261028_165600_aff21f8` (save `1ac3e12`, trunk `f798f9e`; = S_V8c byte for byte; = `LATEST_<branch>`). 9c
 MEASURED + DECIDED (§3.2–3.3: "Export + chart, toggle off"; "Derived, as of the read"); 9c-2 BUILT = its prediction
-(zero change, §3.5; committed — the user: "Commit now, save after 9c-1"); NEXT: 9c-1 (§3.6) + the user's look.** Baseline **S_V8c** `artifacts/commits/week9-entries-decisions/20261028_153518_1318c82`
+(zero change, §3.5; committed `321667a` — the user: "Commit now, save after 9c-1"); 9c-1 BUILT = its prediction
+(§3.7; the user's look: "thank you this look good. please proceed"). **Item 9 DONE — Week 9 Part 1 COMPLETE.**
+One save after 9c-2 + 9c-1: S_W9c (below, §3.7).** Baseline **S_V8c** `artifacts/commits/week9-entries-decisions/20261028_153518_1318c82`
 (source `1318c82`, save `fb6fb81`, trunk `8e6a53a`; HEAD at drafting `6312819`, code = `1318c82`); suite 2172 at the
 cold start (89.7 s). The scope is the user's (register `IDEA_PARKING_LOT.md` §D "SESSION ORDER" item 9, their words
 verbatim there): 9a → 9b → 9c (proposed order), one cause per `/compare`. Inputs: `plans/plan_w_inputs/`.
@@ -288,3 +290,24 @@ the earlier landings' anchors in `entity_df_mutation.py` + `reference_zone.py`: 
 - Docs: CHARTING_SPEC §14 (the button) + §5 (sub KL zones: BOS shown, CTS hidden behind it), ARCHITECTURE ("KL
   zones are BOS-only for subs" → BOS + CTS returned since 9c-1), PART4 §17 (the projection's `source_kinds`), the
   orchestrator comment ("For sub callers `source_kinds=["BOS"]`").
+
+### 3.7 9c-1 result (2026-10-28) — = the prediction
+
+The replay (76.0 s wall: data_fetch 5.14, multi_tf_dual 12.46, chart_h1 6.65, chart_m15_counter 12.48,
+chart_m15_confluence 38.03) — `plan_w_inputs/w9c1_landing_check.py S_W9b artifacts/debug artifacts/charts
+<the §3.2 variant tree>` → `w9c1_landing_check.txt`, ALL AS PREDICTED: the two lens `*_kl_zones.csv` md5-equal to the
+variant's (rows added only: confluence 22 → 42, counter 9 → 16), the other 28 md5-equal to S_W9b; the H1 figure equal;
+each M15 chart's elements outside `sub_cts_zones` = S_W9b's, the group all hidden and = what the variant added
+(confluence +122 traces / +67 shapes → 424 / 372, counter +38 / +20 → 192 / 154), the HTML names the group; the PNGs
+equal. Fetch gate PASS, skip grep 33. In a headless browser (`w9c1_headless_check.py <confluence chart> <shots> 1400` →
+`w9c1_headless_check.txt`, `w9c1_headless_{1_hidden,2_shown}.png`): on load `Sub CTS zones: hidden [off]` with
+122 / 122 traces + 67 / 67 shapes hidden; a click shows them all (`shown`), a second hides them again; `Parent (1H)`
+still flips its own 56 + 38 only. Suite 2172 (+ the projection pin + 3 in `test_plan_w_sub_cts_zones.py`; the
+control cfg test's dict gains `subCtsGroup`); mutants 6 / 6 KILLED (`mutants_9c1.py` / `.txt` — `v9c1_shapes_
+untagged` first "killed" by a SyntaxError — an empty loop body — re-run with `pass`: killed by the hidden-elements test). The earlier landings' anchors in the files 9c-1
+touched (`anchor_scan_9c1.py 321667a` → `.txt`): 8 stale of 285, all the control bar's own (`qa_chart_edits_inputs/
+mutants_chart_controls.py`) — 4 slice mutants of `_tag_parent_overlay` (its loop lines now also in `_tag_sub_cts_zone`)
+and 4 on the M15 control-config call (it gained `sub_cts_group=`): re-anchored by `mutants_9c1_restated.py`, 8 / 8
+KILLED (`.txt`).
+- **The user's chart look (2026-10-28, the reference window's M15 charts, the button): "thank you this look good. please
+  proceed"** — the label `Sub CTS zones`, its place next to `Parent (1H)` and hidden-on-load as built.

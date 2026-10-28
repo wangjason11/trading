@@ -4,6 +4,8 @@
     // `_chart_controls_cfg(...)`: `candles` = [idx, time, low, high(, idx_1H)] per drawn candle in time order, the
     // chart's TF label `tf`, on an M15 chart its parent's `parentTf` + the `parentGroup`, the `chart.controls` knobs.
     //   Parent (<parentTf>) button (M15 charts): flips every trace + shape whose legendgroup is `parentGroup`.
+    //   Sub CTS zones button (M15 charts): the same for `subCtsGroup` - the subs' CTS KL zones, HIDDEN on load
+    //          (PLAN_W 9c-1, the user 2026-10-28: "Export + chart, toggle off").
     //   - / + : the time axis only, double / halve the visible candles about the centre.
     //   wheel  : the same about the cursor, inside the plot area only (outside it the page scrolls).
     //   Box zoom | Pan: plotly's dragmode; a pan moves the TIME axis only (`yaxis.fixedrange` while panning) - the
@@ -87,6 +89,8 @@
         '#fxctl .off,#fxctl .on{background:#555;color:#fff;border-color:#555;}</style>' +
         (CFG.parentGroup ? '<button id="fxparent" title="Show / hide the parent (' + CFG.parentTf + ') overlay">' +
                            'Parent (' + CFG.parentTf + '): shown</button><span class="sep"></span>' : '') +
+        (CFG.subCtsGroup ? '<button id="fxsubcts" class="off" title="Show / hide the subs\' CTS KL zones">' +
+                           'Sub CTS zones: hidden</button><span class="sep"></span>' : '') +
         '<button id="fxout" title="Zoom out (time axis)">&minus;</button>' +
         '<button id="fxin" title="Zoom in (time axis)">+</button>' +
         '<span class="sep"></span>' +
@@ -102,21 +106,22 @@
     var $ = function (id) { return document.getElementById(id); };
     function msg(t) { $('fxmsg').textContent = t || ''; }
 
-    // --- the parent overlay toggle ---
-    if (CFG.parentGroup) {
-        var parentOn = true;
-        $('fxparent').onclick = function () {
-            parentOn = !parentOn;
+    // --- the group toggles: the parent overlay (shown on load) and the sub CTS zones (hidden on load) ---
+    function groupToggle(id, group, on, label) {
+        $(id).onclick = function () {
+            on = !on;
             var tr = [], lay = {};
-            for (var k = 0; k < gd.data.length; k++) if (gd.data[k].legendgroup === CFG.parentGroup) tr.push(k);
+            for (var k = 0; k < gd.data.length; k++) if (gd.data[k].legendgroup === group) tr.push(k);
             (gd.layout.shapes || []).forEach(function (s, k2) {
-                if (s.legendgroup === CFG.parentGroup) lay['shapes[' + k2 + '].visible'] = parentOn;
+                if (s.legendgroup === group) lay['shapes[' + k2 + '].visible'] = on;
             });
-            Plotly.update(gd, {visible: parentOn}, lay, tr);
-            this.textContent = 'Parent (' + CFG.parentTf + '): ' + (parentOn ? 'shown' : 'hidden');
-            this.className = parentOn ? '' : 'off';
+            Plotly.update(gd, {visible: on}, lay, tr);
+            this.textContent = label + ': ' + (on ? 'shown' : 'hidden');
+            this.className = on ? '' : 'off';
         };
     }
+    if (CFG.parentGroup) groupToggle('fxparent', CFG.parentGroup, true, 'Parent (' + CFG.parentTf + ')');
+    if (CFG.subCtsGroup) groupToggle('fxsubcts', CFG.subCtsGroup, false, 'Sub CTS zones');
 
     // --- - / + and the wheel ---
     $('fxin').onclick = function () { msg(); zoom(0.5, 0.5); };

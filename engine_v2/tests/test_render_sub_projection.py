@@ -53,6 +53,8 @@ sweep.
 """
 from __future__ import annotations
 
+import contextlib
+import io
 from typing import Dict, Iterable, Tuple
 
 import numpy as np
@@ -1023,3 +1025,26 @@ def test_a_started_but_unnumbered_sub_is_refused_before_any_projection(geometry,
         _render(sub, m15_df, lens_dfs)
     for ldf in lens_dfs.values():
         assert "events" not in ldf.attrs and "kl_zones" not in ldf.attrs
+
+
+def test_the_projection_returns_the_sub_cts_kl_zones_too(geometry, m15_df):
+    """PLAN_W 9c-1 (the user 2026-10-28: "Export + chart, toggle off"): the lens projection RETURNS the sub's CTS KL
+    zones with its BOS ones (`source_kinds=("BOS", "CTS")`; BOS-only until 9c-1 — the CTS zones fed only the CTS wave
+    candles), mirrored into every lens it is on like the BOS ones, so the lens `*_kl_zones.csv` and the M15 chart (hidden
+    behind its `Sub CTS zones` button) get them. The kinds are those `project_to_window` derives with both."""
+    from engine_v2.multitf.pooled_structure_build import project_to_window
+    pool, sub = geometry
+    _two_lens_records(pool, sub, m15_df)
+    _set_lifecycle(sub, _START, None, None)
+    lens_dfs = _lens_dfs(m15_df)
+    res = _render(sub, m15_df, lens_dfs)
+    bounded, slice_begin = sub.geometry
+    with contextlib.redirect_stdout(io.StringIO()):
+        both = project_to_window(bounded, floor=_START - slice_begin, cap=None, cap_reason=None, direction=1,
+                                 timeframe=_TF, source_kinds=("BOS", "CTS"),
+                                 cross_fib_limits={0: sub.cross_fib_limit.localized(slice_begin)})
+    assert sorted(z.source_kind for z in res.kl_zones) == sorted(z.source_kind for z in both["kl_zones"])
+    assert {z.source_kind for z in res.kl_zones} == {"BOS", "CTS"}
+    for lens in (LENS_CONFLUENCE, LENS_COUNTER):
+        assert {z.source_kind for z in lens_dfs[lens].attrs["kl_zones"]} == {"BOS", "CTS"}
+

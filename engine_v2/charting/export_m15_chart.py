@@ -150,6 +150,11 @@ M15_CHART_DEFAULTS = {
 #: WVMI LP circles stay out). No legend entry carries it.
 PARENT_OVERLAY_GROUP = "parent_overlay"
 
+#: The legend group of every element a sub's CTS KL zone draws (its fills, outline, confirm line, hover lines) —
+#: hidden on load, the control bar's `Sub CTS zones` button shows / hides it (PLAN_W 9c-1, the user 2026-10-28:
+#: "Export + chart, toggle off"; CHARTING_SPEC §14). No legend entry carries it.
+SUB_CTS_GROUP = "sub_cts_zones"
+
 #: A sub dot's `relative_dir` before the sub's `start_idx` (`RELATIVE_DIR_BEFORE_START`,
 #: the user's spec 2026-10-22) and the step-function reader `_sub_relative_dir_at`
 #: live in `multitf/types.py` since 2026-10-26 — shared with the per-LP WVMI CSV.
@@ -1259,6 +1264,8 @@ def export_m15_chart_plotly(
             for zone in sid_kls:
                 if is_collapsed_cycle_zone(zone):
                     continue
+                # A CTS zone (PLAN_W 9c-1) is drawn like a BOS zone; what it adds is tagged + hidden at the end.
+                first_trace, first_shape = len(fig.data), len(fig.layout.shapes)
                 side = str(zone.side)
                 stz = _zone_style(side)
                 op_mult = _m15_opacity_tier_for_zone(zone)
@@ -1412,6 +1419,8 @@ def export_m15_chart_plotly(
                                 layer="below",
                             )
                             break
+                if zone.source_kind == "CTS":
+                    _tag_sub_cts_zone(fig, first_trace, first_shape)
 
         # --- Wave candle verticals (per-candle lifecycle gating) ---
         # WAVE_CANDLES_SPEC "Chart Rendering & Lifecycle": each line gated by
@@ -1815,7 +1824,8 @@ def export_m15_chart_plotly(
     if volume_enabled:
         _inject_volume_autoscale_js(html_path)
     _inject_chart_controls_js(html_path, _chart_controls_cfg(
-        dfx, tf="15M", idx_1h=idx_1h_col, parent_tf="1H", parent_group=PARENT_OVERLAY_GROUP))
+        dfx, tf="15M", idx_1h=idx_1h_col, parent_tf="1H", parent_group=PARENT_OVERLAY_GROUP,
+        sub_cts_group=SUB_CTS_GROUP))
 
     fig.write_image(str(png_path), scale=2)
 
@@ -1984,6 +1994,17 @@ def _render_wvmi_lp_marks(fig, dfx, m15_df, h1_df, sid_records) -> int:
 # ---------------------------------------------------------------------------
 # Phase C: H1 overlay rendering
 # ---------------------------------------------------------------------------
+
+def _tag_sub_cts_zone(fig, first_trace: int, first_shape: int) -> None:
+    """Puts every trace and shape from `first_trace` / `first_shape` on — what one sub CTS KL zone just drew — into
+    `SUB_CTS_GROUP`, hidden: the control bar's `Sub CTS zones` button shows them (PLAN_W 9c-1)."""
+    for tr in fig.data[first_trace:]:
+        tr.legendgroup = SUB_CTS_GROUP
+        tr.visible = False
+    for shape in fig.layout.shapes[first_shape:]:
+        shape.legendgroup = SUB_CTS_GROUP
+        shape.visible = False
+
 
 def _tag_parent_overlay(fig, first_trace: int, first_shape: int) -> None:
     """Puts every trace and shape from `first_trace` / `first_shape` on — what `_render_h1_overlay` just drew — into

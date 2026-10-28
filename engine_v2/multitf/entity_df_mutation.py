@@ -1467,6 +1467,10 @@ def render_sub_projection(
         timeframe=timeframe,
         log_prefix=f"M15_sub{sub.sub_id}_{first.trigger_type}",
         structure_path_id=first_path,
+        # The sub's CTS KL zones too (PLAN_W 9c-1, the user 2026-10-28: "Export + chart, toggle off"): the lens
+        # `attrs["kl_zones"]` / `*_kl_zones.csv` hold both kinds; the M15 chart draws the CTS ones hidden behind the
+        # control bar's `Sub CTS zones` button. BOS-only (the default) until then — the overlay's views keep it.
+        source_kinds=("BOS", "CTS"),
         # entity-absolute → the slice's coordinates: the limit's break indices (PLAN_K §3.5) and each move's
         # `known_at` (PLAN_M §7.1); the fib meta's
         # `ic_ref_break_*_idx` return to entity-absolute through `_FIB_META_IDX_KEYS` in the mirror

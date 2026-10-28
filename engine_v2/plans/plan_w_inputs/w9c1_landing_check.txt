@@ -1,0 +1,11 @@
+     A      B      d  element / (parent_sid,parent_cycle,sub_id)
+OK  NZD_USD_H1_2025-11-15_2026-01-20_sd-1_eps0p0001_rk2-5_M15_confluence_kl_zones.csv: = the variant's True, rows 22 -> 42 (removed 0, added 20)
+OK  NZD_USD_H1_2025-11-15_2026-01-20_sd-1_eps0p0001_rk2-5_M15_counter_kl_zones.csv: = the variant's True, rows 9 -> 16 (removed 0, added 7)
+CSVs: the other 28 md5-equal to BASE
+OK  NZD_USD_H1_2025-11-15_2026-01-20_sd-1_eps0p0001_rk2-5.html: the H1 figure equal to BASE's: True
+OK  NZD_USD_H1_2025-11-15_2026-01-20_sd-1_eps0p0001_rk2-5_M15_confluence.html: traces 302 -> 424 (group 122), shapes 305 -> 372 (group 67); rest = BASE (traces): True, rest = BASE (shapes): True, group all hidden: True, group = the variant's additions (traces): True, group = the variant's additions (shapes): True, the HTML names the group: True
+OK  NZD_USD_H1_2025-11-15_2026-01-20_sd-1_eps0p0001_rk2-5_M15_counter.html: traces 154 -> 192 (group 38), shapes 134 -> 154 (group 20); rest = BASE (traces): True, rest = BASE (shapes): True, group all hidden: True, group = the variant's additions (traces): True, group = the variant's additions (shapes): True, the HTML names the group: True
+OK  PNG NZD_USD_H1_2025-11-15_2026-01-20_sd-1_eps0p0001_rk2-5.png equal: True
+OK  PNG NZD_USD_H1_2025-11-15_2026-01-20_sd-1_eps0p0001_rk2-5_M15_confluence.png equal: True
+OK  PNG NZD_USD_H1_2025-11-15_2026-01-20_sd-1_eps0p0001_rk2-5_M15_counter.png equal: True
+ALL AS PREDICTED

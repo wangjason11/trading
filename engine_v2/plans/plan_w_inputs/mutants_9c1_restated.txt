@@ -1,0 +1,9 @@
+KILLED    trace_slice_plus1_9c1              2 failing: test_the_group_is_exactly_what_the_h1_overlay_draws, test_the_real_overlay_tags_its_elements_and_not_the_wvmi_cir
+KILLED    trace_slice_minus1_9c1             4 failing: test_the_group_is_exactly_what_the_h1_overlay_draws, test_the_real_overlay_tags_its_elements_and_not_the_wvmi_cir, test_m15_chart_draws_each_subs_fibs_in_one_legend_group, test_the_m15_chart_hides_exactly_the_sub_cts_zones
+KILLED    shape_slice_plus1_9c1              2 failing: test_the_group_is_exactly_what_the_h1_overlay_draws, test_the_real_overlay_tags_its_elements_and_not_the_wvmi_cir
+KILLED    shape_slice_minus1_9c1             3 failing: test_the_group_is_exactly_what_the_h1_overlay_draws, test_m15_chart_draws_each_subs_fibs_in_one_legend_group, test_the_m15_chart_hides_exactly_the_sub_cts_zones
+KILLED    m15_no_parent_group_9c1            1 failing: test_m15_chart_carries_the_bar_with_its_parent_and_the_hover
+KILLED    m15_not_injected_9c1               3 failing: test_m15_chart_carries_the_bar_with_its_parent_and_the_hover, test_the_bar_needs_no_volume_panel_and_reads_the_drawn_slice, test_the_m15_html_carries_the_group
+KILLED    m15_before_volume_js_9c1           1 failing: test_m15_chart_carries_the_bar_with_its_parent_and_the_hover
+KILLED    m15_only_with_volume_9c1           2 failing: test_the_bar_needs_no_volume_panel_and_reads_the_drawn_slice, test_the_m15_html_carries_the_group
+8/8 KILLED  (results: C:/Users/wangj/AppData/Local/Temp/mr9c1r\results.json)
