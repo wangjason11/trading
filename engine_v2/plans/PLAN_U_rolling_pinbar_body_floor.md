@@ -262,7 +262,10 @@ kept; the flip + its `/compare` when final is picked.
 - **p90's size**: ~2.5–3 × today's demotions (H1 normals 12.4 % → 34.6 %). The percentile is one setting; a later
   flip to p85 / p80 is a one-value change with its own `/compare`.
 - **Frame-only floors** outside a replay (tests, `debug/zone_proximity_diag.py`): the first ~190 H1 / ~210 M15
-  candles have no floor, so a debug run on such a frame classifies those candles like a no-floor run.
+  candles have no floor, so a debug run on such a frame classifies those candles like a no-floor run. **Since U3
+  (final mode) also after them** until the unseeded windows converge with the seeded ones: H1 floors differ on idx
+  220 – 522 and 3 more candle types up to idx 384; M15 floors on 239 – 357, no type (natural: none —
+  `qa_pinbar_floor_inputs/u3_frame_only.txt`, 2026-10-28).
 - **Live mode**: causal by construction; the seed rule is the same at a live start.
 - M5: no frame, no seed; the rolling rule is TF-agnostic, so an M5 frame added later needs no table.
 
@@ -327,7 +330,9 @@ each lands:
     grid (1e-6); another window / percentile can need more (B13).
 - **For U3:** in final mode a candle's type depends on where the history starts (a different frame start, a live
   start) until the runs converge — natural mode has no such dependence (A6); a per-run convergence check (recompute
-  with the seed's first window of pinbars dropped, raise if a frame floor differs) is the user's call at U3.
+  with the seed's first window of pinbars dropped, raise if a frame floor differs) is the user's call at U3. →
+  Decided 2026-10-28 (§9 "U3"): final picked; the check as worded measured to fail on the 2-window seed, so the user
+  chose "Guard extends" — U3b.
 
 ## 9. Build log
 
@@ -459,6 +464,23 @@ each lands:
   `839c9f2` = **S_U3** `20261028_123113_32c544d` (run mode on the committed code: FETCH GATE PASS + both seed lines,
   skip grep 33, timing total 65.17 s; its 30 CSVs = the variant's; `u3_compare.py` on the save = `u3_compare.txt`).
   S_U3 is U3b's `/compare` baseline.
+- **U3b — notes for its plan (handoff, 2026-10-28; write the plan + prediction as a section after §6 first):**
+  `run_replay.fetch_floor_seed` keeps stepping (400 candles, max 8; `step_candles × max_steps ≤ 5000` stays) until the
+  seed holds ≥ `pinbar_floor_seed_windows × pinbar_floor_window` (180) body-% pinbars AND has converged: the full seed
+  and the seed cut just after its 90th body-% pinbar end with the SAME window (the same rows, in order) after the
+  seed's last candle. The floor and the demotion of every later candle depend only on that window and the candle, so
+  a converged window gives equal floors on ANY frame — seed-only, checkable before the M15 frame is fetched (the
+  frame-floor version, as first worded, needs the frame). Natural mode converges as soon as the cut seed still holds
+  90 body-% pinbars (≥ 180 in all) — pin it. Not converged after `max_steps` → `RuntimeError("[floor_seed] ERROR: …")`.
+  ONE floor loop: let `rolling_pinbar_body_floor` (or a thin wrapper over it) report its end-of-run window rows — no
+  second loop. Prediction (from `u3_convergence.txt`, re-check with the built guard): H1 3 steps, 840 candles
+  2025-09-28 21:00 → 2025-11-14 21:00, 355 body-% pinbars; M15 3 steps, 816 candles 2025-11-04 10:00 → 2025-11-14
+  21:45, 310 (at 2 steps neither has converged by the seed's end: H1 agrees from frame idx 200, M15 from frame idx
+  15); the frame floors equal S_U3's → all 30 CSVs, figures and PNGs byte-equal; only the two `[floor_seed]` lines
+  (their wording gains the convergence) and the `data_fetch` time change → `EXPECTED_SEED_H1` / `_M15` in all three
+  gate copies (`/compare` §2b, `/commit-save` Step 4b, WORKFLOWS "Post-replay log grep") + `gate_floor_seed_sim.py`,
+  in the same commit. The unseeded-frame difference (GOTCHAS, `u3_frame_only.txt`) is unaffected — a frame without
+  a seed has no guard.
 - **Variant** (`qa_pinbar_floor_inputs/make_variant_u3.py`: a `git archive` of `e5c3b07` in `%TEMP%\u3v`, the
   `CandleParams.pinbar_floor_window_source` default "natural" -> "final", nothing else — the setting's one read site is
   `rolling_pinbar_body_floor`): FETCH GATE PASS, both `[floor_seed]` lines = S_U2's (the guard counts body-% pinbars);

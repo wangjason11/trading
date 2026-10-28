@@ -1,0 +1,8 @@
+the frame classified with its seed (= the replay) vs without (floor_seed=None)
+
+H1 natural: unseeded has no floor on idx 0 .. 211 (212 candles); where both have one, floors differ on 0; types differ on 16 in all, 0 after the no-floor stretch
+H1 final  : unseeded has no floor on idx 0 .. 211 (212 candles); where both have one, floors differ on 186 (idx 220 .. 522); types differ on 12 in all, 3 after the no-floor stretch (last idx 384)
+
+M15 natural: unseeded has no floor on idx 0 .. 220 (221 candles); where both have one, floors differ on 0; types differ on 17 in all, 0 after the no-floor stretch
+M15 final  : unseeded has no floor on idx 0 .. 220 (221 candles); where both have one, floors differ on 47 (idx 239 .. 357); types differ on 17 in all, 0 after the no-floor stretch
+

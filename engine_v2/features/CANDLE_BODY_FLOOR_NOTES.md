@@ -58,7 +58,10 @@ pinbars (need 180)` and `M15: 480 candles …, 2 steps, 189 …` on the referenc
 (`/compare` skill §2b). A seed that cannot reach 180 raises `[floor_seed] ERROR` (the replay stops). The seed only
 fills the windows and is dropped: the frame, its candle indices, its prior-maru pool, big flags and volume features
 are the frame's own. A frame without a seed (`floor_seeds=None`: every test, a standalone script) has no floor
-before its 90th pinbar — GOTCHAS "A Frame Classified Without Its Floor Seed Gets Other Candle Types". No M5 seed (the
+before its 90th pinbar and — in final mode — other floors after it until its windows converge with the seeded run's
+(reference window: H1 floors differ on idx 220 – 522, 3 more types up to idx 384; M15 floors on 239 – 357, no type;
+`qa_pinbar_floor_inputs/u3_frame_only.txt`) — GOTCHAS "A Frame Classified Without Its Floor Seed Gets Other Candle
+Types". No M5 seed (the
 replay builds no M5 frame); the rule is TF-agnostic, so an M5 frame needs no table.
 
 **Measured on the reference window (the U3 replay, 2026-10-28):** every frame candle has a floor; H1 floors 2.31 –
