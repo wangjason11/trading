@@ -1,0 +1,5 @@
+KILLED    x1_sched_old                       3 failing: test_the_candidate_names_the_pattern_its_reversal_applies[pe, test_the_candidate_names_the_pattern_its_reversal_applies[re, test_the_rv_schedule_and_rv_apply_lines_name_the_pattern
+KILLED    x1_apply_old                       1 failing: test_the_rv_schedule_and_rv_apply_lines_name_the_pattern
+KILLED    x1_sched_const                     3 failing: test_the_candidate_names_the_pattern_its_reversal_applies[pe, test_the_candidate_names_the_pattern_its_reversal_applies[re, test_the_rv_schedule_and_rv_apply_lines_name_the_pattern
+KILLED    x1_meta_wrong                      2 failing: test_the_candidate_names_the_pattern_its_reversal_applies[pe, test_the_candidate_names_the_pattern_its_reversal_applies[re
+4/4 KILLED  (results: C:\Users\wangj\AppData\Local\Temp\mutant_runner\results.json)

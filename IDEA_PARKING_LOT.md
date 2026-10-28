@@ -623,11 +623,9 @@ SYLLABUS Week 9 Part 2 "Zone size at entry and stop-loss".
   reproducibility gap against the stated bound, not live look-ahead; closing it "can move the H1 sid-1 start through
   the main reversal probe" → its own decision + `/compare`. Never measured. DECIDE. Detail: LANDMINES "Probe
   `end_idx` Is the Supreme Bound"; PLAN_A §8.
-- **`REVERSAL_CANDIDATE.meta["pattern"]` is always `"?"`** (found 2026-09-19; registered by the item-10 sweep
-  2026-10-28): `market_structure.py` `_schedule_reversal_from_anchor` (:811) and the `[RV_APPLY]` line (:848) read
-  `.pat` / `.pattern`, the name is `.name` — all 6 candidates on S_W9d (H1 1, confluence 5). Meta only (no decision
-  reads it; STATE_CHANGED's `meta["pat"]` is right); a one-line fix with its own `/compare` (the 3 events CSVs).
-  OPEN. Detail: GOTCHAS "`REVERSAL_CANDIDATE.meta["pattern"]` Is Always `"?"`".
+- ~~**`REVERSAL_CANDIDATE.meta["pattern"]` is always `"?"`**~~ — DONE 2026-10-28 (PLAN_X X1, the user's pick at
+  item 10): both sites read the `PatternEvent`'s `name`; = the prediction (6 events-CSV cells + the H1 hover at
+  897). "Recently closed"; GOTCHAS "`REVERSAL_CANDIDATE.meta["pattern"]` Is Always `"?"`".
 - ~~**The agreed direction for wave candles + WVMI**~~ (PLAN_H Q-W) — DONE 2026-10-28 (SESSION ORDER item 8c, PLAN_V §3):
   `wave_candles._is_qualified` = the agreed direction == the required one, so a volume-only doji qualifies (the user,
   after the variant replay: "Apply it"); a wave candle on a direction-0 candle is drawn in its `vol_dir` colour on
@@ -834,6 +832,13 @@ detailed sweep.") — the chart revamp, the dot-hover quirks, the hovers not on 
 ---
 
 ## Recently closed (history pointers)
+
+- **`REVERSAL_CANDIDATE.meta["pattern"]` is always `"?"`** (§D.2; found 2026-09-19 by Plan A, registered by the item-10
+  sweep) — FIXED 2026-10-28 by PLAN_X X1 (`engine_v2/plans/PLAN_X_part1_ms_checks.md`): `_schedule_reversal_from_anchor`
+  and `_maybe_apply_pending_reversal` read `PatternEvent.name`. `/compare` vs S_W9d = the prediction: 28 / 30 CSVs + 3
+  PNGs byte-equal, the 2 events CSVs exactly 6 cells (H1 897 `continuous`; confluence sub 0 1936 / sub 4 3588
+  `one_maru_continuous`, sub 1 2465 `continuous`, sub 2 2824 / sub 7 4196 `one_maru_opposite`), the H1 reversal-candidate
+  hover's one point; skip grep 33; suite 2176.
 
 - **PART4 §15 "Validation strategy"** (§I; registered by the item-10 sweep 2026-10-28) — CLOSED 2026-10-28 as
   superseded (the user: "Close it"): the suite (2,173 tests incl. the pool / sweep / registry / per-entity suites),

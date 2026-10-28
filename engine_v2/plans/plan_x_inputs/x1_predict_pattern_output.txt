@@ -1,0 +1,9 @@
+== M15_confluence_structure_events.csv: 5 candidates, 5 STATE_CHANGED->reversal
+  anchor=1936 apply=1940 sid=0 sub_id=0 pattern now='?' -> predicted ['one_maru_continuous']
+  anchor=2465 apply=2470 sid=0 sub_id=1 pattern now='?' -> predicted ['continuous']
+  anchor=2824 apply=2829 sid=0 sub_id=2 pattern now='?' -> predicted ['one_maru_opposite']
+  anchor=3588 apply=3589 sid=0 sub_id=4 pattern now='?' -> predicted ['one_maru_continuous']
+  anchor=4196 apply=4200 sid=0 sub_id=7 pattern now='?' -> predicted ['one_maru_opposite']
+== M15_counter_structure_events.csv: 0 candidates, 0 STATE_CHANGED->reversal
+== structure_events.csv: 1 candidates, 1 STATE_CHANGED->reversal
+  anchor=897 apply=902 sid=0 sub_id=None pattern now='?' -> predicted ['continuous']

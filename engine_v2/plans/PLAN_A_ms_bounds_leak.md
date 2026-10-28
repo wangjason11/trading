@@ -467,7 +467,7 @@ names it:
 - **`REVERSAL_CANDIDATE.meta["pattern"]` is always `"?"`** (found by the L4 verifier): `_schedule_reversal_from_anchor`
   reads `getattr(ev_r, "pat", None) or getattr(ev_r, "pattern", None)`, but `PatternEvent` exposes the name as
   `.name`. Same in `_maybe_apply_pending_reversal`'s debug line. Pre-existing, cosmetic (meta only); a one-line
-  fix for a later commit — recorded in GOTCHAS.
+  fix for a later commit — recorded in GOTCHAS. **FIXED 2026-10-28 by PLAN_X X1.**
 
 ## 9. Definition of done
 §5 tests green (the property test fails at the base — `B=3`, L1 — and passes after, in both modes);

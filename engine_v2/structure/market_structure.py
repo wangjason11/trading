@@ -808,7 +808,8 @@ class MarketStructure:
             st.pending_reversal_pattern_anchor_idx = int(anchor_idx)
             st.pending_reversal_apply_idx = int(apply_r)
 
-            pat = getattr(ev_r, "pat", None) or getattr(ev_r, "pattern", None) or "?"
+            # The PatternEvent's name (PLAN_X X1: was a `.pat` / `.pattern` getattr chain that always gave "?").
+            pat = ev_r.name
             self._dbg(
                 f"[RV_SCHEDULE] anchor={st.pending_reversal_pattern_anchor_idx} "
                 f"apply={st.pending_reversal_apply_idx} pat={pat} "
@@ -845,7 +846,7 @@ class MarketStructure:
         if int(i) != int(st.pending_reversal_apply_idx):
             return False
 
-        pat = getattr(st.pending_reversal_ev, "pat", None) or getattr(st.pending_reversal_ev, "pattern", None) or "?"
+        pat = st.pending_reversal_ev.name
         self._dbg(
             f"[RV_APPLY] i={i} anchor={st.pending_reversal_pattern_anchor_idx} "
             f"apply={st.pending_reversal_apply_idx} pat={pat}"

@@ -115,7 +115,7 @@ def _h1_events() -> List[StructureEvent]:
         _ev(897, "STRUCTURE", "REVERSAL_WATCH_START", 0.5736, pattern_anchor_idx=897, bos_frozen=0.5736,
             expires_idx=902, structure_id=0, struct_direction=1),
         _ev(897, "STRUCTURE", "REVERSAL_CANDIDATE", 0.5736, pattern_anchor_idx=897, apply_idx=902,
-            pattern="?", bos_frozen=0.5736, expires_idx=902, structure_id=0, struct_direction=1),
+            pattern="continuous", bos_frozen=0.5736, expires_idx=902, structure_id=0, struct_direction=1),
         _ev(902, "STATE", "STATE_CHANGED", None, **{"from": "pullback_range"}, to="reversal",
             structure_id=0, struct_direction=1, reason="reversal_pattern", pat="continuous",
             bos_frozen=0.5736, effective_idx=902),

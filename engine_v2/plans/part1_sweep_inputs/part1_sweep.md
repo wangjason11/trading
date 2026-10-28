@@ -61,8 +61,8 @@ latent (b); register §F (with moment-order processing, PLAN_E Q3).
 `ev_r.pat` / `ev_r.pattern`, but the pattern's name is `ev_r.name` (`market_structure.py:811`, `:848`). On S_W9d: all
 6 candidates (H1 1, confluence 5) say `'?'`; the `[RV_SCHEDULE]` / `[RV_APPLY]` log lines too. The STATE_CHANGED →
 reversal `meta["pat"]` is right. Meta only — no decision reads it. Found 2026-09-19: "a one-line fix (`ev_r.name`) for
-a later commit — it changes event meta, so it gets its own `/compare`". **OPEN.** GOTCHAS "`REVERSAL_CANDIDATE.meta
-["pattern"]` Is Always `"?"`".
+a later commit — it changes event meta, so it gets its own `/compare`". ~~**OPEN.**~~ **DONE 2026-10-28 (PLAN_X X1).**
+GOTCHAS "`REVERSAL_CANDIDATE.meta["pattern"]` Is Always `"?"`".
 
 **1.6 ★ A `REVERSAL_CANDIDATE` can straddle a sub's cap** — `knowable_at_idx` keys the candidate on its pattern candle,
 not its `apply_idx`, so a sub capped for another reason could keep a candidate that applies past the cap. 0 on the

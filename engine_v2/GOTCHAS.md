@@ -1958,7 +1958,14 @@ ARCHITECTURE.md "`ev.idx` convention", "Anchor has two realms").
 
 ---
 
-## `REVERSAL_CANDIDATE.meta["pattern"]` Is Always `"?"` (found 2026-09-19, not yet fixed)
+## `REVERSAL_CANDIDATE.meta["pattern"]` Is Always `"?"` (found 2026-09-19; FIXED 2026-10-28, PLAN_X X1)
+
+> **FIXED 2026-10-28 (PLAN_X X1, the user's pick at the Week 9 Part 1 item-10 sweep):** both sites read the
+> `PatternEvent`'s `name` directly (no fallback). On the reference window the 6 candidates now name their pattern
+> (H1 897 `continuous`; confluence `one_maru_continuous` ×2, `continuous`, `one_maru_opposite` ×2) — each equal to the
+> `pat` of the STATE_CHANGED → reversal that realised it — and the H1 reversal-candidate hover at 897 shows it. Pins:
+> `tests/test_plan_x_reversal_candidate_pattern.py`. The lesson stands: a `getattr(…, "x", None) or …` chain on a
+> frozen dataclass hides a wrong field name forever — read the field directly. The history below is as found.
 
 `_schedule_reversal_from_anchor` (and `_maybe_apply_pending_reversal`'s debug line) reads the
 pattern name as `getattr(ev_r, "pat", None) or getattr(ev_r, "pattern", None) or "?"`, but
