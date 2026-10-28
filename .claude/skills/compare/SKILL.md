@@ -895,7 +895,7 @@ candles / 355 body-% pinbars, 3 steps; M15 480 / 189 → 816 / 310, 3 steps; eac
 (the gate's `EXPECTED_SEED_H1` / `_M15`, all three copies); vs S_U3 30 / 30 CSVs md5-equal, the three figures' full
 JSON equal (`cmp_fig_full.py`), the PNGs byte-equal, chart counts unchanged (79 / 232, 154 / 134, 302 / 305;
 `qa_pinbar_floor_inputs/u3b_compare.txt`); `data_fetch` 2.6 → 4.2 s. Skip grep 33 (the same lines). Not a
-save-format boundary. Suite 2154; mutants 11 / 11. A `[floor_seed] ERROR: … the final window has not converged …`
+save-format boundary. Suite 2154; mutants 15 / 15. A `[floor_seed] ERROR: … the final window has not converged …`
 = a crashed run (§2b). S_U3b `20261028_130713_9c3949d` (source `9c3949d`, save `2fcfcb3`, trunk `ef65a65`; =
 `LATEST_<branch>` from 2026-10-28; run mode, the save = S_U3 byte for byte again). PLAN_U is complete.
 

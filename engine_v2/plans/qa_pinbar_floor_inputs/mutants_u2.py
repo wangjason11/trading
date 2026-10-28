@@ -6,6 +6,11 @@ Each row: (id, relpath, old, new) — `old` occurs exactly once (text mode, LF a
 pin expected to kill it (written BEFORE the run; the tests: `test_plan_u_rolling_floor.py` unless named). PLAN_U §5.3 +
 the cold review's §8 additions. Not a mutant (equivalent): `<` → `<=` in `floor_demotes` (differs only
 on a body EXACTLY at floor - EPS).
+
+A RECORD of the run at U2 (`84fbbc6`). Since U3b (`9c3949d`, the loop's window holds rows) four anchors no longer
+match — a re-run reports `u2_window_includes_candle`, `u2_nearest_rank`, `u2_window_hardcoded_90` (now twice) and
+`u2_guard_strict_gt` BAD; they are re-anchored and re-run in `mutants_u3b.py` (`u2r_*`, `u3b_guard_count_strict_gt`;
+all KILLED — `mutants_u3b.txt`).
 """
 PF = "engine_v2/features/pinbar_body_floor.py"
 CV = "engine_v2/features/candles_v2.py"

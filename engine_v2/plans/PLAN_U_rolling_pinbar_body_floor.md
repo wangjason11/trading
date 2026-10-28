@@ -565,7 +565,8 @@ each lands:
     random seed gives the cut seed's floors on the frame (279 of 300 converged); the guard steps on / stops / raises
     with a stubbed fixed history; natural stops at the count; the U2 line test → the new line). Each seed was found
     by a small search, then checked by hand. **Mutants** `mutants_u3b.py` (+ `.txt`): **11 / 11 KILLED**, each by
-    its sketched pin.
+    its sketched pin; after the landing, U2's loop mutants whose anchors the U3b loop broke (`mutants_u2.py`: 4 BAD on
+    a re-run) re-anchored + the predicate's window hard-coded: 4 / 4 KILLED — **15 / 15 in all**.
   - **Replay** (run mode): FETCH GATE PASS + the two new lines; skip grep 33, the same families (no RETRY); timing
     total 80.79 s (`data_fetch` 4.17 s — the 3-step seeds; 2.60 s at U2). `gate_floor_seed_sim.py`: 12 / 12 (+ a seed
     line without its convergence → FAIL (floor seed); a not-converged crash → FAIL). **= S_U3 byte for byte**

@@ -48,4 +48,30 @@ MUT = [
     ("u3b_guard_default_params", RR, GUARD_IF, GUARD_IF.replace("], params):", "], CandleParams()):")),
     # a not-converged seed reported as a short count: test_the_guard_raises_when_the_window_never_converges
     ("u3b_error_says_count", RR, "    if n_pins < int(min_pinbars):\n", "    if True:\n"),
+    # --- U2's loop mutants re-anchored on the U3b loop (its window holds rows; `mutants_u2.py`'s anchors for these no
+    # longer match since U3b; its `u2_guard_strict_gt` = `u3b_guard_count_strict_gt` above). Same killers as at U2.
+    # the window includes the candle itself: test_the_window_is_strictly_before_the_candle (the 3rd pinbar's floor)
+    ("u2r_window_includes_candle", PF, LOOP_U3B := (
+        "        floor[i] = current\n"
+        "        demoted[i] = bool(floor_demotes(body[i], btype[i], floor[i]))\n"
+        "        if btype[i] == \"pinbar\" or (source == \"final\" and demoted[i]):\n"
+        "            window.append(i)\n"
+        "            if len(window) == size:\n"
+        "                current = float(np.percentile(body[list(window)], pct))\n"),
+     "        demoted[i] = bool(floor_demotes(body[i], btype[i], current))\n"
+     "        if btype[i] == \"pinbar\" or (source == \"final\" and demoted[i]):\n"
+     "            window.append(i)\n"
+     "            if len(window) == size:\n"
+     "                current = float(np.percentile(body[list(window)], pct))\n"
+     "        floor[i] = current\n"),
+    # nearest-rank instead of linear: test_the_percentile_is_numpy_linear (4.0, not 3.7)
+    ("u2r_nearest_rank", PF, "np.percentile(body[list(window)], pct)",
+     "np.percentile(body[list(window)], pct, method=\"nearest\")"),
+    # the loop's window size hard-coded: every window-3 / 4 / 5 test (no full window -> NaN)
+    ("u2r_window_hardcoded_90", PF, "    size = int(params.pinbar_floor_window)\n    pct = float(params.pinbar_floor_percentile)\n",
+     "    size = 90\n    pct = float(params.pinbar_floor_percentile)\n"),
+    # the predicate's window size hard-coded (the cut after the 90th pinbar): the window-2 predicate tests (True cases)
+    ("u3b_predicate_window_hardcoded_90", PF,
+     "    size = int(params.pinbar_floor_window)\n    pin_rows = np.flatnonzero(btype == \"pinbar\")\n",
+     "    size = 90\n    pin_rows = np.flatnonzero(btype == \"pinbar\")\n"),
 ]
