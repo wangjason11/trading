@@ -1,7 +1,9 @@
 # PLAN_X — the item-10 picks: the REVERSAL_CANDIDATE pattern fix + the MS risk census (Week 9 Part 1)
 
-**Status: X1 LANDED `6764bde` = its prediction (§X1 "Result") · X2 MEASURED (§X2 "X2 result": every check 0 in
-effect on 5 windows).** Register `IDEA_PARKING_LOT.md` §D SESSION
+**Status: X1 LANDED `6764bde` = its prediction (§X1 "Result"), SAVED S_X1 `20261028_195331_ebbf223` (source
+`ebbf223`, save `b5c61de`, trunk `96def92`; = the landing replay byte for byte) · X2 MEASURED (§X2 "X2 result": every
+check 0 in effect on 5 windows) · X3 the fib re-ask built as a VARIANT — asked for by the user 2026-10-28 ("Build the
+fib re-ask as a variant"), to plan.** Register `IDEA_PARKING_LOT.md` §D SESSION
 ORDER item 10 — the user's pick 2026-10-28 (verbatim there and in `part1_sweep_inputs/part1_sweep.md` "The user's
 pick"): "Measure 3 MS risks", "Fix the '?' pattern meta", "Re-check parked latent cases". The sweep list's numbers
 (1.1, 1.3, …) are its section numbers. Baseline: S_W9d `20261028_182318_7c9477e` (HEAD `93e8304` = S_W9d's code +

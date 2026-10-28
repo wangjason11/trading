@@ -953,8 +953,18 @@ the H1 chart, the M15 charts' H1 overlay, every sub zone incl. the hidden CTS on
 confluence 208, counter 72 — each in `hovertemplate` (+ the one line) and `customdata` (+ the kind) only; check with
 `plans/plan_w_inputs/w9d_landing_check.py BASE CUR_DEBUG CUR_CHARTS`; positional `cmp_save` is fine, a hover diff
 (`cmp_hover.py`) shows every KL hover changed; `chart_census.py` 0 deltas. Skip grep 33. Suite 2173; mutants 4 / 4.
-S_W9d `20261028_182318_7c9477e` (source `7c9477e`, save `c02c567`, trunk `050bf18`; = `LATEST_<branch>` from
-2026-10-28; run mode, the save = `w9d_landing_check.py` ALL AS PREDICTED vs S_W9c).
+S_W9d `20261028_182318_7c9477e` (source `7c9477e`, save `c02c567`, trunk `050bf18`; = `LATEST_<branch>` until S_X1,
+below; run mode, the save = `w9d_landing_check.py` ALL AS PREDICTED vs S_W9c).
+**PLAN_X X1 (2026-10-28, SESSION ORDER item 10's pick — the user: "Fix the '?' pattern meta") — event-meta VALUES,
+not a save-format boundary:** every `REVERSAL_CANDIDATE.meta["pattern"]` = the scheduled `PatternEvent`'s name
+(was always `'?'`). Vs S_W9d: 28 / 30 CSVs + the 3 PNGs byte-equal; the 2 events CSVs exactly 6 meta cells (H1 897
+`continuous`; confluence sub 0 1936 / sub 4 3588 `one_maru_continuous`, sub 1 2465 `continuous`, sub 2 2824 / sub 7
+4196 `one_maru_opposite`; counter: no candidate); the figures: counts / x / y / shapes equal, only the H1 `reversal
+candidate` trace's customdata (its one point, 897: `?` → `continuous`) — `cmp_save` sees the 6 cells (it ignores
+hovers), `qa_chart_edits_inputs/fig_named_diff.py` the trace, `plans/plan_x_inputs/x1_landing_check.py BASE_SAVE
+CUR_CHARTS` the point. run.log: the 6 `[RV_SCHEDULE]` lines name the pattern. Skip grep 33. Suite 2176; mutants 4 / 4.
+S_X1 `20261028_195331_ebbf223` (source `ebbf223` = the code of `6764bde` + docs, save `b5c61de`, trunk `96def92`;
+= `LATEST_<branch>` from 2026-10-28; run mode, gate PASS, the save = the X1 landing replay byte for byte).
 
 **M15.counter** and **M15.confluence** (9 files each — 7 per-lens debug CSVs
 with the same filename suffixes prefixed `*_M15_counter_` /
