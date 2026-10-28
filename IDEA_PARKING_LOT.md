@@ -284,14 +284,50 @@ SYLLABUS Week 9 Part 2 "Zone size at entry and stop-loss".
    fibs without a POI row are `no_ic_candidate` / `all_ic_candidates_pinbar` outcomes —
    `engine_v2/plans/plan_v_inputs/backlog_no_poi_census.py` / `.txt`), the sub probe reference = the
    derived CTS KL zone. IC Step 4: KEEP DEFERRED. Moved to D.3 (Parts 2 / 3): the candle-direction / rejection
-   confirmation, zone strength scoring, the M5 layer. Then Part 1 is complete.
+   confirmation, zone strength scoring, the M5 layer. Then Part 1 was to be complete — the user added item 9 after
+   item 8 closed (below).
    **Progress 2026-10-28 (PLAN_V, `engine_v2/plans/PLAN_V_part1_minor_items.md`):** 8a DONE (`955489b`, zero change)
    and 8b DONE (`01f5282`, zero change) — the user: "Two commits, one save" (S_V8b `20261028_141322_245620c` = S_U3b
    byte for byte); 8c MEASURED (PLAN_V §3.1: 0 of 53 wave
    candles move, sub 3's temporary-LP history gains three volume-only dojis) and DECIDED: "Apply it" + a
    direction-0 wave candle drawn in its `vol_dir` colour ("Draw it in its vol_dir colour"); 8c LANDED `1318c82` (= the
    variant byte for byte, PLAN_V §3.3; the user's chart look: "looks good go ahead"), save S_V8c
-   `20261028_153518_1318c82`. **Item 8 DONE — Week 9 Part 1 complete.**
+   `20261028_153518_1318c82`. **Item 8 DONE.** NEXT: item 9.
+9. **The last Part 1 items — three of item 8's not-picked backlog entries** (the user 2026-10-28, after item 8 closed,
+   shown a brief description of each of the four: "I think once we complete these we will truly be done with W9 Part
+   1"; the user's words per entry, verbatim):
+   **(9a)** the missing-label fill paths (D.2 below) — "Let's address in next session". Zero output change expected
+   (unreachable: every engine frame is a contiguous index).
+   **(9b)** the POI record gate for a fib that ENDED without ever LOCKING (was the "sub 3 cyc 3 has no POI record"
+   note) — "This one I think I'd like to also address, specifically the part around A sub fib that ended without ever
+   locking gets no POI record, so no IC is ever evaluated for it. I'm not sure when we implemented this specific rule,
+   but I'm not sure that is what I want if you are saying anytime fibs are not locked we don't get an IC or POI."
+   The rule as coded (`zones/poi_zones._poi_record_gate` + the next check in `select_ic_records`, main and
+   subs alike; FIB_LIFECYCLE_SPEC §11): a fib record gets a POI record if it is LOCKED (a fib locks at its cycle's
+   CTS_CONFIRMED) OR still LIVE in the final records (condition-active AND its cycle not ended) — AND its cycle has a
+   CTS_ESTABLISHED (the user's 2026-09-29 zones-audit option N). So an unlocked fib is not always without one: it has
+   it while its cycle is live; a cycle that ENDS before its CTS confirms loses it — and the export / chart are the
+   final records, so that cycle shows no POI and no IC at all, not even for the candles it was live. Origin: Week 7
+   (`0033c53`, 2026-01-31: "A Fib is valid for IC detection if it's active OR locked" — `active` then went False when
+   a cycle ended); FibState Session 2 (`310c395`, 2026-05-27) kept the effect when `active` became condition-only
+   (`end_idx is None` added). On this window: 0 instances (`plan_v_inputs/backlog_no_poi_census.txt`; the 2026-10-06
+   example, sub 3 cyc 3 3304 → 3611 ended `parent_end`, is gone) — a rule change needs a synthetic case or another
+   window for its chart look. The user's call: what a never-locked ended fib should get (a POI with its lifecycle
+   ending at the cycle end? an IC evaluated but no POI? the CTS_ESTABLISHED requirement kept?).
+   **(9c)** the sub probe reference = the derived CTS KL zone (D.2 below) — "On this I'd also like to discuss more
+   next session. Speicifically, for subs are we currently not deriving any CTS zones? So this isn't just a case of
+   the zones are derived and simply not being charted?" The answer, checked 2026-10-28 (code + S_V8c): subs DO derive
+   CTS KL zones — `orchestrator._run_downstream_pipeline` derives the full set (`all_kl_zones`, BOS + CTS) because
+   the CTS wave candles and WVMI need it — then RETURNS only the BOS ones (`source_kinds=("BOS",)`,
+   `pooled_structure_build`), so the CTS zones are used internally but are not exported (the sub KL CSVs: confluence
+   21 BOS / 0 CTS, counter 8 / 0; H1: 5 BOS / 5 CTS), not charted, and not handed to the probe — whose pool-path
+   readers pass `kl_zones=[]` anyway (Plan C, GOTCHAS "the `kl_zones=[]` pool-path note"), so every sub reference
+   zone is built ad hoc from the CTS event. BOS-only for subs since the multi-TF foundation (`6a53948`, 2026-02-17;
+   ARCHITECTURE "KL zones are BOS-only for subs"). Two separable questions: chart / export the sub CTS zones? feed the
+   derived CTS zone to the probe (a behaviour change — sub start candles may move)?
+   **Parked by the user (stays in D.2):** B5 — "I think this case is not possible, so let's park for now".
+   Order (proposed): 9a (zero change) → 9b (the user's decision, then a plan) → 9c (discussion first). Then Week 9
+   Part 1 is complete → push (the user: "don't push just yet") → Part 2.
 
 **D.1 — Ordered (the heavy items):**
 1. **One POI per cycle** (redefine the IC & POI zone logic) — B landed; its chart debugging PAUSED for item 2 (user
@@ -334,7 +370,7 @@ SYLLABUS Week 9 Part 2 "Zone size at entry and stop-loss".
    write-up (all DONE by PLAN_L L1 + the decisions below): POI_ZONES_SPEC §3's step structure, the code's
    "candidates" names (`find_ic_candidates`, `*_ip_candidates.csv` → `*_ic_candidates.csv`), the fallbacks (Step 3
    the ranking rules, L2; Step 4 — D.2 "Step 4 of IC identification", deferred). Still open from the debugging log: sub 3 cyc 3
-   has no POI record (PLAN_H §8.9; 0 instances of its case on S_V8c, 2026-10-28 — SESSION ORDER item 8's note). **The write-up RECEIVED 2026-10-09** (verbatim
+   has no POI record (PLAN_H §8.9; 0 instances of its case on S_V8c, 2026-10-28 — SESSION ORDER item 9b, the record gate itself, the user's to revisit). **The write-up RECEIVED 2026-10-09** (verbatim
    `engine_v2/plans/plan_h_inputs/ic_identification_revamp_spec.md`; the reading + the measurement: PLAN_H §8.9 "The
    IC identification revamp"): Step 1 the IC candidates, Step 2 the IP (both as built), **Step 3 NEW — the general
    ranking when no pattern exists** (its own four ranking rules over the unfiltered Step 1 list — a separate rule set
@@ -485,9 +521,11 @@ SYLLABUS Week 9 Part 2 "Zone size at entry and stop-loss".
   2026-10-21; unreachable — every engine frame is a contiguous 0..n−1 index, 0 on the window): `is_filled`'s fallback
   loop skips a missing label (`continue`; a `break` mutant there survives the suite), while
   `poi_zones._compute_fill_idx_cache` returns `(None, None)` when the label `end_idx + 1` is missing. Fix only if a
-  non-contiguous frame ever reaches them. Detail: PLAN_S §6 step 2. DECIDE.
+  non-contiguous frame ever reaches them. Detail: PLAN_S §6 step 2. SCHEDULED — SESSION ORDER item 9a (the user
+  2026-10-28: "Let's address in next session").
 - **Should subs get the DERIVED CTS KL zone as their probe reference?** (today every sub reference zone is ad-hoc).
-  Unscheduled follow-up. DECIDE. Detail: PART4 §17.12, GOTCHAS (the `kl_zones=[]` pool-path note).
+  SCHEDULED for discussion — SESSION ORDER item 9c (the user 2026-10-28; the derived-but-not-returned answer is
+  there). Detail: PART4 §17.12, GOTCHAS (the `kl_zones=[]` pool-path note).
 - **Step 4 of IC identification — the lower-TF fallback — DEFERRED, possibly never built** (was "No-pattern cycles —
   a fallback POI"; DECIDED by the user's IC identification write-up 2026-10-09, `engine_v2/plans/plan_h_inputs/
   ic_identification_revamp_spec.md`, PLAN_H §6 ICR-*). A no-pattern record gets its IC from Step 3, the ranking
@@ -522,6 +560,8 @@ SYLLABUS Week 9 Part 2 "Zone size at entry and stop-loss".
   (not saved). OPEN (latent, 0 on the window; PLAN_K §11.2 B5): can MS confirm a BOS on a reversal's own apply candle?
   Both reversal builders take the most recent BOS_CONFIRMED with moment ≤ the reversal (inclusive, pinned) — such a
   BOS's threshold would not be `P`, so its anchor would not be "the anchor behind `P`". DECIDE only if reachable.
+  PARKED by the user 2026-10-28 (shown it as an item 8 leftover): "I think this case is not possible, so let's park
+  for now".
 - ~~**The agreed direction for wave candles + WVMI**~~ (PLAN_H Q-W) — DONE 2026-10-28 (SESSION ORDER item 8c, PLAN_V §3):
   `wave_candles._is_qualified` = the agreed direction == the required one, so a volume-only doji qualifies (the user,
   after the variant replay: "Apply it"); a wave candle on a direction-0 candle is drawn in its `vol_dir` colour on

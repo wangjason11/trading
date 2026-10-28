@@ -914,7 +914,7 @@ chart, 'M15 WVMI LP sell' (confluence 112 → 115 dots, counter 47 → 50) + the
 other 28 CSVs, the trace counts (79, 302, 154), the `[floor_seed]` lines and skip grep 33 unchanged
 (`plan_v_inputs/v8c_landing_compare.txt`, `v8c_save_counts.txt`). Not a save-format boundary. Suite 2172; mutants
 4 / 4. S_V8c `20261028_153518_1318c82` (source `1318c82`, save `fb6fb81`, trunk `8e6a53a`; = `LATEST_<branch>` from
-2026-10-28; run mode, the save = the variant byte for byte). PLAN_V is complete — Week 9 Part 1 complete.
+2026-10-28; run mode, the save = the variant byte for byte). PLAN_V is complete.
 
 **M15.counter** and **M15.confluence** (9 files each — 7 per-lens debug CSVs
 with the same filename suffixes prefixed `*_M15_counter_` /
