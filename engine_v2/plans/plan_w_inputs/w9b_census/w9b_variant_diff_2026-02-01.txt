@@ -1,0 +1,16 @@
+window 2026-02-01 -> 2026-03-20: base vs gate_any
+
+== H1.main
+   events: EQUAL (146 / 146)
+   kl_zones: EQUAL (4 / 4)
+   sids: EQUAL (1 / 1)
+   poi_zones: 1 -> 1
+   ic records: 2 -> 2 (rows 177 -> 177)
+
+== H1.main >> M15.confluence
+   events: EQUAL (610 / 610)
+   kl_zones: EQUAL (12 / 12)
+   sids: EQUAL (5 / 5)
+   poi_zones: 11 -> 11
+   ic records: 11 -> 12 (rows 364 -> 808)
+     NEW ic record sub 0 sid 0 cyc 1: 444 rows, candidates 0, pick [], no-IC reason ['no_ic_candidate'], ip_outcome ['None'], fib bos 1156 -> cts 2059

@@ -1,0 +1,55 @@
+window 2025-08-01 -> 2025-09-20, H1.main >> M15.confluence: sub 2 cycle 1
+
+   M15 idx  time (UTC)        event                price     meta
+      2525  2025-09-08 07:15  CTS_ESTABLISHED                {'cts_anchor_idx': 2525, 'confirmed_at': 2525, 'via': 'one_maru_continuous'}
+      2525  2025-09-08 07:15  BOS_CONFIRMED                  {'bos_anchor_idx': 2362, 'confirmed_at': 2525}
+      2526  2025-09-08 07:30  CTS_UPDATED                    {'via': 'replay_raw'}
+      2527  2025-09-08 07:45  CTS_UPDATED                    {'via': 'replay_raw'}
+      2528  2025-09-08 08:00  CTS_UPDATED                    {'via': 'replay_raw'}
+      2538  2025-09-08 10:30  CTS_UPDATED                    {'via': 'replay_raw'}
+      2539  2025-09-08 10:45  CTS_UPDATED                    {'via': 'replay_raw'}
+      2540  2025-09-08 11:00  CTS_UPDATED                    {'via': 'replay_raw'}
+      2541  2025-09-08 11:15  CTS_UPDATED                    {'via': 'replay_raw'}
+      2542  2025-09-08 11:30  CTS_UPDATED                    {'via': 'replay_raw'}
+      2544  2025-09-08 12:00  CTS_UPDATED                    {'via': 'replay_raw'}
+      2547  2025-09-08 12:45  CTS_UPDATED                    {'via': 'replay_raw'}
+      2548  2025-09-08 13:00  CTS_UPDATED                    {'via': 'replay_raw'}
+      2550  2025-09-08 13:30  CTS_UPDATED                    {'via': 'replay_raw'}
+      2592  2025-09-09 00:00  CTS_UPDATED                    {'via': 'replay_raw'}
+      2593  2025-09-09 00:15  CTS_UPDATED                    {'via': 'replay_raw'}
+      2595  2025-09-09 00:45  CTS_UPDATED                    {'via': 'replay_raw'}
+      2611  2025-09-09 04:45  CTS_UPDATED                    {'via': 'replay_raw'}
+      2612  2025-09-09 05:00  CTS_UPDATED                    {'via': 'replay_raw'}
+      2613  2025-09-09 05:15  CTS_UPDATED                    {'cts_anchor_idx': 2613, 'confirmed_at': 2613, 'via': 'continuous'}
+      2614  2025-09-09 05:30  CTS_UPDATED                    {'via': 'replay_raw'}
+      2615  2025-09-09 05:45  CTS_UPDATED                    {'via': 'replay_raw'}
+      2616  2025-09-09 06:00  CTS_UPDATED                    {'via': 'replay_raw'}
+      2629  2025-09-09 09:15  CTS_UPDATED                    {'via': 'replay_raw'}
+      2630  2025-09-09 09:30  CTS_UPDATED                    {'via': 'replay_raw'}
+      2632  2025-09-09 10:00  CTS_UPDATED                    {'via': 'replay_raw'}
+      2633  2025-09-09 10:15  CTS_UPDATED                    {'via': 'replay_raw'}
+      2744  2025-09-10 14:00  CTS_UPDATED                    {'via': 'replay_raw'}
+      2845  2025-09-11 15:15  CTS_UPDATED                    {'via': 'replay_raw'}
+      2846  2025-09-11 15:30  CTS_UPDATED                    {'via': 'replay_raw'}
+      2848  2025-09-11 16:00  CTS_UPDATED                    {'via': 'replay_raw'}
+      2849  2025-09-11 16:15  CTS_UPDATED                    {'via': 'replay_raw'}
+      2861  2025-09-11 19:15  CTS_UPDATED                    {'via': 'replay_raw'}
+      2863  2025-09-11 19:45  CTS_UPDATED                    {'via': 'replay_raw'}
+      2864  2025-09-11 20:00  CTS_UPDATED                    {'via': 'replay_raw'}
+      2865  2025-09-11 20:15  CTS_UPDATED                    {'via': 'replay_raw'}
+      2866  2025-09-11 20:30  CTS_UPDATED                    {'via': 'replay_raw'}
+      3101  2025-09-16 07:15  CTS_UPDATED                    {'via': 'replay_raw'}
+      3125  2025-09-16 13:15  CTS_UPDATED                    {'via': 'replay_raw'}
+      3129  2025-09-16 14:15  CTS_UPDATED                    {'via': 'replay_raw'}
+      3137  2025-09-16 16:15  CTS_UPDATED                    {'via': 'replay_raw'}
+      3138  2025-09-16 16:30  CTS_UPDATED                    {'via': 'replay_raw'}
+      3139  2025-09-16 16:45  CTS_UPDATED                    {'via': 'replay_raw'}
+      3140  2025-09-16 17:00  CTS_UPDATED                    {'cts_anchor_idx': 3140, 'confirmed_at': 3140, 'via': 'one_maru_continuous'}
+      3141  2025-09-16 17:15  CTS_UPDATED                    {'via': 'replay_raw'}
+      3142  2025-09-16 17:30  CTS_UPDATED                    {'via': 'replay_raw'}
+
+today (base):        IC rows 0, POI zones 0
+relaxed gate:        IC rows 362 (3 IC candidates), POI zones 1
+   POI: IC 2447 (2025-09-05 11:45), buy [0.58720, 0.58740], pattern 3C.i (pattern), band 61.8-80
+        active from 2542 (2025-09-08 11:30) to its cycle's end 3143 (2025-09-16 17:45, parent_end); activation_history [(2542, True, 'initial')]
+   the picked row: IC 2447 candle_type=pinbar fib bos 2362 (2025-09-04 14:30) -> cts 3142 (2025-09-16 17:30)

@@ -1,0 +1,6 @@
+KILLED    v9a_is_filled_no_check             3 failing: test_the_fill_checks_raise_on_a_frame_not_indexed_0_to_n_min, test_the_fill_checks_raise_on_a_frame_not_indexed_0_to_n_min, test_the_fill_checks_raise_on_a_frame_not_indexed_0_to_n_min
+KILLED    v9a_cache_no_check                 3 failing: test_the_fill_checks_raise_on_a_frame_not_indexed_0_to_n_min, test_the_fill_checks_raise_on_a_frame_not_indexed_0_to_n_min, test_the_fill_checks_raise_on_a_frame_not_indexed_0_to_n_min
+KILLED    v9a_no_int_branch                  7 failing: test_fill_cache_separate_candles_and_agrees_with_is_filled[b, test_fill_cache_separate_candles_and_agrees_with_is_filled[b, test_fill_cache_separate_candles_and_agrees_with_is_filled[b, test_fill_cache_separate_candles_and_agrees_with_is_filled[b
+KILLED    v9a_first_last_only                1 failing: test_the_fill_checks_raise_on_a_frame_not_indexed_0_to_n_min
+KILLED    v9a_no_empty_pass                  1 failing: test_the_fill_checks_accept_an_int64_index_0_to_n_minus_1
+5/5 KILLED  (results: C:\Users\wangj\AppData\Local\Temp\mutant_runner\results.json)

@@ -1,0 +1,22 @@
+window 2025-12-01 -> 2026-01-20: base vs gate_any
+
+== H1.main
+   events: EQUAL (325 / 325)
+   kl_zones: EQUAL (10 / 10)
+   sids: EQUAL (2 / 2)
+   poi_zones: 2 -> 2
+   ic records: 5 -> 5 (rows 248 -> 248)
+
+== H1.main >> M15.counter
+   events: EQUAL (591 / 591)
+   kl_zones: EQUAL (8 / 8)
+   sids: EQUAL (4 / 4)
+   poi_zones: 7 -> 7
+   ic records: 8 -> 8 (rows 593 -> 593)
+
+== H1.main >> M15.confluence
+   events: EQUAL (1386 / 1386)
+   kl_zones: EQUAL (21 / 21)
+   sids: EQUAL (8 / 8)
+   poi_zones: 17 -> 17
+   ic records: 21 -> 21 (rows 1426 -> 1426)

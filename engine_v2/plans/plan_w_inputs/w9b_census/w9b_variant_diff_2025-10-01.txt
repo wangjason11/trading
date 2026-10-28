@@ -1,0 +1,19 @@
+window 2025-10-01 -> 2025-11-15: base vs gate_any
+
+== H1.main
+   events: EQUAL (151 / 151)
+   kl_zones: EQUAL (4 / 4)
+   sids: EQUAL (1 / 1)
+   poi_zones: 1 -> 1
+   ic records: 2 -> 2 (rows 242 -> 242)
+
+== H1.main >> M15.confluence
+   events: EQUAL (509 / 509)
+   kl_zones: EQUAL (8 / 8)
+   sids: EQUAL (2 / 2)
+   poi_zones: 6 -> 7
+     NEW sub 0 sid 0 cyc 2: IC 2060 (2025-10-30 11:00) sell [0.57621, 0.57652] band=61.8-80 ip_outcome=pattern ip_rank=3A.iii ranking_rule=None
+         cts_established 2337 (2025-11-04 09:15), confirmed_idx 2337 (2025-11-04 09:15), end 2339 (2025-11-04 09:45) end_reason=parent_end status=ended
+         activation_history: [(2337, True, 'initial')]
+   ic records: 7 -> 8 (rows 771 -> 949)
+     NEW ic record sub 0 sid 0 cyc 2: 178 rows, candidates 2, pick [2060], no-IC reason [], ip_outcome ['pattern'], fib bos 1983 -> cts 2339

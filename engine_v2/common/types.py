@@ -113,6 +113,26 @@ class ChartRect(TypedDict, total=False):
 IMBALANCE_FILL_THRESHOLD = 0.65
 
 
+def require_positional_index(df: "pd.DataFrame", caller: str) -> int:
+    """`len(df)` if `df`'s labels are 0..n−1 in order (label == position); else `ValueError`.
+
+    The fill checks (`ImbalanceInstance.is_filled`, `poi_zones._compute_fill_idx_cache`) scan numpy arrays by position
+    and read an idx as a position. Every engine frame is 0..n−1 (the H1 main df and the sub entity frames — PLAN_W 9a's
+    census: 188,013 of 188,013 `is_filled` calls); the label-based fallbacks for any other frame disagreed on a
+    missing label and were never run, so they are gone (PLAN_W 9a, the user 2026-10-28: "Require 0..n−1").
+    Passes a 0..n−1 RangeIndex (the O(1) check — duck-typed, types.py has no runtime `pd` import), an integer index
+    equal to 0..n−1, or an empty frame."""
+    n = len(df)
+    index = df.index
+    if getattr(index, "step", None) == 1 and getattr(index, "start", None) == 0 and getattr(index, "stop", None) == n:
+        return n
+    if n == 0 or (index.dtype.kind in "iu" and list(index) == list(range(n))):
+        return n
+    raise ValueError(
+        f"{caller}: the fill check needs a frame indexed 0..n-1 (label == position); got "
+        f"{type(index).__name__} [{index[0]!r} .. {index[-1]!r}], n={n}")
+
+
 @dataclass(frozen=True)
 class ImbalanceInstance:
     """One merged FVG instance: either a single imbalance candle or a run
@@ -214,86 +234,48 @@ class ImbalanceInstance:
           cannot arm its gap), but an instance that has not formed yet is not
           an imbalance at all: a caller asking at a moment must apply the
           `formed_at` cut first (`has_unfilled_imbalance(evaluated_at=...)`).
+        `df` must be indexed 0..n−1 (`require_positional_index`; ValueError
+          otherwise — every call, the degenerate gap included).
         """
+        n = require_positional_index(df, "ImbalanceInstance.is_filled")
         if self.gap_size <= 0:
             return True  # invalid gap -> treat as filled (safe default)
 
-        # Fast path: positional numpy scan when the working df is a contiguous
-        # 0..n-1 RangeIndex (always in practice — sub slices are reset_index'd
-        # and the H1 main df is a 0..n-1 RangeIndex). Avoids the ~35x-slower
-        # `df.loc[idx, col]` scalar lookups + `idx not in df.index`
-        # (RangeIndex.__contains__) in the hot per-candle loop; is_filled is
-        # called ~O(1e5) times per replay across the Fib/POI/scenario imbalance
-        # checks. Byte-identical to the label-based loop in the fallback below
-        # (same ascending (end_idx, check_to_idx] scan clamped to the data,
-        # same two-stroke armed/confirmed latch, same inclusive comparisons).
-        # Duck-typed RangeIndex check (types.py has no runtime `pd` import).
-        n = len(df)
-        _index = df.index
-        contiguous = (
-            getattr(_index, "step", None) == 1
-            and getattr(_index, "start", None) == 0
-            and getattr(_index, "stop", None) == n
-        )
-        if contiguous:
-            lo = self.end_idx + 1
-            if lo < 0:
-                lo = 0
-            hi = check_to_idx
-            if hi > n - 1:
-                hi = n - 1
-            if lo > hi:
-                return False
-            if self.direction == 1:
-                l_arr = df["l"].to_numpy(dtype=float)
-                c_arr = df["c"].to_numpy(dtype=float)
-                stroke1_level = self.gap_top - self.gap_size * fill_threshold
-                stroke2_level = self.gap_top
-                armed = False
-                for pos in range(lo, hi + 1):
-                    if armed and c_arr[pos] >= stroke2_level:  # stroke 2 — only on a candle AFTER the arming one
-                        return True
-                    if not armed and l_arr[pos] <= stroke1_level:
-                        armed = True
-            elif self.direction == -1:
-                h_arr = df["h"].to_numpy(dtype=float)
-                c_arr = df["c"].to_numpy(dtype=float)
-                stroke1_level = self.gap_bottom + self.gap_size * fill_threshold
-                stroke2_level = self.gap_bottom
-                armed = False
-                for pos in range(lo, hi + 1):
-                    if armed and c_arr[pos] <= stroke2_level:  # stroke 2 — only on a candle AFTER the arming one
-                        return True
-                    if not armed and h_arr[pos] >= stroke1_level:
-                        armed = True
+        # Positional numpy scan (label == position, checked above): avoids the
+        # ~35x-slower `df.loc[idx, col]` scalar lookups in the hot per-candle
+        # loop; is_filled is called ~O(1e5) times per replay across the
+        # Fib/POI/scenario imbalance checks (188,013 on the window — PLAN_W 9a).
+        # The ascending (end_idx, check_to_idx] scan is clamped to the data.
+        lo = self.end_idx + 1
+        if lo < 0:
+            lo = 0
+        hi = check_to_idx
+        if hi > n - 1:
+            hi = n - 1
+        if lo > hi:
             return False
-
-        # Fallback: label-based loop for a non-contiguous index (rare/never in
-        # practice). The pre-optimization loop, with PLAN_S step 2's reorder (stroke 2
-        # tested before stroke 1 latches on a candle — the arming candle's close never counts).
         if self.direction == 1:
+            l_arr = df["l"].to_numpy(dtype=float)
+            c_arr = df["c"].to_numpy(dtype=float)
             stroke1_level = self.gap_top - self.gap_size * fill_threshold
             stroke2_level = self.gap_top
             armed = False
-            for idx in range(self.end_idx + 1, check_to_idx + 1):
-                if idx not in df.index:
-                    continue
-                if armed and float(df.loc[idx, "c"]) >= stroke2_level:  # stroke 2 — only on a candle AFTER the arming one
+            for pos in range(lo, hi + 1):
+                if armed and c_arr[pos] >= stroke2_level:  # stroke 2 — only on a candle AFTER the arming one
                     return True
-                if not armed and float(df.loc[idx, "l"]) <= stroke1_level:
+                if not armed and l_arr[pos] <= stroke1_level:
                     armed = True
         elif self.direction == -1:
+            h_arr = df["h"].to_numpy(dtype=float)
+            c_arr = df["c"].to_numpy(dtype=float)
             stroke1_level = self.gap_bottom + self.gap_size * fill_threshold
             stroke2_level = self.gap_bottom
             armed = False
-            for idx in range(self.end_idx + 1, check_to_idx + 1):
-                if idx not in df.index:
-                    continue
-                if armed and float(df.loc[idx, "c"]) <= stroke2_level:  # stroke 2 — only on a candle AFTER the arming one
+            for pos in range(lo, hi + 1):
+                if armed and c_arr[pos] <= stroke2_level:  # stroke 2 — only on a candle AFTER the arming one
                     return True
-                if not armed and float(df.loc[idx, "h"]) >= stroke1_level:
+                if not armed and h_arr[pos] >= stroke1_level:
                     armed = True
-
         return False
 
 

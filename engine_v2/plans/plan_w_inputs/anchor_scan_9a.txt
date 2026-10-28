@@ -1,0 +1,23 @@
+STALE engine_v2/plans\qa_ic_revisit_inputs\mutants_plan_s_step2.py s2_fast_bull (engine_v2/common/types.py): 1 -> 0
+      anchor: 'if armed and c_arr[pos] >= stroke2_level:  # stroke 2 — only on a candle AFTER the arming one\n                        return True\n                    '
+STALE engine_v2/plans\qa_ic_revisit_inputs\mutants_plan_s_step2.py s2_fast_bear (engine_v2/common/types.py): 1 -> 0
+      anchor: 'if armed and c_arr[pos] <= stroke2_level:  # stroke 2 — only on a candle AFTER the arming one\n                        return True\n                    '
+STALE engine_v2/plans\qa_ic_revisit_inputs\mutants_plan_s_step2.py s2_slow_bull (engine_v2/common/types.py): 1 -> 0
+      anchor: 'if armed and float(df.loc[idx, "c"]) >= stroke2_level:  # stroke 2 — only on a candle AFTER the arming one\n                    return True\n           '
+STALE engine_v2/plans\qa_ic_revisit_inputs\mutants_plan_s_step2.py s2_slow_bear (engine_v2/common/types.py): 1 -> 0
+      anchor: 'if armed and float(df.loc[idx, "c"]) <= stroke2_level:  # stroke 2 — only on a candle AFTER the arming one\n                    return True\n           '
+STALE engine_v2/plans\qa_ic_revisit_inputs\mutants_plan_s_step2.py s2_cache_bull_offset_only (engine_v2/zones/poi_zones.py): 1 -> 0
+      anchor: 'confirmed_pos = armed_pos + 1 + int(stroke2_hits[0])\n                    confirmed_fill_idx = _idx_from_pos(confirmed_pos)\n        elif inst.direction'
+STALE engine_v2/plans\qa_ic_revisit_inputs\mutants_plan_s_step2.py s2_edge_slow_bull (engine_v2/common/types.py): 1 -> 0
+      anchor: 'if armed and float(df.loc[idx, "c"]) >= stroke2_level:'
+STALE engine_v2/plans\qa_ic_revisit_inputs\mutants_plan_s_step2.py s2_edge_slow_bear (engine_v2/common/types.py): 1 -> 0
+      anchor: 'if armed and float(df.loc[idx, "c"]) <= stroke2_level:'
+STALE engine_v2/plans\qa_ic_revisit_inputs\mutants_plan_s_step2.py s2_latch_fast_bull (engine_v2/common/types.py): 1 -> 0
+      anchor: 'if not armed and l_arr[pos] <= stroke1_level:\n                        armed = True'
+STALE engine_v2/plans\qa_ic_revisit_inputs\mutants_plan_s_step2.py s2_latch_fast_bear (engine_v2/common/types.py): 1 -> 0
+      anchor: 'if not armed and h_arr[pos] >= stroke1_level:\n                        armed = True'
+STALE engine_v2/plans\qa_ic_revisit_inputs\mutants_plan_s_step2.py s2_latch_slow_bull (engine_v2/common/types.py): 1 -> 0
+      anchor: 'if not armed and float(df.loc[idx, "l"]) <= stroke1_level:\n                    armed = True'
+STALE engine_v2/plans\qa_ic_revisit_inputs\mutants_plan_s_step2.py s2_latch_slow_bear (engine_v2/common/types.py): 1 -> 0
+      anchor: 'if not armed and float(df.loc[idx, "h"]) >= stroke1_level:\n                    armed = True'
+11 stale of 175 anchors that matched once at the base (50 mutants files read)

@@ -41,7 +41,7 @@ from typing import List, Optional, Dict, Any, Literal, Sequence, Tuple
 import numpy as np
 import pandas as pd
 
-from engine_v2.common.types import IMBALANCE_FILL_THRESHOLD, ImbalanceInstance
+from engine_v2.common.types import IMBALANCE_FILL_THRESHOLD, ImbalanceInstance, require_positional_index
 from engine_v2.features.candle_params import CandleParams
 from engine_v2.features.candles_v2 import agreed_direction
 from engine_v2.features.fibonacci import FibRetracement, calculate_fib_price
@@ -1530,18 +1530,18 @@ def _compute_fill_idx_cache(
     Key: ``id(inst)`` → ``(armed_idx, confirmed_fill_idx)``. Both are
     entity-absolute idx (or ``None``). Stable across the call's lifetime;
     not persisted.
+
+    ``df`` must be indexed 0..n−1 (``require_positional_index``; ValueError
+    otherwise — PLAN_W 9a).
     """
+    n = require_positional_index(df, "poi_zones._compute_fill_idx_cache")
     cache: Dict[int, Tuple[Optional[int], Optional[int]]] = {}
-    if not imbalances or len(df) == 0:
+    if not imbalances or n == 0:
         return cache
 
     # Numpy positional indexing is ~35x faster than pandas .loc per element
     # (microbench: 0.02ms vs 0.70ms for a 3000-candle scan with 60 starts).
-    # For a contiguous RangeIndex 0..N (which df has after reset_index in the
-    # pipeline) idx_to_pos is the identity map, and pos == idx. We compute it
-    # explicitly so this stays correct for any df.index — sliced sub-entity
-    # frames that have non-contiguous indices route through the dict lookup.
-    n = len(df)
+    # Label == position (checked above), so a hit's position IS its idx.
     required_cols = ("h", "l", "c")
     if any(col not in df.columns for col in required_cols):
         empty = (None, None)
@@ -1552,20 +1552,6 @@ def _compute_fill_idx_cache(
     h_arr = df["h"].to_numpy(dtype=float, copy=False)
     l_arr = df["l"].to_numpy(dtype=float, copy=False)
     c_arr = df["c"].to_numpy(dtype=float, copy=False)
-    df_idx_arr = df.index.to_numpy()
-    if df_idx_arr.dtype.kind in "iu" and n > 0 and df_idx_arr[0] == 0 and df_idx_arr[-1] == n - 1:
-        # Contiguous RangeIndex: pos == idx.
-        idx_to_pos = None
-    else:
-        idx_to_pos = {int(v): i for i, v in enumerate(df_idx_arr)}
-
-    def _pos(idx: int) -> int:
-        if idx_to_pos is None:
-            return idx if 0 <= idx < n else -1
-        return idx_to_pos.get(idx, -1)
-
-    def _idx_from_pos(pos: int) -> int:
-        return int(df_idx_arr[pos]) if idx_to_pos is not None else pos
 
     for inst in imbalances:
         # Degenerate gap → treat as already filled (is_filled returns True
@@ -1577,8 +1563,8 @@ def _compute_fill_idx_cache(
             inst.meta["confirmed_fill_idx"] = None
             continue
 
-        start_pos = _pos(inst.end_idx + 1)
-        if start_pos < 0:
+        start_pos = inst.end_idx + 1
+        if not 0 <= start_pos < n:
             # End of instance is at or past the last candle — no candles
             # available to retrace into.
             cache[id(inst)] = (None, None)
@@ -1595,14 +1581,14 @@ def _compute_fill_idx_cache(
             stroke1_hits = np.where(slice_l <= stroke1_level)[0]
             if stroke1_hits.size:
                 armed_pos = start_pos + int(stroke1_hits[0])
-                armed_idx = _idx_from_pos(armed_pos)
+                armed_idx = armed_pos
                 # Stroke 2 scan starts AFTER armed_pos — the arming candle's own
                 # close never counts (PLAN_S step 2, separate candles).
                 slice_c = c_arr[armed_pos + 1:]
                 stroke2_hits = np.where(slice_c >= stroke2_level)[0]
                 if stroke2_hits.size:
                     confirmed_pos = armed_pos + 1 + int(stroke2_hits[0])
-                    confirmed_fill_idx = _idx_from_pos(confirmed_pos)
+                    confirmed_fill_idx = confirmed_pos
         elif inst.direction == -1:
             stroke1_level = inst.gap_bottom + inst.gap_size * fill_threshold
             stroke2_level = inst.gap_bottom
@@ -1610,12 +1596,12 @@ def _compute_fill_idx_cache(
             stroke1_hits = np.where(slice_h >= stroke1_level)[0]
             if stroke1_hits.size:
                 armed_pos = start_pos + int(stroke1_hits[0])
-                armed_idx = _idx_from_pos(armed_pos)
+                armed_idx = armed_pos
                 slice_c = c_arr[armed_pos + 1:]
                 stroke2_hits = np.where(slice_c <= stroke2_level)[0]
                 if stroke2_hits.size:
                     confirmed_pos = armed_pos + 1 + int(stroke2_hits[0])
-                    confirmed_fill_idx = _idx_from_pos(confirmed_pos)
+                    confirmed_fill_idx = confirmed_pos
 
         cache[id(inst)] = (armed_idx, confirmed_fill_idx)
         inst.meta["armed_idx"] = armed_idx

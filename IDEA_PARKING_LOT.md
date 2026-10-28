@@ -328,6 +328,9 @@ SYLLABUS Week 9 Part 2 "Zone size at entry and stop-loss".
    **Parked by the user (stays in D.2):** B5 — "I think this case is not possible, so let's park for now".
    Order (proposed): 9a (zero change) → 9b (the user's decision, then a plan) → 9c (discussion first). Then Week 9
    Part 1 is complete → push (the user: "don't push just yet") → Part 2.
+   **Progress 2026-10-28 (PLAN_W, `engine_v2/plans/PLAN_W_part1_last_items.md`):** 9a DECIDED ("Require 0..n−1" —
+   both fill checks raise on a frame not indexed 0..n−1, the label-based code deleted) and BUILT = its prediction
+   (zero change vs S_V8c, PLAN_W §1.5).
 
 **D.1 — Ordered (the heavy items):**
 1. **One POI per cycle** (redefine the IC & POI zone logic) — B landed; its chart debugging PAUSED for item 2 (user
@@ -517,12 +520,14 @@ SYLLABUS Week 9 Part 2 "Zone size at entry and stop-loss".
   ended by pool#k, which never started`). Pins: `test_lifecycle_sweep_unit.py::test_a_same_candle_replacement_chain_
   names_the_replacer_that_survives` (was `…_leaves_ended_by_empty_and_warns`, which pinned the old behaviour),
   `test_three_co_starters_all_name_the_last_one`, `test_the_re_point_leaves_a_record_ended_at_an_earlier_candle`.
-- **The fill check's label-based paths disagree on a frame with a missing label** (PLAN_S step 2's landing review,
-  2026-10-21; unreachable — every engine frame is a contiguous 0..n−1 index, 0 on the window): `is_filled`'s fallback
-  loop skips a missing label (`continue`; a `break` mutant there survives the suite), while
-  `poi_zones._compute_fill_idx_cache` returns `(None, None)` when the label `end_idx + 1` is missing. Fix only if a
-  non-contiguous frame ever reaches them. Detail: PLAN_S §6 step 2. SCHEDULED — SESSION ORDER item 9a (the user
-  2026-10-28: "Let's address in next session").
+- ~~**The fill check's label-based paths disagree on a frame with a missing label**~~ — DONE 2026-10-28 (SESSION ORDER
+  item 9a, PLAN_W §1; zero output change): the user's pick "Require 0..n−1" — both fill checks raise `ValueError` on a
+  frame not indexed 0..n−1 (`common/types.require_positional_index`), the label-based fallback loop and the cache's
+  label → position dict deleted (the census: 188,013 of 188,013 `is_filled` calls on a 0..n−1 frame —
+  `plans/plan_w_inputs/w9a_index_census.txt`). Was (PLAN_S step 2's landing review, 2026-10-21): `is_filled`'s
+  fallback skipped a missing label (`continue`; a `break` mutant survived the suite) while the cache returned
+  `(None, None)` when the label `end_idx + 1` was missing. Pins: `test_imbalance.py::test_the_fill_checks_raise_on_a_
+  frame_not_indexed_0_to_n_minus_1`, `test_the_fill_checks_accept_an_int64_index_0_to_n_minus_1`.
 - **Should subs get the DERIVED CTS KL zone as their probe reference?** (today every sub reference zone is ad-hoc).
   SCHEDULED for discussion — SESSION ORDER item 9c (the user 2026-10-28; the derived-but-not-returned answer is
   there). Detail: PART4 §17.12, GOTCHAS (the `kl_zones=[]` pool-path note).

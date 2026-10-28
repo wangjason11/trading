@@ -237,10 +237,9 @@ _SEPARATE_CANDLE_CASES = [  # (rows, the candle that fills — stroke 2; candle 
 
 
 def _frame_and_instance(rows, offset):
-    """The fixture's frame and its one instance. `offset` None: the frame as built — a RangeIndex (the positional
-    fast path of `is_filled`, the cache's identity path). An int: a NON-RangeIndex int64 frame labelled
-    offset..offset+n-1 with the instance re-labelled (the label-based fallback of `is_filled`; the cache's identity
-    path at 0, its dict path otherwise)."""
+    """The fixture's frame and its one instance. `offset` None: the frame as built — a RangeIndex. An int: a
+    NON-RangeIndex int64 frame labelled offset..offset+n-1 with the instance re-labelled — at 0 still 0..n-1 (both fill
+    checks accept it), otherwise both raise (`require_positional_index`, PLAN_W 9a)."""
     out = compute_imbalance(_make_df(rows))
     inst, = out.attrs["imbalances"]
     if offset is None:
@@ -262,21 +261,73 @@ def test_is_filled_the_arming_candle_cannot_also_fill(rows, filled_at):
     assert inst.is_filled(out, check_to_idx=filled_at) is True
 
 
-@pytest.mark.parametrize("rows, filled_at", _SEPARATE_CANDLE_CASES)
-def test_is_filled_fallback_path_separate_candles(rows, filled_at):
-    """The same rule on the label-based fallback loop (a non-RangeIndex frame)."""
-    out, inst = _frame_and_instance(rows, 100)
-    assert inst.is_filled(out, check_to_idx=100 + filled_at - 1) is False
-    assert inst.is_filled(out, check_to_idx=100 + filled_at) is True
+def _relabelled(kind):
+    """`_SAME_CANDLE_BULL` + a candle (5 arms, 6 fills — PLAN_W `plan_w_inputs/w9a_disagreement_demo.py`) on a frame
+    that is NOT 0..n-1, with the instance re-labelled to match: `labelled` 100..106; `missing_label` 0..6 without 2
+    (the instance's `end_idx + 1` — the old cache answered `(None, None)` there while the old fallback skipped the label
+    and answered filled); `out_of_order` 0, 1, 2, 3, 5, 4, 6 (first 0, last n-1 — the old cache's identity test passed
+    it)."""
+    rows = _SAME_CANDLE_BULL[:3] + [
+        (1.12, 1.13, 1.08, 1.12),   # 3: no arm (low 1.08 > 1.035)
+        (1.12, 1.13, 1.08, 1.12),   # 4: no arm
+        (1.05, 1.13, 1.02, 1.09),   # 5: low 1.02 arms; close 1.09 inside
+        (1.09, 1.14, 1.08, 1.12),   # 6: close 1.12 >= 1.10 -> stroke 2: filled
+    ]
+    out = compute_imbalance(_make_df(rows))
+    inst, = out.attrs["imbalances"]
+    if kind == "labelled":
+        out.index = pd.Index([i + 100 for i in range(len(out))], dtype="int64")
+        inst = ImbalanceInstance(start_idx=101, end_idx=101, direction=1, gap_top=inst.gap_top,
+                                 gap_bottom=inst.gap_bottom, gap_size=inst.gap_size)
+    elif kind == "missing_label":
+        out = out.drop(index=2)
+    else:
+        out.index = pd.Index([0, 1, 2, 3, 5, 4, 6], dtype="int64")
+    return out, inst
 
 
-@pytest.mark.parametrize("offset", [None, 0, 100], ids=["range_index", "int64_index", "labelled_index"])
+@pytest.mark.parametrize("kind", ["labelled", "missing_label", "out_of_order"])
+def test_the_fill_checks_raise_on_a_frame_not_indexed_0_to_n_minus_1(kind, monkeypatch):
+    """Both fill checks scan by position and read an idx as a position, so a frame whose labels are not 0..n-1 raises
+    (PLAN_W 9a, the user 2026-10-28: "Require 0..n−1"; the label-based fallbacks it replaces disagreed on a missing
+    label). The harm without the check, shown: the positional scan names the wrong candles — the labels of the
+    arming / filling rows are (105, 106) / (5, 6) / (4, 6); bypassed, the cache answers (None, None) / (4, 5) / (5, 6)
+    and `is_filled` calls the gap labelled 100.. unfilled."""
+    from engine_v2.zones import poi_zones
+    out, inst = _relabelled(kind)
+    with pytest.raises(ValueError, match="indexed 0..n-1"):
+        inst.is_filled(out, check_to_idx=int(out.index.max()))
+    with pytest.raises(ValueError, match="indexed 0..n-1"):
+        poi_zones._compute_fill_idx_cache(out, [inst], IMBALANCE_FILL_THRESHOLD)
+    # Bypassed: the answer the check prevents.
+    monkeypatch.setattr("engine_v2.common.types.require_positional_index", lambda df, caller: len(df))
+    monkeypatch.setattr(poi_zones, "require_positional_index", lambda df, caller: len(df))
+    truth = (int(out.index[out["l"] == 1.02][0]), int(out.index[(out["c"] == 1.12) & (out["h"] == 1.14)][0]))
+    assert truth == {"labelled": (105, 106), "missing_label": (5, 6), "out_of_order": (4, 6)}[kind]
+    bypassed = poi_zones._compute_fill_idx_cache(out, [inst], IMBALANCE_FILL_THRESHOLD)[id(inst)]
+    assert bypassed == {"labelled": (None, None), "missing_label": (4, 5), "out_of_order": (5, 6)}[kind] != truth
+    if kind == "labelled":
+        assert inst.is_filled(out, check_to_idx=106) is False
+
+
+def test_the_fill_checks_accept_an_int64_index_0_to_n_minus_1():
+    """An integer index EQUAL to 0..n-1 is not a RangeIndex but label == position: accepted, the same answers. So is
+    an empty frame, whatever its index dtype (no label to mismatch): unfilled, no cache entries."""
+    from engine_v2.zones.poi_zones import _compute_fill_idx_cache
+    out, inst = _frame_and_instance(_SAME_CANDLE_BULL, 0)
+    assert inst.is_filled(out, check_to_idx=3) is False and inst.is_filled(out, check_to_idx=4) is True
+    empty = pd.DataFrame({"h": [], "l": [], "c": []}, index=pd.Index([], dtype=object))
+    assert inst.is_filled(empty, check_to_idx=4) is False
+    assert _compute_fill_idx_cache(empty, [inst], IMBALANCE_FILL_THRESHOLD) == {}
+
+
+@pytest.mark.parametrize("offset", [None, 0], ids=["range_index", "int64_index"])
 @pytest.mark.parametrize("rows, filled_at", _SEPARATE_CANDLE_CASES)
 def test_fill_cache_separate_candles_and_agrees_with_is_filled(rows, filled_at, offset):
-    """`poi_zones._compute_fill_idx_cache` (the POI activation sweep's numpy scan — the third implementation of the
+    """`poi_zones._compute_fill_idx_cache` (the POI activation sweep's numpy scan — the second implementation of the
     rule): armed at candle 3, confirmed at the filling candle (never the arming one); and at EVERY horizon `t` its
-    answer equals `is_filled(t)` — the documented mirror — on the fast path (range_index) and the fallback (the
-    int64 frames)."""
+    answer equals `is_filled(t)` — the documented mirror — on a RangeIndex frame and an int64 0..n-1 one (a frame
+    labelled otherwise raises — the test above)."""
     from engine_v2.zones.poi_zones import _compute_fill_idx_cache
     k = offset or 0
     out, inst = _frame_and_instance(rows, offset)

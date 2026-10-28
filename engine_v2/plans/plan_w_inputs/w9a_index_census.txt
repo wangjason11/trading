@@ -1,0 +1,5 @@
+window NZD_USD H1 2025-12-01 00:00:00+00:00 -> 2026-01-20 00:00:00+00:00; H1 frame 1058 candles
+
+    16899  _compute_fill_idx_cache | RangeIndex(0, n) | identity path | instances
+       65  _compute_fill_idx_cache | RangeIndex(0, n) | identity path
+   188013  is_filled | RangeIndex(0, n)

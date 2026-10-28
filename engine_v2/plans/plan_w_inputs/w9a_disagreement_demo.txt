@@ -1,0 +1,13 @@
+The frame (labels 100..105; candle 104 arms, 105 fills):
+  label     o     h     l     c   note
+    100  0.95  1.00  0.90  0.95   c1 (gap_bottom 1.00)
+    101  1.02  1.08  1.01  1.07   c2 bullish imbalance
+    102  1.10  1.15  1.10  1.14   c3 (gap_top 1.10); stroke 1 = low <= 1.10 - 0.10 x 0.65 = 1.035
+    103  1.12  1.13  1.08  1.12   no arm (low 1.08)
+    104  1.05  1.13  1.02  1.09   low 1.02 ARMS (close 1.09 inside)
+    105  1.09  1.14  1.08  1.12   close 1.12 >= 1.10 -> stroke 2: FILLED
+
+case                          is_filled(t=105)   cache (armed, filled)   agree?
+no label missing              True               (104, 105)              yes
+label 102 missing (end_idx+1) True               (None, None)            NO
+label 103 missing (later)     True               (104, 105)              yes

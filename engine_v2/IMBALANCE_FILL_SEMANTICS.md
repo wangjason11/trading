@@ -145,10 +145,13 @@ red candle closing above a bullish gap's top completes it (H1 450 on gap 447, ar
 candle could do both (a pinbar whose wick reaches the arming level while its body stays outside the gap) —
 ~30 % of committed fills on the reference window (H1 48 / 152, M15 153 / 522 at 0.70). A close past the gap
 outer **before** any stroke 1 does not count either. The scan starts at `end_idx + 1` — the last c3, which
-cannot arm its own gap. The rule has three implementations, kept in step: `is_filled`'s positional fast path,
-its label-based fallback, and `zones/poi_zones.py::_compute_fill_idx_cache` (pinned:
-`tests/test_imbalance.py` — the separate-candle fixtures on all three, and the cache == `is_filled` at every
-horizon).
+cannot arm its own gap. The rule has two implementations, kept in step: `is_filled`'s positional scan and
+`zones/poi_zones.py::_compute_fill_idx_cache` (pinned: `tests/test_imbalance.py` — the separate-candle fixtures on
+both, and the cache == `is_filled` at every horizon). Both read an idx as a position, so both require a frame
+indexed 0..n−1 — every engine frame is — and raise `ValueError` on any other (`common/types.require_positional_index`;
+PLAN_W 9a, the user 2026-10-28: "Require 0..n−1"). Until then `is_filled` had a label-based fallback for any other
+index and the cache a label → position dict; the two disagreed on a missing label and neither was ever run (the
+census: 188,013 of 188,013 `is_filled` calls on a 0..n−1 frame — `plans/plan_w_inputs/w9a_index_census.txt`).
 
 The state machine is **monotonic in `check_to_idx`**: once `is_filled`
 returns True at some `check_to_idx = t`, it returns True for all larger

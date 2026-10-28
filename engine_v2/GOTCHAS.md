@@ -1372,14 +1372,15 @@ for an observed bottleneck.
 
 **Subtleties:**
 - `to_numpy(copy=False)` returns a view when possible; cheap.
-- For non-RangeIndex (sparse / non-zero-based), build the
-  `idx_to_pos` dict once. `np.searchsorted` works too if df.index is sorted.
-- Don't forget to translate the positional hit back to df idx for callers
-  that store it (`int(df_idx_arr[hit_pos])`). On RangeIndex they're equal,
-  but elsewhere they aren't.
+- A positional scan reads a hit's position as its idx — true only on a frame
+  indexed 0..n−1. State that instead of supporting other frames: call
+  `common/types.require_positional_index(df, caller)` (ValueError otherwise).
+  A label-based fallback for "any other index" is code no frame runs — the
+  fill checks' two disagreed on a missing label, unseen until PLAN_S's landing
+  review (removed by PLAN_W 9a, 2026-10-28).
 
 **Concrete example:** `engine_v2/zones/poi_zones.py::_compute_fill_idx_cache`
-(landed 2026-05-18).
+(landed 2026-05-18; the label → position dict it had removed by PLAN_W 9a).
 
 ---
 

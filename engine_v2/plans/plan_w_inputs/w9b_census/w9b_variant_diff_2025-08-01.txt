@@ -1,0 +1,30 @@
+window 2025-08-01 -> 2025-09-20: base vs gate_any
+
+== H1.main
+   events: EQUAL (173 / 173)
+   kl_zones: EQUAL (6 / 6)
+   sids: EQUAL (1 / 1)
+   poi_zones: 1 -> 1
+   ic records: 3 -> 3 (rows 157 -> 157)
+
+== H1.main >> M15.counter
+   events: EQUAL (396 / 396)
+   kl_zones: EQUAL (4 / 4)
+   sids: EQUAL (3 / 3)
+   poi_zones: 2 -> 3
+     NEW sub 2 sid 0 cyc 1: IC 2447 (2025-09-05 11:45) buy [0.58720, 0.58740] band=61.8-80 ip_outcome=pattern ip_rank=3C.i ranking_rule=None
+         cts_established 2525 (2025-09-08 07:15), confirmed_idx 2542 (2025-09-08 11:30), end 3143 (2025-09-16 17:45) end_reason=parent_end status=ended
+         activation_history: [(2542, True, 'initial')]
+   ic records: 3 -> 4 (rows 160 -> 522)
+     NEW ic record sub 2 sid 0 cyc 1: 362 rows, candidates 3, pick [2447], no-IC reason [], ip_outcome ['pattern'], fib bos 2362 -> cts 3142
+
+== H1.main >> M15.confluence
+   events: EQUAL (437 / 437)
+   kl_zones: EQUAL (6 / 6)
+   sids: EQUAL (4 / 4)
+   poi_zones: 3 -> 4
+     NEW sub 2 sid 0 cyc 1: IC 2447 (2025-09-05 11:45) buy [0.58720, 0.58740] band=61.8-80 ip_outcome=pattern ip_rank=3C.i ranking_rule=None
+         cts_established 2525 (2025-09-08 07:15), confirmed_idx 2542 (2025-09-08 11:30), end 3143 (2025-09-16 17:45) end_reason=parent_end status=ended
+         activation_history: [(2542, True, 'initial')]
+   ic records: 5 -> 6 (rows 376 -> 738)
+     NEW ic record sub 2 sid 0 cyc 1: 362 rows, candidates 3, pick [2447], no-IC reason [], ip_outcome ['pattern'], fib bos 2362 -> cts 3142
