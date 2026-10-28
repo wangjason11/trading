@@ -262,7 +262,8 @@ SYLLABUS Week 9 Part 2 "Zone size at entry and stop-loss".
    after seeing both ("Final + convergence check"; natural kept as a switch) — LANDED 2026-10-28 = its prediction
    (S_U3 `20261028_123113_32c544d`); U3b, the floor seed guard steps back until final mode converges — the user:
    "Guard extends" — LANDED 2026-10-28 = its prediction (only the two `[floor_seed]` lines change, every output
-   byte-equal; PLAN_U §6b / §9 "U3b")) — D.1 item 4 below. NEXT: item 8.
+   byte-equal; S_U3b `20261028_130713_9c3949d`, source `9c3949d`; PLAN_U §6b / §9 "U3b")) — D.1 item 4 below.
+   NEXT: item 8.
 8. **The remaining minor items before Part 2** — after item 7, in the next session(s) (the user 2026-10-27: "any
    remaining minor tasks & items in the next session(s) that we previously documented as pre-reqs to starting part 2
    of week 9"). Candidates on file: D.2 below (the backlog "decided after D.1 is complete", the user 2026-10-01) and

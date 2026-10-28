@@ -7,8 +7,8 @@ window LANDED 2026-10-28 (= §6 exactly — the user's pick after seeing both, n
 `32c544d`, save **S_U3** `20261028_123113_32c544d` = the new `LATEST_<branch>`, U3b's `/compare` baseline; §9 "U3"); U3b
 LANDED 2026-10-28 = §6b exactly — the floor seed guard steps back until final mode converges (the user's "Guard
 extends", §9 "U3"; the plan + prediction §6b; the replay = S_U3 byte for byte, only the two `[floor_seed]` lines
-changed; the user's look: "go ahead and commit-save"; §9 "U3b"). PLAN_U COMPLETE — SESSION ORDER item 7 DONE; next
-item 8.** U1's
+changed; the user's look: "go ahead and commit-save"; source `9c3949d`, save **S_U3b** `20261028_130713_9c3949d` =
+the new `LATEST_<branch>`; §9 "U3b"). PLAN_U COMPLETE — SESSION ORDER item 7 DONE; next item 8.** U1's
 baseline **S_controls**
 `artifacts/commits/week9-entries-decisions/20261027_164527_5dfb5b3` (`LATEST_week9-entries-decisions` until S_U1; source
 `5dfb5b3`, HEAD at drafting `4914f31`, code = `5dfb5b3`); suite 2108. Session order item 7 (register
@@ -571,6 +571,10 @@ each lands:
     line without its convergence → FAIL (floor seed); a not-converged crash → FAIL). **= S_U3 byte for byte**
     (`u3b_compare.txt`): 30 / 30 CSVs md5-equal, the three figures' full JSON equal (79 / 154 / 302 traces, layouts
     equal), the 3 PNGs byte-equal; chart counts 79 / 232, 154 / 134, 302 / 305.
+  - **Landed:** source `9c3949d`, save `2fcfcb3`, trunk `ef65a65` = **S_U3b** `20261028_130713_9c3949d` (run mode on
+    the committed code: FETCH GATE PASS + both new seed lines, skip grep 33, no RETRY, timing total 64.48 s; the save
+    = S_U3 byte for byte again — 30 / 30 CSVs md5-equal, the figures' full JSON and the PNGs equal). PLAN_U is
+    complete; S_U3b is item 8's `/compare` baseline.
 - **Variant** (`qa_pinbar_floor_inputs/make_variant_u3.py`: a `git archive` of `e5c3b07` in `%TEMP%\u3v`, the
   `CandleParams.pinbar_floor_window_source` default "natural" -> "final", nothing else — the setting's one read site is
   `rolling_pinbar_body_floor`): FETCH GATE PASS, both `[floor_seed]` lines = S_U2's (the guard counts body-% pinbars);

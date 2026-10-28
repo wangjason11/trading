@@ -866,7 +866,7 @@ CTS_CONFIRMED 1748 → 1751) and sub 1 (cycle 0 1818 → 1833, cycle 1 reconfirm
 → 302 / 305 (the H1 CTS zone's 2 fewer bounds steps, on H1 + both overlays; the moved dots / labels / wave candles /
 WVMI marks; every candle hover's floor). The fetch gate checks the two `[floor_seed]` lines (§2b) — H1 559 / 232, M15
 480 / 189. Skip grep 33 (the same lines). Suite 2146; mutants 30 / 30. S_U2 `20261028_113834_84fbbc6` (source
-`84fbbc6`, save `ca25478`, trunk `562d237`; = `LATEST_<branch>` from 2026-10-28; run mode, the save replay =
+`84fbbc6`, save `ca25478`, trunk `562d237`; = `LATEST_<branch>` until S_U3, below; run mode, the save replay =
 `u2_compare.py` output identical to the compared replay's). U3 (the final window) is the next flip.
 **PLAN_U U3 (2026-10-28, the final window — the floor's 90 pinbars include the floor-demoted ones, candle by candle;
 `CandleParams.pinbar_floor_window_source` default "natural" → "final", "natural" kept as a switch; the user's pick
@@ -885,7 +885,7 @@ breakout-pattern markers, the H1 FP wave candle + its vertical line, the conflue
 candle, the WVMI LP hovers. The landing replay = the U3 variant (`make_variant_u3.py`): 30 / 30 CSVs byte-equal, the
 figures and PNGs equal. The `[floor_seed]` lines unchanged (the guard counts body-% pinbars). Skip grep 33 (the same
 lines). Suite 2146. S_U3 `20261028_123113_32c544d` (source `32c544d`, save `704785e`, trunk `839c9f2`; =
-`LATEST_<branch>` from 2026-10-28; run mode, `u3_compare.py` on the save = the compared replay's output). U3b (the
+`LATEST_<branch>` until S_U3b, below; run mode, `u3_compare.py` on the save = the compared replay's output). U3b (the
 seed guard extends until final mode converges) is next — it changes the two `[floor_seed]` lines.
 **PLAN_U U3b (2026-10-28, the floor seed guard steps back until final mode converges — the user's "Guard extends";
 `plans/PLAN_U_rolling_pinbar_body_floor.md` §6b) — the LOG only, every output byte-equal:** the guard also stops only
@@ -896,7 +896,8 @@ candles / 355 body-% pinbars, 3 steps; M15 480 / 189 → 816 / 310, 3 steps; eac
 JSON equal (`cmp_fig_full.py`), the PNGs byte-equal, chart counts unchanged (79 / 232, 154 / 134, 302 / 305;
 `qa_pinbar_floor_inputs/u3b_compare.txt`); `data_fetch` 2.6 → 4.2 s. Skip grep 33 (the same lines). Not a
 save-format boundary. Suite 2154; mutants 11 / 11. A `[floor_seed] ERROR: … the final window has not converged …`
-= a crashed run (§2b).
+= a crashed run (§2b). S_U3b `20261028_130713_9c3949d` (source `9c3949d`, save `2fcfcb3`, trunk `ef65a65`; =
+`LATEST_<branch>` from 2026-10-28; run mode, the save = S_U3 byte for byte again). PLAN_U is complete.
 
 **M15.counter** and **M15.confluence** (9 files each — 7 per-lens debug CSVs
 with the same filename suffixes prefixed `*_M15_counter_` /
