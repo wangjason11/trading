@@ -1,4 +1,4 @@
-"""PLAN_W 9d — today's KL zone hover, rendered as text for one BOS and one CTS zone of the H1 chart (S_W9c), with the
+"""PLAN_W §4 — the KL zone hover before the `kind=` line, rendered as text for one BOS and one CTS zone of the H1 chart (S_W9c), with the
 proposed kind line in each option's place. The hover = `kl_zone_hovertemplate("1H")` filled with the trace's customdata.
 
     PYTHONIOENCODING=utf-8 PYTHONPATH=. python engine_v2/plans/plan_w_inputs/w9d_kl_hover_examples.py SAVE_DIR [OUT.txt]

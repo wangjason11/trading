@@ -341,4 +341,8 @@ exactly when hidden. `debug/chart_census.py` S_W9c vs current: 0 deltas, no unkn
 rule for a hover-format change). Gate PASS, skip grep 33. Suite 2173 (the KL hover pins + one new); mutants 4 / 4
 KILLED (`mutants_9d.py` / `.txt`). A hover-format boundary (figure-only; positional `cmp_save` fine, a hover diff shows
 every KL hover changed).
-The user (after the look, AskUserQuestion): **"Commit + /commit-save now"** — its own save, S_W9d.
+The user (after the look, AskUserQuestion): **"Commit + /commit-save now"** — its own save: **S_W9d
+`20261028_182318_7c9477e`** (source `7c9477e`, save `c02c567`, trunk `050bf18`; = `LATEST_<branch>`; the save =
+`w9d_landing_check.py` ALL AS PREDICTED vs S_W9c). (`w9d_kl_hover_examples.py` / `.txt` — today's H1 KL hover for one
+BOS and one CTS zone, the kind readable only from `side=` vs `struct_direction=` — appeared in this folder during
+the label question; its origin was not traced: kept, it is accurate and on topic.)

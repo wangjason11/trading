@@ -942,9 +942,19 @@ S_W9b exactly the two lens `*_kl_zones.csv` differ, rows ADDED only (confluence 
 `plans/plan_w_inputs/w9c1_landing_check.py BASE CUR_DEBUG CUR_CHARTS VARIANT_TREE` (multisets; the variant tree from
 `w9c_variant_replay.py`) or `qa_chart_edits_inputs/fig_named_diff.py`; the button: `w9c1_headless_check.py`. Skip
 grep 33; the gate lines unchanged. Suite 2172; mutants 7 / 7 + 6 / 6 + 8 / 8 (the control bar's re-anchored).
-S_W9c `20261028_180228_538cd2f` (source `538cd2f`, save `bfe9f93`, trunk `58e5cb5`; = `LATEST_<branch>` from
-2026-10-28; run mode, the save = `w9c1_landing_check.py` ALL AS PREDICTED). SESSION ORDER item 9 DONE — **Week 9
+S_W9c `20261028_180228_538cd2f` (source `538cd2f`, save `bfe9f93`, trunk `58e5cb5`; = `LATEST_<branch>` until S_W9d,
+below; run mode, the save = `w9c1_landing_check.py` ALL AS PREDICTED). SESSION ORDER item 9 DONE — **Week 9
 Part 1 COMPLETE.**
+**PLAN_W §4 (2026-10-28, after item 9 — the user: "yes we should add that to KL zone hovers. For consistency it
+should be done for both main and subs") — FIGURE-ONLY, a hover-format boundary:** every KL zone hover gains
+`kind=BOS` / `kind=CTS` right after `KL Zone` (`_zone_render.kl_zone_hovertemplate` + `kl_zone_customdata` slot 10 —
+the H1 chart, the M15 charts' H1 overlay, every sub zone incl. the hidden CTS ones; the label = the dot hover's
+`kind=`). Vs S_W9c: 30 / 30 CSVs, the PNGs, the layouts (shapes) equal; changed exactly the KL hover traces — H1 26,
+confluence 208, counter 72 — each in `hovertemplate` (+ the one line) and `customdata` (+ the kind) only; check with
+`plans/plan_w_inputs/w9d_landing_check.py BASE CUR_DEBUG CUR_CHARTS`; positional `cmp_save` is fine, a hover diff
+(`cmp_hover.py`) shows every KL hover changed; `chart_census.py` 0 deltas. Skip grep 33. Suite 2173; mutants 4 / 4.
+S_W9d `20261028_182318_7c9477e` (source `7c9477e`, save `c02c567`, trunk `050bf18`; = `LATEST_<branch>` from
+2026-10-28; run mode, the save = `w9d_landing_check.py` ALL AS PREDICTED vs S_W9c).
 
 **M15.counter** and **M15.confluence** (9 files each — 7 per-lens debug CSVs
 with the same filename suffixes prefixed `*_M15_counter_` /
