@@ -1,0 +1,26 @@
+--- today (BOS zone; the kind is readable only from side=sell vs struct_direction=-1):
+TF=1H
+KL Zone
+side=sell
+sid=1 | cycle_id=2
+base_pattern=base inside bar
+base_idx=826
+confirmed_idx=902
+lifecycle=[902, open] | end_reason=open
+top=0.58105
+bottom=0.57996
+zone_size=10.9 pips
+struct_direction=-1
+--- today (CTS zone; the kind is readable only from side=buy vs struct_direction=-1):
+TF=1H
+KL Zone
+side=buy
+sid=1 | cycle_id=2
+base_pattern=base inside bar
+base_idx=905
+confirmed_idx=935
+lifecycle=[935, open] | end_reason=open
+top=0.57282
+bottom=0.57112
+zone_size=17.0 pips
+struct_direction=-1

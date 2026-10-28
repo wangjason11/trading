@@ -1,0 +1,5 @@
+KILLED    v9d_no_line                        3 failing: test_main_kl_hover_renders_the_spec_order, test_sub_kl_hover_carries_the_sub_identity_and_the_first_rec, test_the_kl_hover_names_the_zone_kind_on_main_and_sub_zones
+KILLED    v9d_wrong_slot                     3 failing: test_main_kl_hover_renders_the_spec_order, test_sub_kl_hover_carries_the_sub_identity_and_the_first_rec, test_the_kl_hover_names_the_zone_kind_on_main_and_sub_zones
+KILLED    v9d_constant_kind                  1 failing: test_the_kl_hover_names_the_zone_kind_on_main_and_sub_zones
+KILLED    v9d_no_guard                       1 failing: test_the_kl_hover_names_the_zone_kind_on_main_and_sub_zones
+4/4 KILLED  (results: C:/Users/wangj/AppData/Local/Temp/mr9d\results.json)

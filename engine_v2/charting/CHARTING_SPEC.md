@@ -161,8 +161,8 @@ To change any visual element:
 - Stepwise bounds from `meta["bounds_steps"]` still drive per-step (top, bottom) — the fill within the active stretch is intersected with each step's x-range so each step's y-bounds apply. A step's x is `kl_zones_v1.bounds_step_draw_idx(step)`: the INIT step's `base_idx`, an expansion's `expanded_idx` (PLAN_N N1; `start_idx` on both until then).
 - Single vertical confirm line at `confirmed_idx`.
 - **A sub's CTS KL zones (M15 charts; PLAN_W 9c-1, the user 2026-10-28: "Export + chart, toggle off"):** drawn exactly
-  like its BOS zones (style, tier, fills, outline, confirm line, hover — `KL Zone`, `side=`, as the H1 chart's CTS
-  zones; no BOS / CTS label on any chart) but HIDDEN on load: every trace / shape a CTS zone adds is in the legend
+  like its BOS zones (style, tier, fills, outline, confirm line, hover — `kind=CTS` since PLAN_W §4, as the H1
+  chart's CTS zones) but HIDDEN on load: every trace / shape a CTS zone adds is in the legend
   group `sub_cts_zones` (`export_m15_chart.SUB_CTS_GROUP`, `_tag_sub_cts_zone`, `visible=False`), shown by the control
   bar's `Sub CTS zones` button (§14). The PNGs never show them. Until 9c-1 a sub's projection returned its BOS zones
   only (the CTS ones fed only its CTS wave candles). On the reference window: counter 7, confluence 20 (4 of them on
@@ -174,6 +174,7 @@ To change any visual element:
   ```
   TF=1H
   KL Zone
+  kind=BOS                                       ← the zone's source_kind, BOS / CTS (PLAN_W §4, 2026-10-28)
   side=buy
   sid=0 | cycle_id=0                             ← sub: sub_id=X | cycle_id=X + the dot hover's first record: line
   base_pattern=base inside bar

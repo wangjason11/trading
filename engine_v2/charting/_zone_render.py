@@ -666,10 +666,13 @@ def main_zone_id_line(meta: dict) -> str:
 def kl_zone_hovertemplate(tf: str) -> str:
     """The KL zone hover — ONE template for the H1 chart and the M15 charts' H1 overlay (`tf="1H"`) and the sub
     zones (`"15M"`); customdata = `kl_zone_customdata`. Slot 1 = the identity line(s): `main_zone_id_line`, or a
-    sub's `sub_id | cycle_id` + its `first record:` line."""
+    sub's `sub_id | cycle_id` + its `first record:` line. `kind=` (slot 10, appended so slots 0–9 keep their places)
+    = the zone's `source_kind`, BOS or CTS — on the main's and the subs' zones alike (PLAN_W §4, the user 2026-10-28:
+    "For consistency it should be done for both main and subs"; label `kind=`, the user's pick)."""
     return (
         f"TF={tf}<br>"
         "KL Zone<br>"
+        "kind=%{customdata[10]}<br>"
         "side=%{customdata[0]}<br>"
         "%{customdata[1]}<br>"
         "base_pattern=%{customdata[2]}<br>"
@@ -692,8 +695,10 @@ def kl_zone_customdata(zone: Any, id_lines: str, top: float, bottom: float, pip_
     conf = int(m["confirmed_idx"])
     first_active = [int(ev["idx"]) for ev in m["activation_history"] if ev["active"]]
     assert first_active == [conf], f"[chart] KL zone confirmed {conf}, activations {first_active}"
+    assert zone.source_kind in ("BOS", "CTS"), f"[chart] KL zone source_kind {zone.source_kind!r}"
     return [str(zone.side), id_lines, str(m["base_pattern"]), int(m["base_idx"]), conf, zone_lifecycle_line(m),
-            float(top), float(bottom), zone_size_text(top, bottom, pip_size), int(m["struct_direction"])]
+            float(top), float(bottom), zone_size_text(top, bottom, pip_size), int(m["struct_direction"]),
+            str(zone.source_kind)]
 
 
 def poi_zone_hovertemplate(tf: str) -> str:

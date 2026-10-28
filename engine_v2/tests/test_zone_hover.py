@@ -39,7 +39,7 @@ def _act(*idx_active):
 
 def _kl_sid0_c0_bos():
     """H1 sid 0 cycle 0's BOS KL zone: active from 115, ended by the next cycle at 652."""
-    return SimpleNamespace(side="buy", meta={
+    return SimpleNamespace(side="buy", source_kind="BOS", meta={
         "structure_id": 0, "cycle_id": 0, "struct_direction": 1, "base_pattern": "base inside bar", "base_idx": 96,
         "confirmed_idx": 115, "activation_history": _act((115, True)), "end_idx": 652, "end_reason": "next_cycle"})
 
@@ -95,6 +95,7 @@ def test_main_kl_hover_renders_the_spec_order():
     assert _render(kl_zone_hovertemplate("1H"), row).split("<br>") == [
         "TF=1H",
         "KL Zone",
+        "kind=BOS",                                  # PLAN_W §4 (the user 2026-10-28)
         "side=buy",
         "sid=0 | cycle_id=0",
         "base_pattern=base inside bar",
@@ -172,5 +173,24 @@ def test_sub_kl_hover_carries_the_sub_identity_and_the_first_record():
     first = "first record: lens=confluence | parent_sid=0 | parent_cycle_id=0"
     row = kl_zone_customdata(z, _sub_zone_id_lines(0, 0, first), 0.55910, 0.55808, PIP)
     lines = _render(kl_zone_hovertemplate("15M"), row).split("<br>")
-    assert lines[:5] == ["TF=15M", "KL Zone", "side=buy", "sub_id=0 | cycle_id=0", first]
-    assert len(lines) == 13
+    assert lines[:6] == ["TF=15M", "KL Zone", "kind=BOS", "side=buy", "sub_id=0 | cycle_id=0", first]
+    assert len(lines) == 14
+
+
+def test_the_kl_hover_names_the_zone_kind_on_main_and_sub_zones():
+    """PLAN_W §4 (the user 2026-10-28: "yes we should add that to KL zone hovers. For consistency it should be done for
+    both main and subs"; the label `kind=`, the user's pick): the line right after `KL Zone` names the zone's
+    `source_kind` — a CTS zone `kind=CTS` (an H1 CTS zone, or a sub's — drawn hidden behind `Sub CTS zones`, PLAN_W
+    9c-1), a BOS zone `kind=BOS`; slots 0–9 keep their places (the kind is slot 10). Anything else fails loudly."""
+    first = "first record: lens=confluence | parent_sid=0 | parent_cycle_id=0"
+    for kind in ("BOS", "CTS"):
+        z = _kl_sid0_c0_bos()
+        z.source_kind = kind
+        for tf, ids in (("1H", main_zone_id_line(z.meta)), ("15M", _sub_zone_id_lines(0, 0, first))):
+            row = kl_zone_customdata(z, ids, 0.55910, 0.55808, PIP)
+            assert row[10] == kind and row[0] == "buy" and row[9] == 1
+            assert _render(kl_zone_hovertemplate(tf), row).split("<br>")[1:3] == ["KL Zone", f"kind={kind}"]
+    z.source_kind = "POI"
+    with pytest.raises(AssertionError, match="source_kind 'POI'"):
+        kl_zone_customdata(z, "id", 0.55910, 0.55808, PIP)
+

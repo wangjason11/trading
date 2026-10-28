@@ -312,3 +312,33 @@ and 4 on the M15 control-config call (it gained `sub_cts_group=`): re-anchored b
 KILLED (`.txt`).
 - **The user's chart look (2026-10-28, the reference window's M15 charts, the button): "thank you this look good. please
   proceed"** — the label `Sub CTS zones`, its place next to `Parent (1H)` and hidden-on-load as built.
+
+---
+
+## 4. The KL zone hover's `kind=` line (the user 2026-10-28, after item 9)
+
+Raised at the session's close (9c-1 left the sub CTS zones on the KL zone hover, which never said BOS or CTS on any
+chart — `side=` vs the structure's direction told them apart). Offered as an idea for the backlog; **the user: "yes
+we should add that to KL zone hovers. For consistency it should be done for both main and subs"**. The label (options
+shown with a rendered hover each: `source_kind=` — the CSV column / code field, recommended; `zone_kind=`; `kind=`):
+**the user: `kind=BOS`**, right after the `KL Zone` title.
+The label matches the BOS / CTS dot hover's own `kind=` line (CHARTING_SPEC "Dot hover": `kind=BOS`).
+
+**The change:** `charting/_zone_render.kl_zone_hovertemplate` gains `kind=%{customdata[10]}<br>` right after `KL Zone`;
+`kl_zone_customdata` appends `str(zone.source_kind)` as slot 10 (slots 0–9 keep their places for any reader) and fails
+loudly on a kind other than BOS / CTS. One template + one row builder serve every KL zone hover: the H1 chart, the M15
+charts' H1 overlay and every sub zone (incl. the hidden CTS ones). **Prediction: FIGURE-ONLY, the KL hover traces
+only** — counted on S_W9c (`w9d_kl_hover_count.py` → `w9d_kl_hover_count_S_W9c.txt`): H1 26, confluence 208 (106
+hidden CTS), counter 72 (32 hidden CTS) change in `hovertemplate` + `customdata` only; 30 / 30 CSVs, every other trace,
+the layouts (shapes) and the PNGs equal.
+
+**Result (2026-10-28) — = the prediction.** The replay (78.3 s wall: data_fetch 6.03, multi_tf_dual 12.66, chart_h1
+6.39, chart_m15_counter 12.96, chart_m15_confluence 38.96), `w9d_landing_check.py S_W9c` → `w9d_landing_check.txt`
+ALL AS PREDICTED: CSVs 30 / 30 md5-equal, PNGs equal, layouts equal; changed exactly the KL hover traces — H1 26 (BOS
+6, CTS 20), confluence 208 (sub BOS 76 shown, sub CTS 106 hidden, overlay BOS 6 / CTS 20), counter 72 (14 / 32, 6 /
+20), each template = S_W9c's + the one line, each customdata row = S_W9c's + the kind; a sub hover is `kind=CTS`
+exactly when hidden. `debug/chart_census.py` S_W9c vs current: 0 deltas, no unknown key, both lenses (the GOTCHAS
+rule for a hover-format change). Gate PASS, skip grep 33. Suite 2173 (the KL hover pins + one new); mutants 4 / 4
+KILLED (`mutants_9d.py` / `.txt`). A hover-format boundary (figure-only; positional `cmp_save` fine, a hover diff shows
+every KL hover changed).
+The user (after the look, AskUserQuestion): **"Commit + /commit-save now"** — its own save, S_W9d.

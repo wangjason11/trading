@@ -1,0 +1,3 @@
+NZD_USD_H1_2025-11-15_2026-01-20_sd-1_eps0p0001_rk2-5.html: 26 KL hover traces of 79 — {'KL zone (inactive)': 22, 'KL zone': 4}; in sub_cts_zones: 0
+NZD_USD_H1_2025-11-15_2026-01-20_sd-1_eps0p0001_rk2-5_M15_confluence.html: 208 KL hover traces of 424 — {'M15 KL zone': 182, 'H1 KL zone (overlay)': 26}; in sub_cts_zones: 106
+NZD_USD_H1_2025-11-15_2026-01-20_sd-1_eps0p0001_rk2-5_M15_counter.html: 72 KL hover traces of 192 — {'M15 KL zone': 46, 'H1 KL zone (overlay)': 26}; in sub_cts_zones: 32

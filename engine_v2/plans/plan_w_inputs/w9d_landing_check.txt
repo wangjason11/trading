@@ -1,0 +1,8 @@
+CSVs: 30 compared, differing []
+PNG NZD_USD_H1_2025-11-15_2026-01-20_sd-1_eps0p0001_rk2-5.png equal: True
+PNG NZD_USD_H1_2025-11-15_2026-01-20_sd-1_eps0p0001_rk2-5_M15_confluence.png equal: True
+PNG NZD_USD_H1_2025-11-15_2026-01-20_sd-1_eps0p0001_rk2-5_M15_counter.png equal: True
+OK  NZD_USD_H1_2025-11-15_2026-01-20_sd-1_eps0p0001_rk2-5.html: traces 79/79, layout equal, 26 changed — {('KL zone (inactive)', 'BOS', False): 4, ('KL zone (inactive)', 'CTS', False): 18, ('KL zone', 'BOS', False): 2, ('KL zone', 'CTS', False): 2} (name, kind, hidden)
+OK  NZD_USD_H1_2025-11-15_2026-01-20_sd-1_eps0p0001_rk2-5_M15_confluence.html: traces 424/424, layout equal, 208 changed — {('M15 KL zone', 'BOS', False): 76, ('M15 KL zone', 'CTS', True): 106, ('H1 KL zone (overlay)', 'BOS', False): 6, ('H1 KL zone (overlay)', 'CTS', False): 20} (name, kind, hidden)
+OK  NZD_USD_H1_2025-11-15_2026-01-20_sd-1_eps0p0001_rk2-5_M15_counter.html: traces 192/192, layout equal, 72 changed — {('M15 KL zone', 'BOS', False): 14, ('M15 KL zone', 'CTS', True): 32, ('H1 KL zone (overlay)', 'BOS', False): 6, ('H1 KL zone (overlay)', 'CTS', False): 20} (name, kind, hidden)
+ALL AS PREDICTED
