@@ -1,0 +1,9 @@
+PLAN_W 9c-2 shadow: the landed sibling reader's returned zone (w9c_measure.py base on the 9c-2 code: 'ad_hoc' = what the reader returned) vs the measured as-of derived zone (base run before 9c-2)
+  read confluence parent (0, 1) window (2611, 2995): returned (0.58534, 0.58488) | as-of derived (0.58534, 0.58488) | =
+  read counter    parent (0, 1) window (2995, 3283): returned (0.574, 0.575) | as-of derived (0.574, 0.575) | =
+  read confluence parent (0, 1) window (3283, 3491): returned (0.58105, 0.58055) | as-of derived (0.58105, 0.58055) | =
+  read confluence parent (1, 2) window (3611, 3743): returned (0.57112, 0.57271) | as-of derived (0.57112, 0.57271) | =
+  read counter    parent (1, 2) window (3743, 3819): returned (0.57827, 0.57758) | as-of derived (0.57827, 0.57758) | =
+  read confluence parent (1, 2) window (3819, 4143): returned (0.57255, 0.57337) | as-of derived (0.57255, 0.57337) | =
+6 / 6 sibling reads return the as-of derived zone
+lens parts equal to the pre-9c-2 base run: True

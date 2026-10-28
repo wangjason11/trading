@@ -38,6 +38,10 @@ its own printout.
 """
 from __future__ import annotations
 
+import contextlib
+import dataclasses
+import io
+
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -182,11 +186,14 @@ def built(shifted_df):
 
 def _expected_reference(sub):
     """The reference the rule prescribes: the reversing structure's (sid=0) most
-    recent CTS, read from the sub's OWN slice-local events with `kl_zones=[]`,
-    no idx window (Plan C §4.3 step 2 / §5.1 note)."""
+    recent CTS, read from the sub's OWN slice-local events, no idx window (Plan C
+    §4.3 step 2 / §5.1 note) — a CTS_CONFIRMED winner's DERIVED CTS zone as of the
+    reversal (PLAN_W 9c-2; on this fixture = the ad-hoc zone: one bounds step)."""
     bounded, _ = sub.geometry
+    with contextlib.redirect_stdout(io.StringIO()):
+        zones = edm._cts_kl_zones_as_of(sub, sub.natural_reversal_idx)
     rz = build_reference_zone_from_cts_event(
-        bounded.events, [], bounded.df, sid=0,
+        bounded.events, zones, bounded.df, sid=0,
         probe_direction=_PROBE_DIR, idx_window=None,
     )
     assert rz is not None, "the reversing fixture has CTS events"
@@ -592,3 +599,55 @@ def test_pending_probe_is_a_probe_failure_and_writes_no_cache(built):
     assert "pending" in res.detail
     assert res.probe_input_idx == input_abs
     assert pool.get_cached_probe(_PARENT, _TF, _PROBE_DIR, input_abs) is None
+
+
+# ---------------------------------------------------------------------------
+# PLAN_W 9c-2 — the reference reads the sub's DERIVED CTS zone as of the reversal
+# ---------------------------------------------------------------------------
+
+def test_cts_kl_zones_as_of_is_the_projection_as_of_that_moment(built):
+    """`_cts_kl_zones_as_of(sub, cap)` = the CTS zones the sub's own projection holds as of `cap` (`project_to_window`,
+    floorless, capped — the derivation a lens projection runs), bounds steps included; and NONE before the zone is
+    knowable — its cycle's CTS_CONFIRMED moment (entity-absolute 104 here; 103 → none): an as-of read never sees a
+    zone, or an expansion, from after the read."""
+    from engine_v2.multitf.pooled_structure_build import project_to_window
+    pool, sub, df = built
+    bounded, slice_begin = sub.geometry
+    R = sub.natural_reversal_idx
+
+    def full(z):      # the whole zone — its lifecycle fields (end, status) as of the cap too, not only its bounds
+        return (z.source_kind, z.side, z.top, z.bottom, z.start_time, z.end_time, z.meta)
+
+    for cap, end_reason in ((110, "probe_reference"), (R, "reversal")):    # at 110 the zone is live: the read ends it
+        with contextlib.redirect_stdout(io.StringIO()):
+            down = project_to_window(bounded, floor=None, cap=cap - slice_begin, cap_reason="probe_reference",
+                                     direction=_SD, timeframe=_TF, source_kinds=("BOS", "CTS"),
+                                     cross_fib_limits={0: sub.cross_fib_limit.localized(slice_begin)})
+            got = edm._cts_kl_zones_as_of(sub, cap)
+        assert [full(z) for z in got] == [full(z) for z in down["kl_zones"] if z.source_kind == "CTS"], cap
+        assert len(got) == 1 and got[0].source_kind == "CTS" and got[0].meta["end_reason"] == end_reason, cap
+    with contextlib.redirect_stdout(io.StringIO()):
+        before, at = edm._cts_kl_zones_as_of(sub, 103), edm._cts_kl_zones_as_of(sub, 104)
+    assert before == [] and len(at) == 1
+
+
+def test_the_reversal_reference_reads_the_derived_zone_as_of_the_reversal(built, monkeypatch):
+    """PLAN_W 9c-2 (the user 2026-10-28: "Derived, as of the read"): the winner is a CTS_CONFIRMED, so the reference =
+    its cycle's DERIVED CTS zone as of R (`_cts_kl_zones_as_of(sub, R)`), not the ad-hoc one. Shown with a derived
+    zone whose outer an expansion has moved (+20 pips, as on the reference window's 3819 read: 0.57806 → 0.57827): the
+    probe gets that outer, where the ad-hoc zone — the derived zone's INIT step — keeps the old one."""
+    pool, sub, df = built
+    R = sub.natural_reversal_idx
+    with contextlib.redirect_stdout(io.StringIO()):
+        (z,) = edm._cts_kl_zones_as_of(sub, R)
+    wider = dataclasses.replace(z, top=z.top + 0.0020)            # probe direction -1: the outer is the top
+    calls, seen = [], []
+    monkeypatch.setattr(edm, "_cts_kl_zones_as_of", lambda s, cap: calls.append((s, int(cap))) or [wider])
+    real_probe = up_mod.unified_probe
+    monkeypatch.setattr(up_mod, "unified_probe", lambda *a, **k: seen.append(k["reference_zone"]) or real_probe(*a, **k))
+    res = _resolve(pool, sub, R, df)
+    assert isinstance(res, ResolvedStart) and calls == [(sub, R)]
+    assert (seen[0].outer, seen[0].inner) == (pytest.approx(wider.top), pytest.approx(z.bottom))
+    bounded, _ = sub.geometry
+    ad_hoc = build_reference_zone_from_cts_event(bounded.events, [], bounded.df, sid=0, probe_direction=_PROBE_DIR)
+    assert ad_hoc.outer == pytest.approx(z.top) and ad_hoc.outer != pytest.approx(wider.top)

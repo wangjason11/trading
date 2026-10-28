@@ -337,7 +337,9 @@ SYLLABUS Week 9 Part 2 "Zone size at entry and stop-loss".
    end) + the CTS_ESTABLISHED requirement "Keep it" (PLAN_W §2.3); BUILT `aff21f8` = its prediction (zero change
    on the reference window; 2025-08-01 → 09-20: sub 2 cycle 1's POI, PLAN_W §2.5; the user's chart look: "charts
    look good, go ahead and commit-save"). One save after 9a + 9b: S_W9b `20261028_165600_aff21f8` (= S_V8c byte for
-   byte). **9a + 9b DONE.** NEXT: 9c.
+   byte). **9a + 9b DONE.** 9c MEASURED (PLAN_W §3.2) and DECIDED: "Export + chart, toggle off" (9c-1) and
+   "Derived, as of the read" (9c-2); 9c-2 BUILT = its prediction (zero change — the one sub reference that differs,
+   +2.1 pips outer at 3819, moves no start; PLAN_W §3.5). NEXT: 9c-1.
 
 **D.1 — Ordered (the heavy items):**
 1. **One POI per cycle** (redefine the IC & POI zone logic) — B landed; its chart debugging PAUSED for item 2 (user
@@ -536,9 +538,11 @@ SYLLABUS Week 9 Part 2 "Zone size at entry and stop-loss".
   fallback skipped a missing label (`continue`; a `break` mutant survived the suite) while the cache returned
   `(None, None)` when the label `end_idx + 1` was missing. Pins: `test_imbalance.py::test_the_fill_checks_raise_on_a_
   frame_not_indexed_0_to_n_minus_1`, `test_the_fill_checks_accept_an_int64_index_0_to_n_minus_1`.
-- **Should subs get the DERIVED CTS KL zone as their probe reference?** (today every sub reference zone is ad-hoc).
-  SCHEDULED for discussion — SESSION ORDER item 9c (the user 2026-10-28; the derived-but-not-returned answer is
-  there). Detail: PART4 §17.12, GOTCHAS (the `kl_zones=[]` pool-path note).
+- ~~**Should subs get the DERIVED CTS KL zone as their probe reference?**~~ — DECIDED 2026-10-28 (SESSION ORDER item
+  9c, PLAN_W §3): the user: "Derived, as of the read" (9c-2: a CTS_CONFIRMED winner's own sub's CTS KL zone as of
+  the read — was ad hoc, = the derived zone's INIT step; 1 of 11 reads differs on the window, no start moves) and,
+  for exporting / charting them, "Export + chart, toggle off" (9c-1). Detail: PART4 §17.8, GOTCHAS (the `kl_zones=[]`
+  pool-path note).
 - **Step 4 of IC identification — the lower-TF fallback — DEFERRED, possibly never built** (was "No-pattern cycles —
   a fallback POI"; DECIDED by the user's IC identification write-up 2026-10-09, `engine_v2/plans/plan_h_inputs/
   ic_identification_revamp_spec.md`, PLAN_H §6 ICR-*). A no-pattern record gets its IC from Step 3, the ranking

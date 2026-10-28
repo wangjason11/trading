@@ -3,8 +3,9 @@
 **Status: 2026-10-28 — 9a LANDED (`35e827e`, = its prediction, zero change, §1.5); 9b LANDED (`aff21f8`, = its
 prediction: zero change on the reference window, sub 2 cycle 1's POI on 2025-08-01 → 09-20, §2.5; the user's chart
 look: "charts look good, go ahead and commit-save"); one save after both (the user: "Commit now, save after 9b"):
-S_W9b `20261028_165600_aff21f8` (save `1ac3e12`, trunk `f798f9e`; = S_V8c byte for byte; = `LATEST_<branch>`). NEXT:
-9c (§3, discussion first).** Baseline **S_V8c** `artifacts/commits/week9-entries-decisions/20261028_153518_1318c82`
+S_W9b `20261028_165600_aff21f8` (save `1ac3e12`, trunk `f798f9e`; = S_V8c byte for byte; = `LATEST_<branch>`). 9c
+MEASURED + DECIDED (§3.2–3.3: "Export + chart, toggle off"; "Derived, as of the read"); 9c-2 BUILT = its prediction
+(zero change, §3.5; committed — the user: "Commit now, save after 9c-1"); NEXT: 9c-1 (§3.6) + the user's look.** Baseline **S_V8c** `artifacts/commits/week9-entries-decisions/20261028_153518_1318c82`
 (source `1318c82`, save `fb6fb81`, trunk `8e6a53a`; HEAD at drafting `6312819`, code = `1318c82`); suite 2172 at the
 cold start (89.7 s). The scope is the user's (register `IDEA_PARKING_LOT.md` §D "SESSION ORDER" item 9, their words
 verbatim there): 9a → 9b → 9c (proposed order), one cause per `/compare`. Inputs: `plans/plan_w_inputs/`.
@@ -175,3 +176,115 @@ for the saves: **"Commit now, save after 9b"** — 9a's commit now, one `/commit
   Lifecycle Gate Is Per-Record" (the POI gate line), POI_ZONES_SPEC (option N's reach), CHARTING_SPEC §8 (the "not
   evaluated" line's one cause), the register item 9 progress.
 - **The user's chart look (2026-10-28, the Aug–Sep 9b charts): "charts look good, go ahead and commit-save".**
+
+---
+
+## 3. 9c — the sub CTS KL zones (discussion first; measured 2026-10-28)
+
+### 3.1 Today (the code)
+
+Every sub projection (`pooled_structure_build.project_to_window` → `orchestrator._run_downstream_pipeline`) DERIVES the
+full KL set (`all_kl_zones`, BOS + CTS) — the CTS wave candles are built from the CTS zones — then RETURNS only
+`source_kinds=("BOS",)` (since the multi-TF foundation `6a53948`, 2026-02-17). WVMI reads only the BOS zone
+(`wvmi._find_bos_zone`), so the sub CTS zones reach nothing else: not the lens `attrs["kl_zones"]`, the KL CSVs, the
+M15 charts, nor a probe. The sub probe's reference zone (`entity_df_mutation._build_sibling_cts_ref_zone_from_pool` —
+first_counter / subsequent_* — and `_resolve_reversal_start`) is built AD HOC from the winning CTS event
+(`reference_zone._derive_cts_zone_ad_hoc`: the same `identify_base_pattern` + `zone_thresholds` as `kl_zones_v1`)
+with `kl_zones=[]`; the derived-zone branch (CTS_CONFIRMED winners only) is dead for subs. The H1 main's reversal
+reference (`structure_engine`) DOES pass its derived CTS zones (from the reversed sid's events — which end at its
+reversal, so its zone as of the read).
+
+### 3.2 Measured (the reference window; `plan_w_inputs/w9c_measure.py` base / cts_export / derived_ref,
+`w9c_diff.py` → `w9c_report.txt`, `w9c_derived_ref_diff.py` → `.txt`, `w9c_variant_replay.py`)
+
+**Question 1 — return / export / chart them** (`source_kinds=("BOS", "CTS")`): counter +7 CTS zones, confluence +20
+(one per sub cycle with a CTS zone; 4 of them `status inactive` with end = confirmed, e.g. sub 0 c0, sub 1 c0 / c1,
+sub 3 c0); events, POIs, IC rows, subs, WVMI, wave candles EQUAL — the variant only adds. The full replay (scratch
+tree, 75.4 s): 2 of 30 CSVs differ — the lens `*_kl_zones.csv`, rows added only (confluence 22 → 42 lines, counter
+9 → 16); the H1 chart equal; counter 154 / 134 → 192 / 154 traces / shapes, confluence 302 / 305 → 424 / 372; the
+gate lines + skip grep 33 unchanged. The look (`w9c_zoom_confluence_980_1800_{today,cts}.png`): red CTS zones over
+each sub's breakouts — sub 0 c2's zone (17 expansion steps) a stepped block over Dec 5 → 10.
+
+**Question 2 — the derived zone as the probe reference:** 11 distinct sub reads (6 sibling, 5 reversal), ALL with a
+CTS_CONFIRMED winner. The ad-hoc zone = the derived zone's INIT step in 11 / 11 (the same derivation). As of the read
+(the sibling window's `hi` / the reversal candle — causal): = ad hoc in 10 / 11; the one difference, the counter read
+for the subsequent_confluence probe at 3819 (window 3743–3819, winner sub 6 cycle 0, anchor 3760, confirmed 3786): its
+zone expanded once before the read — outer 0.57806 → 0.57827. At the sub's natural end (look-ahead): 2 / 11 differ
+(that one → 0.57898 after 9 steps, and the counter read at 3283: 0.57400 → 0.57376). The variant that FEEDS the as-of
+derived zone (`derived_ref`): ZERO output change — the 3819 probe ran (cache miss) with the wider zone and returned the
+same start (3760, finalized, `no_retrace`, 1 iteration). The H1 main's one reversal read: its derived zone = the ad-hoc
+one (0.58534, 0.58404).
+
+### 3.3 The decisions (the user, 2026-10-28, AskUserQuestion after §3.2)
+
+Options shown — question 1: (a) CSV export only; (b) export + chart them; (c) export + chart them, hidden by default
+behind a toggle (a small design step first); (d) keep as is. Question 2: (a) keep ad hoc; (b) the derived zone as of
+the read; (c) the natural-end zone (rejected in the text: look-ahead). **The user: question 1 "Export + chart, toggle
+off"; question 2 "Derived, as of the read".** Two landings, one cause each: 9c-2 (the probe reference — predicted zero
+change on the window) first, then 9c-1 (the export + the toggle — CSV rows + figure, the user's chart look).
+
+### 3.4 9c-2 — the sub probe's reference reads the derived CTS zone as of the read (change + prediction)
+
+- `structure/reference_zone.pick_reference_cts_event` — the winner pick lifted out of
+  `build_reference_zone_from_cts_event` (which now calls it; no behaviour change): a caller that must know the
+  winner before the build reads it there, never a copy.
+- `multitf/entity_df_mutation._cts_kl_zones_as_of(sub, cap_abs)` — the sub's slice-local geometry events clipped by
+  knowable-at to the cap (`clip_events_to_window`, the projection's clip) → `derive_kl_zones_v1` (the projection's
+  derivation; floorless, `lifecycle_cap` = the cap) → its CTS zones; the derivation's debug prints silenced (lines the
+  post-replay grep flags re-printed `[probe_ref] …`, `proximity_overlay._VIEW_LOG_KEEP`).
+- `_build_sibling_cts_ref_zone_from_pool`: each mirrored event remembers its sub; the winner (`pick_reference_cts_event`
+  over the same events and window) — a CTS_CONFIRMED → `kl_zones` = ITS sub's CTS zones as of `hi` (several siblings'
+  events compete, all sid 0, so only the winner's sub's zones can be passed); else `[]` (ad hoc, as before).
+  `_resolve_reversal_start`: the same with the sub's own events, as of the reversal candle. The H1 main's reversal
+  read (`structure_engine`) is unchanged — it already passes its derived zones.
+- **Prediction: ZERO output change on the reference window** — the measured `derived_ref` variant (§3.2: every lens
+  part equal; the 3819 probe ran with the wider zone, same start); the shadow on the landed code: every sibling read's
+  returned zone = §3.2's as-of derived zone (6 / 6, `plan_w_inputs/w9c2_shadow.txt`; the 5 reversal reads' as-of zone = ad hoc). 30 / 30 CSVs + the
+  figures + the PNGs byte-equal to S_W9b; skip grep 33 (`run.log` itself gains no grep line — the prints silenced).
+- Tests: `test_first_trigger_migration.py` — an autouse recorder replaces `_cts_kl_zones_as_of` for the stub subs
+  (`df=None`); (10) `test_primitive_called_with_empty_kl_zones_and_shared_frame` (pinned TODAY's `kl_zones=[]`)
+  BECOMES `…_with_the_winners_as_of_cts_zones_and_shared_frame` (two sibling subs: the winner's sub, as of `hi`, its
+  zones passed through) + (10b) an UPDATED winner reads no derived zone; `test_reversal_resolver.py` —
+  `_expected_reference` follows the rule, `test_cts_kl_zones_as_of_is_the_projection_as_of_that_moment` (= the
+  projection's CTS zones with bounds steps; none at 103, one at 104 = its CTS_CONFIRMED moment) and
+  `test_the_reversal_reference_reads_the_derived_zone_as_of_the_reversal` (a +20-pip expanded outer reaches the probe;
+  the ad-hoc zone keeps the INIT one). Mutants: `plan_w_inputs/mutants_9c2.py` (7).
+- Docs: PART4 §4.3.x rows + §17.8, GOTCHAS ("`ref=cts_confirmed` … does NOT mean the derived zone was used" — an
+  update note + its Plan C paragraph), `reference_zone` / `entity_df_mutation` docstrings, the register D.2 entry.
+
+### 3.5 9c-2 result (2026-10-28) — = the prediction
+
+The replay (69.7 s wall: data_fetch 6.03, multi_tf_dual 15.65, chart_h1 6.76, chart_m15_counter 11.73,
+chart_m15_confluence 28.22) vs S_W9b: 30 / 30 CSVs md5-equal, the three figures' full JSON equal, the PNGs equal;
+fetch gate PASS, skip grep 33, no `[probe_ref]` line (`plan_w_inputs/w9c2_compare.txt`). The shadow on the landed
+code: 6 / 6 sibling reads return §3.2's as-of derived zone, the 3819 read the wider one (0.57827), every lens part
+equal (`w9c2_shadow.txt`). Suite 2168 (2165 + (10b) + the two reversal pins; (10) rewritten); mutants 7 / 7 KILLED
+(`mutants_9c2.py` / `.txt` — `v9c2_no_cap` SURVIVED the first run: the as-of test compared bounds only and at R the
+reversal is the earlier end; the test now compares the whole zone at 110, where the read's cap ends it, and at R);
+the earlier landings' anchors in `entity_df_mutation.py` + `reference_zone.py`: 0 stale of 67 (`anchor_scan_9c2.py
+158d3d2` → `.txt`).
+
+### 3.6 9c-1 — export the sub CTS KL zones + chart them behind a toggle, hidden on load (change + prediction)
+
+- `multitf/entity_df_mutation.py` (the lens projection, `project_to_window(...)` for a unique sub): `source_kinds=
+  ("BOS", "CTS")` — the sub's CTS KL zones reach the lens `attrs["kl_zones"]` (mirrored like the BOS ones) and so the
+  lens `*_kl_zones.csv`. The proximity overlay's views keep the default `("BOS",)` (it reads BOS zones only). The other
+  readers of a lens's KL zones are unaffected (checked): `collapsed_cycles` and the wave-candle `cycle_life` read BOS
+  zones only; `struct_direction_by_sid` reads the direction (the same on both kinds); WVMI reads only the BOS zone.
+- `charting/export_m15_chart.py`, the sub KL loop: a CTS zone is drawn exactly like a BOS zone (style, tier, fills
+  per active stretch, the stepped outline, the confirm line, the hover lines; a collapsed cycle's skipped) but every
+  trace and shape it adds gets `legendgroup = SUB_CTS_GROUP = "sub_cts_zones"` and `visible = False`. The hover = the
+  KL zone hover (`KL Zone`, `side=` — as the H1 chart's CTS zones; no BOS / CTS label on any chart).
+- The control bar (`chart_controls.js`, `export_plotly._chart_controls_cfg(..., sub_cts_group=)`): on the M15 charts
+  a second button **`Sub CTS zones: hidden`** next to `Parent (1H)`, flipping that group (hidden ↔ shown); the
+  toggle code shared by both buttons. AUTHOR'S DEFAULTS (the user's look decides): the label, the place, hidden on load.
+- **Prediction** (the measured variant, §3.2, + the hiding): vs the 9c-2 replay (= S_W9b): exactly 2 of 30 CSVs differ —
+  the lens `*_kl_zones.csv`, rows added only (confluence +20, counter +7); the H1 chart identical; each M15 chart
+  ADDS the variant's traces + shapes (counter +38 / +20, confluence +122 / +67), every one in `sub_cts_zones` and
+  hidden, and the control script gains the button — every other trace / shape equal by name; the PNGs byte-equal
+  (hidden); skip grep 33. (`debug/chart_census.py` counts the hidden traces too.)
+- Tests: the projection returns CTS zones (a lens's KL zones hold both kinds; the overlay's view BOS only); the M15
+  chart tags + hides exactly the CTS zones' traces / shapes; the control cfg + script carry the group and the button.
+- Docs: CHARTING_SPEC §14 (the button) + §5 (sub KL zones: BOS shown, CTS hidden behind it), ARCHITECTURE ("KL
+  zones are BOS-only for subs" → BOS + CTS returned since 9c-1), PART4 §17 (the projection's `source_kinds`), the
+  orchestrator comment ("For sub callers `source_kinds=["BOS"]`").

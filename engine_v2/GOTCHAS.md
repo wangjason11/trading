@@ -1972,6 +1972,12 @@ gets its own `/compare`.
 
 ## `ref=cts_confirmed` in a Replay Log Does NOT Mean the Derived CTS Zone Was Used (2026-09-19)
 
+> **Update 2026-10-28 (PLAN_W 9c-2, the user: "Derived, as of the read"):** the sub readers now pass the winner's
+> OWN sub's CTS KL zones as of the read (`entity_df_mutation._cts_kl_zones_as_of`), so a CTS_CONFIRMED winner
+> reads its derived zone — the branch below is no longer dead for subs. The token lesson stands: `ref=…` is still
+> the winning event's TYPE on both branches. Measured before the switch: the ad-hoc zone = the derived zone's INIT
+> step in 11 / 11 reads; as of the read 10 / 11 (one expansion, no start moved). The rest is the 2026-09-19 history.
+
 `build_reference_zone_from_cts_event` has two branches: the CONFIRMED branch (find the existing CTS
 KL zone for `(structure_id, cycle_id)`) and the ad-hoc fallback (`_derive_cts_zone_ad_hoc`). **Both**
 label the returned `ReferenceZone.source` by the winning EVENT's type — the derived branch hard-codes
@@ -1998,7 +2004,8 @@ geometry is cap-free MS output with no KL derivation (`build_or_get_geometry`), 
 mirror-then-read of `attrs["kl_zones"]` is gone — so `[]` is not only behaviour-preserving, it is the
 only honest input. The `ref=cts_confirmed` / `ref=cts_updated` / `ref=cts_established` token in the
 `[entity_compute] unified_probe (...)` lines is still the winning EVENT's type. Reopening the derived-zone
-question now means deriving CTS KL zones from the pool geometry on demand — its own `/compare`.
+question meant deriving CTS KL zones from the pool geometry on demand — done by PLAN_W 9c-2 (2026-10-28):
+`_cts_kl_zones_as_of(sub, read moment)`, the winner's sub only (several siblings' events compete, all sid 0).
 
 ---
 

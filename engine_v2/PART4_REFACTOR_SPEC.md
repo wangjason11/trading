@@ -407,7 +407,7 @@ probe; mechanics unchanged.
 | **Trigger** | First parent sd-zone proximity trigger (BOS or POI) after parent CTS (`WVMIRecord.meta["triggered_by_event_idx"]` → `trigger_event_idx`) |
 | **Idx input** | Sibling confluence lens's most recent qualifying CTS **anchor** on the sub TF (= the reference zone's `anchor_idx`; CONFIRMED → `cts_anchor_idx`, UPDATED/EST → the CTS anchor `ef.cts_anchor_idx` — the event idx on UPDATED, meta `cts_anchor_idx` on EST, whose idx is the moment since Plan E E4a). **Same candle as the reference zone** — input and ref are co-sourced from the sibling CTS event (Session 3 uniform rule). |
 | **Probe `probe_end_idx`** | First parent sd-zone proximity trigger candle after CTS, time-mapped to the sub TF's last-of-hour = the trigger's `trigger_idx` (`hi`) |
-| **Probe reference zone** | Sibling confluence lens's most recent qualifying CTS, built ad hoc from the winning CTS event (§17.8: `kl_zones=[]` — subs receive BOS zones only, so no derived CTS zone exists), read from the pool within the sub-TF window `[the parent cycle's CTS-established moment, this trigger]` (`_sibling_cts_idx_window`; the moment = the LOH of `ParentTables.cts_moment[(S, C)]`, where the cycle's price structure begins — the pool read is already scoped to this parent cycle, but the step-4 fallback (§4.3.4) scans the raw shared frame, so `lo` is bounded for it too; was `0` until PLAN_R step 0a, 2026-10-20; the moment, not the real-time floor `ParentTables.floor`, by the user's decision the same day — see §4.3.4 step 1) |
+| **Probe reference zone** | Sibling confluence lens's most recent qualifying CTS — a CTS_CONFIRMED winner's DERIVED CTS KL zone, its own sub's as of the read (`hi`; PLAN_W 9c-2, 2026-10-28 — was ad hoc, `kl_zones=[]`), an UPDATED / ESTABLISHED winner built ad hoc (§17.8) — read from the pool within the sub-TF window `[the parent cycle's CTS-established moment, this trigger]` (`_sibling_cts_idx_window`; the moment = the LOH of `ParentTables.cts_moment[(S, C)]`, where the cycle's price structure begins — the pool read is already scoped to this parent cycle, but the step-4 fallback (§4.3.4) scans the raw shared frame, so `lo` is bounded for it too; was `0` until PLAN_R step 0a, 2026-10-20; the moment, not the real-time floor `ParentTables.floor`, by the user's decision the same day — see §4.3.4 step 1) |
 | **Output** | `starting_idx` for the first counter sub of the cycle |
 
 > **Session 3 (2026-05-31):** input_idx changed from the price-mapped parent
@@ -434,7 +434,7 @@ conditions fire, end the previous confluence sid and create
 | **Trigger** | Parent opp_sd zones proximity trigger ("CTS-zone proximity" until PLAN_R — the opp_sd proximity reference: the CTS zone, or from PLAN_R step 2 a counter sub's BOS / POI) AND most recent prior parent proximity trigger was to sd zones |
 | **Idx input** | Sibling **counter** lens's most recent qualifying CTS **anchor** on the sub TF (= the reference zone's `anchor_idx`; CONFIRMED → `cts_anchor_idx`, UPDATED/EST → the CTS anchor `ef.cts_anchor_idx` — the event idx on UPDATED, meta `cts_anchor_idx` on EST, whose idx is the moment since Plan E E4a). **Same candle as the reference zone.** |
 | **Probe `probe_end_idx`** | Current parent opp_sd zones proximity trigger candle, time-mapped to the sub TF's last-of-hour = the trigger's `trigger_idx` (`hi`) |
-| **Probe reference zone** | Sibling **counter** lens's most recent qualifying CTS, built ad hoc from the winning event (`kl_zones=[]`, §17.8), read from the pool within the sub-TF window `[max(last-M15-of prior_sd_prox hour, the parent cycle's CTS-established moment), last-M15-of this_opp_sd_prox hour]` |
+| **Probe reference zone** | Sibling **counter** lens's most recent qualifying CTS (a CONFIRMED winner's derived zone as of the read, else ad hoc — §17.8, PLAN_W 9c-2), read from the pool within the sub-TF window `[max(last-M15-of prior_sd_prox hour, the parent cycle's CTS-established moment), last-M15-of this_opp_sd_prox hour]` |
 | **Output** | `starting_idx` for the next confluence record's sub (a new unique sub, or an existing one if the key repeats) |
 
 **Reference zone + input resolution (Session 3 uniform rule, 2026-05-31;
@@ -462,7 +462,7 @@ conditions fire, end the previous counter sid and create
 | **Trigger** | Parent sd-zone proximity trigger AND most recent prior parent proximity trigger was to the opp_sd zones (an opp_sd zones proximity trigger) AND the proximity trigger before *that* was to sd zones (forms Λ in bullish parent / V in bearish parent) |
 | **Idx input** | Sibling **confluence** lens's most recent qualifying CTS **anchor** on the sub TF (= the reference zone's `anchor_idx`; CONFIRMED → `cts_anchor_idx`, UPDATED/EST → the CTS anchor `ef.cts_anchor_idx` — the event idx on UPDATED, meta `cts_anchor_idx` on EST, whose idx is the moment since Plan E E4a). **Same candle as the reference zone.** |
 | **Probe `probe_end_idx`** | Current parent sd-zone proximity trigger candle, time-mapped to the sub TF's last-of-hour = the trigger's `trigger_idx` (`hi`) |
-| **Probe reference zone** | Sibling **confluence** lens's most recent qualifying CTS, built ad hoc from the winning event (`kl_zones=[]`, §17.8), read from the pool within the sub-TF window `[max(last-M15-of prior_opp_sd_prox hour, the parent cycle's CTS-established moment), last-M15-of this_sd_prox hour]` (same pool read as §4.3.4 step 2 with `other_lens="confluence"`; same step-4 fallback) |
+| **Probe reference zone** | Sibling **confluence** lens's most recent qualifying CTS (a CONFIRMED winner's derived zone as of the read, else ad hoc — §17.8, PLAN_W 9c-2), read from the pool within the sub-TF window `[max(last-M15-of prior_opp_sd_prox hour, the parent cycle's CTS-established moment), last-M15-of this_sd_prox hour]` (same pool read as §4.3.4 step 2 with `other_lens="confluence"`; same step-4 fallback) |
 | **Output** | `starting_idx` for the next counter record's sub |
 
 > **Session 3 (2026-05-31)** supersedes the old "parent-TF candle closest to
@@ -3388,12 +3388,17 @@ of the opposite-direction sub on the other lens in this parent cycle":
   the ANCHOR for `CTS_ESTABLISHED` — the cold-review known limit of
   2026-09-20), so a CTS whose anchor is `<= hi` but whose moment is after it is
   not a candidate. Changing it moves `starting_idx` = pool keys → its own `/compare`;
-- the reference zone is built ad hoc from the winning CTS event with
-  `kl_zones=[]` — behaviour-preserving, not a shortcut: subs only ever receive
-  BOS zones (`source_kinds=["BOS"]`), so the primitive's CONFIRMED-zone branch
-  has been dead for subs since the narrowing; the `ref=cts_confirmed` label in
-  replay logs is the winning event's *type*, not evidence of a derived zone.
-  Whether subs *should* get the derived CTS zone is a follow-up.
+- the reference zone: a CTS_CONFIRMED winner's DERIVED CTS KL zone, its own
+  sub's as of `hi` (`entity_df_mutation._cts_kl_zones_as_of` — the geometry's
+  events clipped by knowable-at, `derive_kl_zones_v1`), else ad hoc from the
+  winning event; the reversal handoff the same, as of the reversal candle
+  (PLAN_W 9c-2, the user 2026-10-28: "Derived, as of the read"). Until then
+  `kl_zones=[]`: subs returned BOS zones only, so the primitive's CONFIRMED-zone
+  branch was dead for subs — every reference ad hoc, which is the derived zone's
+  INIT step (11 / 11 reads on the reference window): only an expansion before
+  the read differs (1 / 11, no start moved — `plans/PLAN_W_part1_last_items.md`
+  §3.2). The `ref=cts_confirmed` label in replay logs is the winning event's
+  *type* either way.
 
 **Expected behavioural delta:** within a record's live window the sibling now
 sees the natural-end CTS stream (a `CTS_UPDATED` the old per-trigger bound had

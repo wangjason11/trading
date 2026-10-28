@@ -1,0 +1,20 @@
+base vs derived_ref (a sibling read with a CTS_CONFIRMED winner returns the derived zone as of the read)
+  changed read: sibling read counter parent [1, 2] window [3743, 3819] dir -1: ad hoc (0.57806, 0.57758) -> derived (0.57827, 0.57758)
+
+H1.main >> M15.counter
+   events: EQUAL (591)
+   kl_zones: EQUAL (8)
+   poi_zones: EQUAL (7)
+   ic_candidates: EQUAL (593)
+   sids: EQUAL (4)
+   wvmi: EQUAL (7)
+   wave_candles: EQUAL (15)
+
+H1.main >> M15.confluence
+   events: EQUAL (1386)
+   kl_zones: EQUAL (21)
+   poi_zones: EQUAL (17)
+   ic_candidates: EQUAL (1426)
+   sids: EQUAL (8)
+   wvmi: EQUAL (18)
+   wave_candles: EQUAL (41)

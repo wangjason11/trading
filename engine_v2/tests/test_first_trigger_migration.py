@@ -285,6 +285,17 @@ def _cts_event(
     )
 
 
+@pytest.fixture(autouse=True)
+def _no_derived_cts_zones(monkeypatch):
+    """The stub subs carry no frame (`df=None`), so the sibling read's derived CTS zones (PLAN_W 9c-2:
+    `entity_df_mutation._cts_kl_zones_as_of(sub, hi)` for a CTS_CONFIRMED winner) cannot be derived here: a recorder
+    returning none — the reference is then the ad-hoc one these tests expect. Returns its calls `[(sub, cap)]`; the
+    tests pinning the derived zone's wiring replace it."""
+    calls = []
+    monkeypatch.setattr(edm, "_cts_kl_zones_as_of", lambda sub, cap: calls.append((sub, int(cap))) or [])
+    return calls
+
+
 def _stub_sub(pool: SubStructurePool, *, direction: int, starting_idx: int,
               slice_begin: int, events):
     """A pool entry with stub geometry `(bounded, slice_begin)`; `bounded`
@@ -367,11 +378,11 @@ def _patched_fc_ref(zone):
 
 
 def _patched_cts_derivation():
-    """The sibling read passes `kl_zones=[]` (§5.1), so the primitive ALWAYS
-    takes its ad-hoc branch; on the raw synthetic frame that derivation would
-    return None. Pin the derived geometry so the tests exercise the SELECTION
-    logic (which event wins, which idx is the input), not base-pattern
-    derivation on synthetic data."""
+    """The stub subs' CTS KL zones are none (`_no_derived_cts_zones`), so the
+    primitive takes its ad-hoc branch; on the raw synthetic frame that
+    derivation would return None. Pin the derived geometry so the tests exercise
+    the SELECTION logic (which event wins, which idx is the input), not
+    base-pattern derivation on synthetic data."""
     return patch.object(
         rz_mod, "_derive_cts_zone_ad_hoc", return_value=(0.6010, 0.6020, "sell"),
     )
@@ -866,8 +877,13 @@ class TestResolveSiblingCts:
         assert res.detail == "probe pending"
         assert res.probe_input_idx == 6
 
-    # --- (10) primitive gets kl_zones=[] + the SHARED frame + shifted copies -
-    def test_primitive_called_with_empty_kl_zones_and_shared_frame(self):
+    # --- (10) primitive gets the winner's CTS zones AS OF hi + the SHARED frame + shifted copies -
+    def test_primitive_called_with_the_winners_as_of_cts_zones_and_shared_frame(self, monkeypatch):
+        """PLAN_W 9c-2 (the user 2026-10-28: "Derived, as of the read"): a CTS_CONFIRMED winner's reference reads its
+        OWN sub's CTS KL zones as of the window's `hi` (`_cts_kl_zones_as_of(sub, hi)`) — not `kl_zones=[]` (the ad-hoc
+        zone = the derived zone's INIT step, so an expansion before the read was lost: the 3819 read on the reference
+        window, outer 0.57806 → 0.57827). Another sibling's later CTS_UPDATED loses here only on the moment — it is
+        the winner's sub whose zones are read, never the other's."""
         h1, m15 = self._fixtures()
         pool = SubStructurePool()
         # slice_begin 2: local CTS_CONFIRMED idx 6 / anchor 4 / confirmed_at 6
@@ -876,6 +892,12 @@ class TestResolveSiblingCts:
         sib = _stub_sub(pool, direction=1, starting_idx=4, slice_begin=2, events=[local_ev])
         _rec(sib, pool=pool, lens="confluence", S=0, C=2, tss=0, trigger_type="first_confluence",
              trigger_idx=3, start_idx=4)
+        other = _stub_sub(pool, direction=1, starting_idx=1, slice_begin=0, events=[_cts_event("CTS_UPDATED", 5, 5)])
+        _rec(other, pool=pool, lens="confluence", S=0, C=2, tss=0, trigger_type="first_confluence",
+             trigger_idx=1, start_idx=1)
+        zones = [object()]                            # the winner's derived zones, passed through untouched
+        calls = []
+        monkeypatch.setattr(edm, "_cts_kl_zones_as_of", lambda sub, cap: calls.append((sub, int(cap))) or zones)
 
         def _fake_primitive(*args, **kwargs):
             return _ref_zone("cts_confirmed", 6, inner=0.6020, outer=0.6010, side="sell")
@@ -887,15 +909,15 @@ class TestResolveSiblingCts:
         assert ref is not None and ref.anchor_idx == 6
         mock_prim.assert_called_once()
         bound = _PRIMITIVE_SIG.bind(*mock_prim.call_args.args, **mock_prim.call_args.kwargs).arguments
-        assert bound["kl_zones"] == []               # §5.1: the CONFIRMED-zone branch is dead for subs
+        assert calls == [(sib, 23)]                   # the WINNER's sub (8 beats the other's 5), as of hi
+        assert bound["kl_zones"] is zones
         assert bound["df"] is m15                    # the shared entity-absolute frame, NOT bounded.df
         assert bound["sid"] == 0
         assert bound["probe_direction"] == -1
         assert bound["idx_window"] == (0, 23)
         passed = bound["events"]
-        assert len(passed) == 1
-        ev = passed[0]
-        assert ev.type == "CTS_CONFIRMED"
+        assert sorted(e.type for e in passed) == ["CTS_CONFIRMED", "CTS_UPDATED"]   # both siblings' events compete
+        ev = next(e for e in passed if e.type == "CTS_CONFIRMED")
         assert int(ev.idx) == 8                      # shifted by slice_begin
         assert int(ev.meta["cts_anchor_idx"]) == 6   # idx-bearing meta shifted too
         assert int(ev.meta["confirmed_at"]) == 8
@@ -903,6 +925,23 @@ class TestResolveSiblingCts:
         assert ev is not local_ev
         assert int(local_ev.idx) == 6
         assert int(local_ev.meta["cts_anchor_idx"]) == 4
+
+    # --- (10b) an UPDATED / ESTABLISHED winner reads no derived zone -----------
+    def test_an_updated_winner_reads_no_derived_zone(self, _no_derived_cts_zones):
+        """Only a CTS_CONFIRMED winner has a derived zone to read (PLAN_W 9c-2; the primitive's CONFIRMED branch):
+        a later CTS_UPDATED winner → `kl_zones=[]`, `_cts_kl_zones_as_of` never called — the ad-hoc zone at its
+        anchor, as before."""
+        h1, m15 = self._fixtures()
+        pool = SubStructurePool()
+        sib = _stub_sub(pool, direction=1, starting_idx=4, slice_begin=2,
+                        events=[_cts_event("CTS_CONFIRMED", 6, 4), _cts_event("CTS_UPDATED", 9, 9)])
+        _rec(sib, pool=pool, lens="confluence", S=0, C=2, tss=0, trigger_type="first_confluence",
+             trigger_idx=3, start_idx=4)
+        with _patched_primitive(lambda *a, **k: _ref_zone("cts_updated", 11, inner=0.6020, outer=0.6010,
+                                                           side="sell")) as mock_prim:
+            _build_sibling_cts_ref_zone_from_pool(pool, "confluence", 0, 2, -1, (0, 23), m15)
+        bound = _PRIMITIVE_SIG.bind(*mock_prim.call_args.args, **mock_prim.call_args.kwargs).arguments
+        assert bound["kl_zones"] == [] and _no_derived_cts_zones == []
 
     # --- (11) direction filter is on the RECORD's direction -----------------
     def test_direction_filter_is_on_record_direction(self):

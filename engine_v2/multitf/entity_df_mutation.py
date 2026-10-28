@@ -33,6 +33,8 @@ compute needs an MS refactor that is deferred.
 """
 from __future__ import annotations
 
+import contextlib
+import io
 import math
 from copy import deepcopy
 from dataclasses import replace
@@ -482,6 +484,34 @@ def _build_first_confluence_ref_zone(
 
 
 
+def _cts_kl_zones_as_of(sub: PooledStructure, cap_abs: int) -> List[Any]:
+    """`sub`'s CTS KL zones as known at the entity-absolute M15 `cap_abs` — the derived zone a sub probe's reference
+    reads when the winning CTS event is a CTS_CONFIRMED (PLAN_W 9c-2, the user 2026-10-28: "Derived, as of the read";
+    the H1 main's reversal reference reads its derived zone too, `structure_engine`). The sub's slice-local geometry
+    events clipped by knowable-at to the cap (`clip_events_to_window`, the projection's clip) through
+    `derive_kl_zones_v1` (the projection's derivation; floorless, capped), so an expansion after the read never reaches
+    it. Slice-local zones — the reference reads only their bounds (prices). The derivation's debug prints are silenced
+    (only lines the post-replay grep flags are re-printed, prefixed — `proximity_overlay._quiet_project`'s rule)."""
+    from engine_v2.multitf.pooled_structure_build import clip_events_to_window
+    from engine_v2.multitf.proximity_overlay import _VIEW_LOG_KEEP
+    from engine_v2.zones.kl_zones_v1 import derive_kl_zones_v1
+
+    bounded, slice_begin = sub.geometry
+    cap_local = int(cap_abs) - int(slice_begin)
+    buf = io.StringIO()
+    try:
+        with contextlib.redirect_stdout(buf):
+            zones = derive_kl_zones_v1(
+                bounded.df, clip_events_to_window(bounded.events, cap_local),
+                struct_direction=int(sub.direction), lifecycle_cap=cap_local, cap_reason="probe_reference",
+            )
+    finally:
+        for line in buf.getvalue().splitlines():
+            if _VIEW_LOG_KEEP.search(line):
+                print(f"[probe_ref] pool#{sub.pool_idx} cap={cap_abs}: {line}")
+    return [z for z in zones if z.source_kind == "CTS"]
+
+
 def _build_sibling_cts_ref_zone_from_pool(
     pool: SubStructurePool,
     other_lens: str,
@@ -512,12 +542,15 @@ def _build_sibling_cts_ref_zone_from_pool(
       `subsequent_counter`(1,2)@4083's `starting_idx` 4027 — a pool key);
     - `hi` = the reading trigger's `trigger_idx`: the window is the ONLY thing
       keeping the read causal — never widen it;
-    - the reference zone is built ad hoc from the winning CTS event with
-      `kl_zones=[]` — behaviour-preserving, not a shortcut: subs only ever
-      receive BOS zones (`source_kinds=["BOS"]`), so the primitive's
-      CONFIRMED-zone branch has been dead for subs since the narrowing (GOTCHAS
-      "`ref=cts_confirmed` in a Replay Log Does NOT Mean…"). `df` = the shared
-      entity-absolute M15 frame (the winner's own `bounded.df` is slice-local).
+    - the reference zone: a CTS_CONFIRMED winner's DERIVED CTS KL zone as of
+      `hi` — the winner's OWN sub (events of several subs compete, each sid 0)
+      through `_cts_kl_zones_as_of` (PLAN_W 9c-2, the user 2026-10-28:
+      "Derived, as of the read"; until then `kl_zones=[]` — every sub
+      reference ad hoc, = the derived zone's INIT step, so only an expansion
+      before the read differs: 1 of 11 reads on the reference window, no start
+      moved); an UPDATED / ESTABLISHED winner (or a CONFIRMED one without a
+      derived zone) ad hoc. `df` = the shared entity-absolute M15 frame (the
+      winner's own `bounded.df` is slice-local).
 
     The returned zone's `anchor_idx` is the sibling CTS anchor
     (entity-absolute) — the caller uses it as BOTH the probe `input_idx` AND
@@ -526,6 +559,7 @@ def _build_sibling_cts_ref_zone_from_pool(
     """
     from engine_v2.structure.reference_zone import (
         build_reference_zone_from_cts_event,
+        pick_reference_cts_event,
         _CTS_EVENT_TYPES,
     )
 
@@ -542,6 +576,7 @@ def _build_sibling_cts_ref_zone_from_pool(
         return None
 
     events: List[Any] = []
+    sub_of_event: Dict[int, PooledStructure] = {}   # id(mirrored event) → its sub (the winner's own CTS zones)
     for r in recs:
         sub = pool.get_by_pool_idx(r.pool_idx)   # runs DURING the sweep — no sub_id yet
         if sub.geometry is None:
@@ -565,11 +600,15 @@ def _build_sibling_cts_ref_zone_from_pool(
                 new_ev.meta, _EVENT_META_IDX_KEYS, int(slice_begin),
             )
             events.append(new_ev)
+            sub_of_event[id(new_ev)] = sub
     if not events:
         return None
+    winner = pick_reference_cts_event(events, 0, idx_window=(lo, hi))
+    kl_zones = (_cts_kl_zones_as_of(sub_of_event[id(winner)], hi)
+                if winner is not None and winner.type == "CTS_CONFIRMED" else [])
     return build_reference_zone_from_cts_event(
         events=events,
-        kl_zones=[],
+        kl_zones=kl_zones,
         df=m15_df,
         sid=0,
         probe_direction=int(probe_direction),
@@ -1017,13 +1056,14 @@ def _resolve_reversal_start(
     `slice_begin` — lifted out of the old `build_one_sid`.
 
     Reference = the reversing structure's (sid=0) most recent {CONF/UPD/EST}
-    CTS, read from its own events (`kl_zones=[]`: subs never receive CTS KL
-    zones, so the CONFIRMED-zone branch is dead — behaviour-preserving);
+    CTS, read from its own events — a CTS_CONFIRMED winner's DERIVED CTS KL
+    zone as of the reversal candle (`_cts_kl_zones_as_of`, PLAN_W 9c-2; until
+    then `kl_zones=[]`, every reference ad hoc), else ad hoc;
     probe bound = the reversal candle (`bounded.reversal_idx`, the canonical
     single-source value). Failure branches (no CTS reference / input ≥
     reversal / pending) → `ProbeFailure`.
     """
-    from engine_v2.structure.reference_zone import build_reference_zone_from_cts_event
+    from engine_v2.structure.reference_zone import build_reference_zone_from_cts_event, pick_reference_cts_event
 
     label = f"reversal pool#{sub.pool_idx} R={reversal_idx}"
     assert sub.geometry is not None, f"[entity_compute] {label}: no geometry"
@@ -1034,8 +1074,11 @@ def _resolve_reversal_start(
         f"[entity_compute] {label}: geometry reversal {bounded.reversal_idx} != R-slice_begin "
         f"{reversal_end_local}"
     )
+    winner = pick_reference_cts_event(bounded.events, 0)
+    kl_zones = (_cts_kl_zones_as_of(sub, int(reversal_idx))
+                if winner is not None and winner.type == "CTS_CONFIRMED" else [])
     ref_zone = build_reference_zone_from_cts_event(
-        bounded.events, [], bounded.df, sid=0,
+        bounded.events, kl_zones, bounded.df, sid=0,
         probe_direction=int(probe_direction), idx_window=None,
     )
     if ref_zone is None:

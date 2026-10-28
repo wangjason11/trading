@@ -1,0 +1,64 @@
+== Question 1: the subs RETURN their CTS KL zones (`source_kinds=("BOS", "CTS")`) — vs today
+
+H1.main >> M15.counter: KL zones {'BOS': 8} -> {'BOS': 8, 'CTS': 7}; every base zone unchanged in the variant: True
+   events: EQUAL (591 / 591)
+   poi_zones: EQUAL (7 / 7)
+   ic_candidates: EQUAL (593 / 593)
+   sids: EQUAL (4 / 4)
+   wvmi: EQUAL (7 / 7)
+   wave_candles: EQUAL (15 / 15)
+   added zones (7; one row per (sub, cycle)):
+     CTS sub 3 c0 buy [0.58156, 0.58204] base base inside bar anchor 2736 confirmed 2829 end 2829 (next_cycle) status inactive steps 4
+     CTS sub 3 c1 buy [0.57844, 0.57935] base no base 2nd big anchor 2842 confirmed 2844 end 2992 (next_cycle) status ended steps 6
+     CTS sub 3 c2 buy [0.57400, 0.57500] base base inside bar anchor 3047 confirmed 3086 end 3491 (same_dir_replacement) status ended steps 1
+     CTS sub 5 c0 buy [0.57112, 0.57271] base base anchor 3621 confirmed 3741 end 3819 (same_dir_replacement) status ended steps 1
+     CTS sub 6 c0 sell [0.57758, 0.57827] base base inside bar anchor 3760 confirmed 3786 end 4143 (same_dir_replacement) status ended steps 2
+     CTS sub 8 c0 sell [0.57622, 0.57738] base base anchor 4086 confirmed 4143 end 4157 (next_cycle) status ended steps 4
+     CTS sub 8 c1 sell [0.57765, 0.57802] base no base anchor 4157 confirmed 4159 end 4179 (next_cycle) status ended steps 2
+
+H1.main >> M15.confluence: KL zones {'BOS': 21} -> {'BOS': 21, 'CTS': 20}; every base zone unchanged in the variant: True
+   events: EQUAL (1386 / 1386)
+   poi_zones: EQUAL (17 / 17)
+   ic_candidates: EQUAL (1426 / 1426)
+   sids: EQUAL (8 / 8)
+   wvmi: EQUAL (18 / 18)
+   wave_candles: EQUAL (41 / 41)
+   added zones (20; one row per (sub, cycle)):
+     CTS sub 0 c0 sell [0.57263, 0.57444] base base inside bar anchor 784 confirmed 1020 end 1020 (next_cycle) status inactive steps 4
+     CTS sub 0 c1 sell [0.57452, 0.57572] base no base star 1st big anchor 1020 confirmed 1025 end 1224 (next_cycle) status ended steps 6
+     CTS sub 0 c2 sell [0.57762, 0.58084] base no base big tail down anchor 1245 confirmed 1257 end 1721 (next_cycle) status ended steps 17
+     CTS sub 0 c3 sell [0.58162, 0.58267] base base anchor 1721 confirmed 1751 end 1793 (next_cycle) status ended steps 2
+     CTS sub 0 c4 sell [0.58267, 0.58314] base no base anchor 1794 confirmed 1795 end 1940 (reversal) status ended steps 1
+     CTS sub 1 c0 buy [0.58048, 0.58102] base base anchor 1816 confirmed 1940 end 1940 (next_cycle) status inactive steps 2
+     CTS sub 1 c1 buy [0.57877, 0.57946] base base anchor 1898 confirmed 1940 end 1940 (next_cycle) status inactive steps 1
+     CTS sub 1 c2 buy [0.57582, 0.57730] base base anchor 1945 confirmed 1948 end 2231 (next_cycle) status ended steps 4
+     CTS sub 1 c3 buy [0.57538, 0.57592] base no base star 1st big anchor 2231 confirmed 2236 end 2343 (next_cycle) status ended steps 2
+     CTS sub 1 c4 buy [0.57360, 0.57414] base no base anchor 2365 confirmed 2367 end 2470 (reversal) status ended steps 1
+     CTS sub 2 c0 sell [0.58402, 0.58465] base no base big tail down anchor 2557 confirmed 2560 end 2608 (next_cycle) status ended steps 3
+     CTS sub 2 c1 sell [0.58488, 0.58534] base base anchor 2609 confirmed 2612 end 2829 (reversal) status ended steps 1
+     CTS sub 3 c0 buy [0.58156, 0.58204] base base inside bar anchor 2736 confirmed 2829 end 2829 (next_cycle) status inactive steps 4
+     CTS sub 3 c1 buy [0.57844, 0.57935] base no base 2nd big anchor 2842 confirmed 2844 end 2992 (next_cycle) status ended steps 6
+     CTS sub 3 c2 buy [0.57400, 0.57500] base base inside bar anchor 3047 confirmed 3086 end 3491 (same_dir_replacement) status ended steps 1
+     CTS sub 4 c0 sell [0.58055, 0.58105] base base inside bar anchor 3304 confirmed 3336 end 3589 (reversal) status ended steps 1
+     CTS sub 5 c0 buy [0.57112, 0.57271] base base anchor 3621 confirmed 3741 end 3819 (same_dir_replacement) status ended steps 1
+     CTS sub 7 c0 buy [0.57255, 0.57337] base base anchor 4000 confirmed 4071 end 4200 (reversal) status ended steps 1
+     CTS sub 8 c0 sell [0.57622, 0.57738] base base anchor 4086 confirmed 4143 end 4157 (next_cycle) status ended steps 4
+     CTS sub 8 c1 sell [0.57765, 0.57802] base no base anchor 4157 confirmed 4159 end 4179 (next_cycle) status ended steps 2
+
+== Question 2: the sub probe's reference zone — ad hoc today vs the derived CTS KL zone
+12 reads recorded, 11 distinct sub reads, 1 distinct structure_engine reversal reads; sub winners by type: {'CTS_CONFIRMED': 11}
+  reversal pool#0 R=1940 dir -1 | winner CTS_CONFIRMED c4 moment 1795 anchor 1794 | ad hoc (0.58314, 0.58267) | derived as of the read (0.58314, 0.58267) = (INIT (0.58314, 0.58267), 1 step(s), base no base) | at the natural end (0.58314, 0.58267) = (1 step(s))
+  reversal pool#1 R=2470 dir +1 | winner CTS_CONFIRMED c4 moment 2367 anchor 2365 | ad hoc (0.57360, 0.57414) | derived as of the read (0.57360, 0.57414) = (INIT (0.57360, 0.57414), 1 step(s), base no base) | at the natural end (0.57360, 0.57414) = (1 step(s))
+  reversal pool#2 R=2829 dir -1 | winner CTS_CONFIRMED c1 moment 2612 anchor 2609 | ad hoc (0.58534, 0.58488) | derived as of the read (0.58534, 0.58488) = (INIT (0.58534, 0.58488), 1 step(s), base base) | at the natural end (0.58534, 0.58488) = (1 step(s))
+  sibling  read confluence parent (0, 1) window (2611, 2995) dir -1 | winner CTS_CONFIRMED c1 moment 2612 anchor 2609 | ad hoc (0.58534, 0.58488) | derived as of the read (0.58534, 0.58488) = (INIT (0.58534, 0.58488), 1 step(s), base base) | at the natural end (0.58534, 0.58488) = (1 step(s))
+  sibling  read counter    parent (0, 1) window (2995, 3283) dir +1 | winner CTS_CONFIRMED c2 moment 3086 anchor 3047 | ad hoc (0.57400, 0.57500) | derived as of the read (0.57400, 0.57500) = (INIT (0.57400, 0.57500), 1 step(s), base base inside bar) | at the natural end (0.57376, 0.57500) DIFFERS (2 step(s))
+  sibling  read confluence parent (0, 1) window (3283, 3491) dir -1 | winner CTS_CONFIRMED c0 moment 3336 anchor 3304 | ad hoc (0.58105, 0.58055) | derived as of the read (0.58105, 0.58055) = (INIT (0.58105, 0.58055), 1 step(s), base base inside bar) | at the natural end (0.58105, 0.58055) = (1 step(s))
+  reversal pool#4 R=3589 dir -1 | winner CTS_CONFIRMED c0 moment 3336 anchor 3304 | ad hoc (0.58105, 0.58055) | derived as of the read (0.58105, 0.58055) = (INIT (0.58105, 0.58055), 1 step(s), base base inside bar) | at the natural end (0.58105, 0.58055) = (1 step(s))
+  sibling  read confluence parent (1, 2) window (3611, 3743) dir +1 | winner CTS_CONFIRMED c0 moment 3741 anchor 3621 | ad hoc (0.57112, 0.57271) | derived as of the read (0.57112, 0.57271) = (INIT (0.57112, 0.57271), 1 step(s), base base) | at the natural end (0.57112, 0.57271) = (1 step(s))
+  sibling  read counter    parent (1, 2) window (3743, 3819) dir -1 | winner CTS_CONFIRMED c0 moment 3786 anchor 3760 | ad hoc (0.57806, 0.57758) | derived as of the read (0.57827, 0.57758) DIFFERS (INIT (0.57806, 0.57758), 2 step(s), base base inside bar) | at the natural end (0.57898, 0.57758) DIFFERS (9 step(s))
+  sibling  read confluence parent (1, 2) window (3819, 4143) dir +1 | winner CTS_CONFIRMED c0 moment 4071 anchor 4000 | ad hoc (0.57255, 0.57337) | derived as of the read (0.57255, 0.57337) = (INIT (0.57255, 0.57337), 1 step(s), base base) | at the natural end (0.57255, 0.57337) = (1 step(s))
+  reversal pool#7 R=4200 dir +1 | winner CTS_CONFIRMED c0 moment 4071 anchor 4000 | ad hoc (0.57255, 0.57337) | derived as of the read (0.57255, 0.57337) = (INIT (0.57255, 0.57337), 1 step(s), base base) | at the natural end (0.57255, 0.57337) = (1 step(s))
+CTS_CONFIRMED winners: 11; the derived zone as of the read = ad hoc: 10; its INIT step = ad hoc: 11; the natural-end zone = ad hoc: 9
+
+The structure_engine reversal reads (the H1 main — it already passes its derived CTS zones):
+  sid 0 dir -1 frame n=1058 CTS zones passed 2: got (0.58534, 0.58404) source cts_confirmed anchor 652 | ad hoc (0.58534, 0.58404) =

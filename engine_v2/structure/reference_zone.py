@@ -16,7 +16,13 @@ from the relevant prior/sibling sid's most recent CTS event, by one rule:
 Callers: the sub `reversal` path and the main-structure reversal
 (`structure_engine`), and — through the sibling-CTS pool read
 (`entity_df_mutation._build_sibling_cts_ref_zone_from_pool`) —
-`first_counter` / `subsequent_*`. `first_confluence` does not use this
+`first_counter` / `subsequent_*`. Each passes the derived CTS zones the
+CONFIRMED branch reads: the main its reversed sid's (all its events, which end
+at its reversal), a sub reader the WINNER's own sub's as of the read
+(`entity_df_mutation._cts_kl_zones_as_of`; PLAN_W 9c-2, 2026-10-28 — the sub
+readers passed `kl_zones=[]` until then, so every sub reference was ad hoc;
+the ad-hoc zone = the derived zone's INIT step). A caller that needs the
+winner before the build reads `pick_reference_cts_event`. `first_confluence` does not use this
 helper: it builds its own ad-hoc BOS_0 (`build_ad_hoc_bos0_reference_zone`)
 at its M15 input, the parent BOS anchor price-mapped to M15. (The retired
 "parent BOS / CTS zone" sources were deleted in Plan E E5·2.)
@@ -259,6 +265,51 @@ def _derive_cts_zone_ad_hoc(
     return _derive_zone_ad_hoc(df, cts_anchor_idx, direction, bos=False)
 
 
+def pick_reference_cts_event(
+    events: List[StructureEvent],
+    sid: int,
+    *,
+    idx_window: Optional[Tuple[int, int]] = None,
+) -> Optional[StructureEvent]:
+    """The CTS event a reference zone is built from (`build_reference_zone_from_cts_event`): among `events` of
+    `structure_id == sid` and a type in {CTS_CONFIRMED, CTS_UPDATED, CTS_ESTABLISHED} — inside the inclusive
+    `idx_window` on the event's MOMENT when given — the most recent moment; None when there is none. A caller that
+    must know the winner BEFORE the build (the sub readers derive the winner's own CTS zones, PLAN_W 9c-2) reads it
+    here — one pick, never a copy of it."""
+    candidates: List[StructureEvent] = []
+    for ev in events:
+        if ev.type not in _CTS_EVENT_TYPES:
+            continue
+        if ev.meta.get("structure_id") != sid:
+            continue
+        if idx_window is not None:
+            lo, hi = idx_window
+            # A TIME filter (the sibling window): the event's MOMENT (Plan E E3b).
+            ev_moment_idx = ef.event_moment(ev)
+            if ev_moment_idx < lo or ev_moment_idx > hi:
+                continue
+        candidates.append(ev)
+
+    if not candidates:
+        return None
+
+    # Most-recent MOMENT wins regardless of type (Plan E E3b; hazard H5). Ties
+    # break on type order (CONFIRMED > UPDATED > ESTABLISHED). A tie is real: a
+    # cycle's CTS_ESTABLISHED and a CTS_UPDATED / CTS_CONFIRMED can share a
+    # moment candle (the stamped idx of an EST is its anchor, so the old
+    # "never at the same idx" claim held only for stamped indices).
+    _TYPE_ORDER = {
+        "CTS_CONFIRMED": 2,
+        "CTS_UPDATED": 1,
+        "CTS_ESTABLISHED": 0,
+    }
+    candidates.sort(
+        key=lambda e: (ef.event_moment(e), _TYPE_ORDER[e.type]),
+        reverse=True,
+    )
+    return candidates[0]
+
+
 def build_reference_zone_from_cts_event(
     events: List[StructureEvent],
     kl_zones: List[KLZone],
@@ -325,38 +376,9 @@ def build_reference_zone_from_cts_event(
         rare — caller should fall back to its variant's per-spec fallback,
         e.g. window-extreme-toward-parent-zone for subsequent_*).
     """
-    candidates: List[StructureEvent] = []
-    for ev in events:
-        if ev.type not in _CTS_EVENT_TYPES:
-            continue
-        if ev.meta.get("structure_id") != sid:
-            continue
-        if idx_window is not None:
-            lo, hi = idx_window
-            # A TIME filter (the sibling window): the event's MOMENT (Plan E E3b).
-            ev_moment_idx = ef.event_moment(ev)
-            if ev_moment_idx < lo or ev_moment_idx > hi:
-                continue
-        candidates.append(ev)
-
-    if not candidates:
+    ev = pick_reference_cts_event(events, sid, idx_window=idx_window)
+    if ev is None:
         return None
-
-    # Most-recent MOMENT wins regardless of type (Plan E E3b; hazard H5). Ties
-    # break on type order (CONFIRMED > UPDATED > ESTABLISHED). A tie is real: a
-    # cycle's CTS_ESTABLISHED and a CTS_UPDATED / CTS_CONFIRMED can share a
-    # moment candle (the stamped idx of an EST is its anchor, so the old
-    # "never at the same idx" claim held only for stamped indices).
-    _TYPE_ORDER = {
-        "CTS_CONFIRMED": 2,
-        "CTS_UPDATED": 1,
-        "CTS_ESTABLISHED": 0,
-    }
-    candidates.sort(
-        key=lambda e: (ef.event_moment(e), _TYPE_ORDER[e.type]),
-        reverse=True,
-    )
-    ev = candidates[0]
     # The winner's CTS ANCHOR (a location): the ad-hoc zone base and the probe
     # input (`anchor_idx` → the probe-cache key).
     cts_anchor_idx = ef.cts_anchor_idx(ev)

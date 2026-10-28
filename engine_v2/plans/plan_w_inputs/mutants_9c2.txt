@@ -1,0 +1,8 @@
+KILLED    v9c2_sibling_ad_hoc                1 failing: test_primitive_called_with_the_winners_as_of_cts_zones_and_s
+KILLED    v9c2_sibling_as_of_lo              1 failing: test_primitive_called_with_the_winners_as_of_cts_zones_and_s
+KILLED    v9c2_sibling_any_winner            1 failing: test_an_updated_winner_reads_no_derived_zone
+KILLED    v9c2_reversal_ad_hoc               1 failing: test_the_reversal_reference_reads_the_derived_zone_as_of_the
+KILLED    v9c2_no_clip                       1 failing: test_cts_kl_zones_as_of_is_the_projection_as_of_that_moment
+KILLED    v9c2_no_cap                        1 failing: test_cts_kl_zones_as_of_is_the_projection_as_of_that_moment
+KILLED    v9c2_bos_too                       2 failing: test_cts_kl_zones_as_of_is_the_projection_as_of_that_moment, test_the_reversal_reference_reads_the_derived_zone_as_of_the
+7/7 KILLED  (results: C:/Users/wangj/AppData/Local/Temp/mr9c2\results.json)
