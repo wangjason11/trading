@@ -1,0 +1,4 @@
+commit_hash=1318c82
+timestamp=20261028_153518
+branch=week9-entries-decisions
+commit_message=PLAN_V 8c (SESSION ORDER item 8c): a volume-only doji qualifies - wave_candles._is_qualified = the agreed direction (WVMI's rule); +3 sub 3 temporary LP rows per lens, nothing else moves; a direction-0 wave candle drawn in its vol_dir colour (zero change on the window)
