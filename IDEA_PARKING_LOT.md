@@ -378,6 +378,14 @@ SYLLABUS Week 9 Part 2 "Zone size at entry and stop-loss".
    remaining charting items mentioned in the documentation to be "long term" parked. These we may not come back to
    unless I specifically mention something about doing another detailed sweep." — every chart / hover item in §A
    (the charting audit's unverified list) and §G; do not raise them again unasked.
+   **The picks, done 2026-10-28 (`engine_v2/plans/PLAN_X_part1_ms_checks.md`):** X1 the `REVERSAL_CANDIDATE` pattern
+   fix LANDED `6764bde` (= its prediction; "Recently closed"); X2 the census MEASURED on 5 windows (the reference
+   window + PLAN_W's four; `5d91156`) — every check 0 in effect: the probe's BOS_0 never reads past its bound (26
+   resets + 9 zones), MS's POI snapshot = as-of (6,326 candles), the full-frame imbalance residual 0 (8 bounded runs),
+   the straddling candidate 0 / 12, B5 0 / 13; the fib re-ask: 0 activations dropped, 14 one-candle or
+   pre-established-cycle exposures; the double RANGE_STARTED superseded since PLAN_J J1 (what is left is the range
+   label's documented look-ahead, 1 instance). Each line above carries its measurement. NEXT: the user's call —
+   close Part 1?
 
 **D.1 — Ordered (the heavy items):**
 1. **One POI per cycle** (redefine the IC & POI zone logic) — B landed; its chart debugging PAUSED for item 2 (user
