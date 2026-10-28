@@ -61,9 +61,11 @@ pre-Part-2 items DONE 2026-10-28 (register §D SESSION ORDER item 8, scoped by t
 `plans/PLAN_V_part1_minor_items.md`: 8a the §A hygiene trio and 8b the replacement-chain `ended_by` fix, both zero
 change; 8c the agreed direction for wave candles + WVMI — a volume-only doji qualifies, a direction-0 wave candle is
 drawn in its `vol_dir` colour; the candle-direction confirmation, zone strength scoring and the M5 layer moved to
-Parts 2 / 3); NOW item 9, the last Part 1 items (the user 2026-10-28, three of item 8's not-picked backlog
-entries: the missing-label fill paths, the POI record gate for a fib that ended without ever locking, the sub CTS KL
-zones as the probe reference — register §D SESSION ORDER item 9), then Part 1 is complete); NEXT Part 2 entry decisions (+ the entry confirmation candle
+Parts 2 / 3); item 9, the last Part 1 items (the user 2026-10-28, three of item 8's not-picked backlog entries —
+register §D SESSION ORDER item 9; `plans/PLAN_W_part1_last_items.md`): 9a the fill checks require a frame indexed
+0..n−1 and 9b the POI record gate `active OR locked` (a cycle that ends before its fib locks gets its POI) DONE
+2026-10-28, both zero change on the reference window; NOW 9c, the sub CTS KL zones as the probe reference
+(discussion first), then Part 1 is complete); NEXT Part 2 entry decisions (+ the entry confirmation candle
 patterns, zone size at entry / stop — register §D.3), Part 3 other decisions.
 
 **Pre-Week 8 fix:** Exception 2 probe relaxed from CTS_CONFIRMED to CTS_ESTABLISHED (`bbb6d32`).

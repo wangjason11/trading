@@ -913,8 +913,21 @@ window). = the variant replay byte for byte. vs S_V8b: DIFF only the two lens `*
 chart, 'M15 WVMI LP sell' (confluence 112 → 115 dots, counter 47 → 50) + the two M15 PNGs; the H1 chart + PNG, the
 other 28 CSVs, the trace counts (79, 302, 154), the `[floor_seed]` lines and skip grep 33 unchanged
 (`plan_v_inputs/v8c_landing_compare.txt`, `v8c_save_counts.txt`). Not a save-format boundary. Suite 2172; mutants
-4 / 4. S_V8c `20261028_153518_1318c82` (source `1318c82`, save `fb6fb81`, trunk `8e6a53a`; = `LATEST_<branch>` from
-2026-10-28; run mode, the save = the variant byte for byte). PLAN_V is complete.
+4 / 4. S_V8c `20261028_153518_1318c82` (source `1318c82`, save `fb6fb81`, trunk `8e6a53a`; = `LATEST_<branch>` until
+S_W9b, below; run mode, the save = the variant byte for byte). PLAN_V is complete.
+**PLAN_W 9a + 9b (2026-10-28, SESSION ORDER item 9; `plans/PLAN_W_part1_last_items.md` §1–2) — two zero-change
+landings, one save (the user: "Commit now, save after 9b"):** 9a `35e827e` — the fill checks (`is_filled`,
+`poi_zones._compute_fill_idx_cache`) require a frame indexed 0..n−1 (`common/types.require_positional_index`, a
+`ValueError` otherwise; the label-based fallbacks deleted — never run: 188,013 of 188,013 calls on a 0..n−1 frame);
+9b `aff21f8` — the POI record gate `active OR locked`: a cycle that ends before its fib locks gets its IC rows + its
+POI, ending at its cycle's end (0 on the reference window; on 2025-08-01 → 09-20 sub 2 cycle 1's POI, IC 2447 —
+`plans/plan_w_inputs/w9b_census/`; another window's replay through a scratch tree: `plan_w_inputs/
+w9b_window_replay.py` + `w9b_window_compare.py`). Each = its prediction vs S_V8c: 30 / 30 CSVs md5-equal, the three
+figures' full JSON equal (`cmp_fig_full.py`), the PNGs equal, chart counts 79 / 232, 154 / 134, 302 / 305, the
+`[floor_seed]` lines + skip grep 33 unchanged (`plan_w_inputs/w9a_compare.txt`, `w9b_compare.txt`). Not a
+save-format boundary. Suite 2165; mutants 5 / 5 + 5 / 5 (PLAN_S step 2's re-anchored) + 4 / 4. S_W9b
+`20261028_165600_aff21f8` (source `aff21f8`, save `1ac3e12`, trunk `f798f9e`; = `LATEST_<branch>` from 2026-10-28;
+run mode, the save = S_V8c byte for byte). 9c (the sub CTS KL zones) is next.
 
 **M15.counter** and **M15.confluence** (9 files each — 7 per-lens debug CSVs
 with the same filename suffixes prefixed `*_M15_counter_` /

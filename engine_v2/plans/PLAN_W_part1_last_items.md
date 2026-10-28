@@ -1,6 +1,10 @@
 # PLAN_W — the last Part 1 items: 9a the fill checks require a 0..n−1 frame, 9b the POI record gate for a fib that ended without ever locking, 9c the sub CTS KL zones (SESSION ORDER item 9, the user 2026-10-28)
 
-**Status: 2026-10-28 — 9a DECIDED + BUILT (§1; = its prediction, zero change, §1.5); 9b MEASURED + DECIDED (§2.2–2.3: a full POI record for a fib whose cycle ends before it locks; the CTS_ESTABLISHED requirement kept).** Baseline **S_V8c** `artifacts/commits/week9-entries-decisions/20261028_153518_1318c82`
+**Status: 2026-10-28 — 9a LANDED (`35e827e`, = its prediction, zero change, §1.5); 9b LANDED (`aff21f8`, = its
+prediction: zero change on the reference window, sub 2 cycle 1's POI on 2025-08-01 → 09-20, §2.5; the user's chart
+look: "charts look good, go ahead and commit-save"); one save after both (the user: "Commit now, save after 9b"):
+S_W9b `20261028_165600_aff21f8` (save `1ac3e12`, trunk `f798f9e`; = S_V8c byte for byte; = `LATEST_<branch>`). NEXT:
+9c (§3, discussion first).** Baseline **S_V8c** `artifacts/commits/week9-entries-decisions/20261028_153518_1318c82`
 (source `1318c82`, save `fb6fb81`, trunk `8e6a53a`; HEAD at drafting `6312819`, code = `1318c82`); suite 2172 at the
 cold start (89.7 s). The scope is the user's (register `IDEA_PARKING_LOT.md` §D "SESSION ORDER" item 9, their words
 verbatim there): 9a → 9b → 9c (proposed order), one cause per `/compare`. Inputs: `plans/plan_w_inputs/`.

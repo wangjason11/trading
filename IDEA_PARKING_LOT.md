@@ -334,7 +334,10 @@ SYLLABUS Week 9 Part 2 "Zone size at entry and stop-loss".
    (PLAN_W §2.2: 0 on the reference window; 0–2 sub cycles per other window, never the H1 main; the proximity views
    unaffected — the overlay reads a sub's POI only as of its CTS_CONFIRMED) and DECIDED: "Full POI record" (the gate
    `active OR locked` — a cycle that ends before its fib locks gets its IC rows + its POI, ending at the cycle's
-   end) + the CTS_ESTABLISHED requirement "Keep it" (PLAN_W §2.3).
+   end) + the CTS_ESTABLISHED requirement "Keep it" (PLAN_W §2.3); BUILT `aff21f8` = its prediction (zero change
+   on the reference window; 2025-08-01 → 09-20: sub 2 cycle 1's POI, PLAN_W §2.5; the user's chart look: "charts
+   look good, go ahead and commit-save"). One save after 9a + 9b: S_W9b `20261028_165600_aff21f8` (= S_V8c byte for
+   byte). **9a + 9b DONE.** NEXT: 9c.
 
 **D.1 — Ordered (the heavy items):**
 1. **One POI per cycle** (redefine the IC & POI zone logic) — B landed; its chart debugging PAUSED for item 2 (user
