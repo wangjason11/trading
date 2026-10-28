@@ -1,0 +1,9 @@
+sub_id,direction,starting_idx,start_idx,end_idx,end_reason,natural_reversal_idx,lenses,relative_dir_segments,n_records,first_record_lens,first_record_parent_sid,first_record_parent_cycle_id,first_record_trigger_type,first_record_trigger_idx
+0,1,454,1020,1940.0,reversal,1940.0,"('confluence',)","((1020, 'confluence'),)",1,confluence,0,0,first_confluence,463
+1,-1,1797,1940,2470.0,reversal,2470.0,"('confluence',)","((1940, 'counter'),)",1,confluence,0,0,reversal,1940
+2,1,2365,2470,2829.0,reversal,2829.0,"('confluence',)","((2470, 'confluence'),)",2,confluence,0,0,reversal,2470
+3,-1,2639,2829,3491.0,same_dir_replacement,,"('confluence', 'counter')","((2829, 'counter'),)",2,confluence,0,1,reversal,2829
+4,1,3230,3283,3589.0,reversal,3589.0,"('confluence',)","((3283, 'confluence'),)",1,confluence,0,1,subsequent_confluence,3283
+5,-1,3304,3491,3819.0,same_dir_replacement,,"('confluence', 'counter')","((3491, 'counter'), (3611, 'confluence'))",3,counter,0,1,subsequent_counter,3491
+7,-1,3760,3819,4200.0,reversal,4200.0,"('confluence',)","((3819, 'confluence'),)",1,confluence,1,2,subsequent_confluence,3819
+8,1,4027,4143,,,,"('confluence', 'counter')","((4143, 'counter'),)",2,counter,1,2,subsequent_counter,4143

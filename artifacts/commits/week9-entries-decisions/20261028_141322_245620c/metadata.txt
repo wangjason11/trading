@@ -1,0 +1,4 @@
+commit_hash=245620c
+timestamp=20261028_141322
+branch=week9-entries-decisions
+commit_message=PLAN_V 8a + 8b save (S_V8b): both landings byte-equal to S_U3b; + the 8c measurement inputs (plans/plan_v_inputs/v8c_*)
