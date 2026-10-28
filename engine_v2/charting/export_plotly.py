@@ -2032,6 +2032,8 @@ def export_chart_plotly(
                         continue
 
                 candle_dir = int(dfx.loc[idx, "direction"])
+                if candle_dir == 0:  # a volume-only doji (qualified since PLAN_V 8c): its vol_dir
+                    candle_dir = int(dfx.loc[idx, "vol_dir"]) if "vol_dir" in dfx.columns else 0
                 if candle_dir == 0:
                     continue
 

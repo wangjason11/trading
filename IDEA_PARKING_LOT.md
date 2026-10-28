@@ -286,7 +286,8 @@ SYLLABUS Week 9 Part 2 "Zone size at entry and stop-loss".
    and 8b DONE (`01f5282`, zero change) — the user: "Two commits, one save" (S_V8b `20261028_141322_245620c` = S_U3b
    byte for byte); 8c MEASURED (PLAN_V §3.1: 0 of 53 wave
    candles move, sub 3's temporary-LP history gains three volume-only dojis) and DECIDED: "Apply it" + a
-   direction-0 wave candle drawn in its `vol_dir` colour ("Draw it in its vol_dir colour"). NEXT: 8c's landing.
+   direction-0 wave candle drawn in its `vol_dir` colour ("Draw it in its vol_dir colour"); 8c LANDED (= the variant
+   byte for byte, PLAN_V §3.3; the user's chart look: "looks good go ahead"). **Item 8 DONE — Week 9 Part 1 complete.**
 
 **D.1 — Ordered (the heavy items):**
 1. **One POI per cycle** (redefine the IC & POI zone logic) — B landed; its chart debugging PAUSED for item 2 (user
@@ -517,14 +518,14 @@ SYLLABUS Week 9 Part 2 "Zone size at entry and stop-loss".
   (not saved). OPEN (latent, 0 on the window; PLAN_K §11.2 B5): can MS confirm a BOS on a reversal's own apply candle?
   Both reversal builders take the most recent BOS_CONFIRMED with moment ≤ the reversal (inclusive, pinned) — such a
   BOS's threshold would not be `P`, so its anchor would not be "the anchor behind `P`". DECIDE only if reachable.
-- **The agreed direction for wave candles + WVMI** (PLAN_H Q-W) — item 1 gives the IP legs the *agreed direction*
-  (candle and volume direction agree; one at 0 → the other decides; both 0 = a true doji). Wave candles and WVMI keep
-  GLOSSARY "qualified candle" (no volume-only-doji row) for now — user 2026-10-05: "we likely will also make the change
-  for wave candles & WVMI, but we'll come back to that later". "Qualified" was implemented twice
-  (`wave_candles._is_qualified`, inline in `wvmi._find_temporary_lp`) — ONE helper since 2026-10-26 (the WVMI temp
-  LP calls `_is_qualified`, "WVMI back on the chart" step 3; no output change from the helper); the rule change
-  itself → its own `/compare`. **DECIDED 2026-10-28 — SESSION ORDER item 8c** (the user, item 8's scoping): its own
-  plan + prediction, `/compare`, chart look.
+- ~~**The agreed direction for wave candles + WVMI**~~ (PLAN_H Q-W) — DONE 2026-10-28 (SESSION ORDER item 8c, PLAN_V §3):
+  `wave_candles._is_qualified` = the agreed direction == the required one, so a volume-only doji qualifies (the user,
+  after the variant replay: "Apply it"); a wave candle on a direction-0 candle is drawn in its `vol_dir` colour on
+  every chart ("Draw it in its vol_dir colour"). On the window: 0 of 53 wave candles move; sub 3's WVMI temporary-LP
+  history gains M15 2907 / 2913 / 3252 (+3 rows per lens `*_wvmi_lps.csv`, +3 sell dots per M15 chart). Was: the IP
+  legs got the agreed direction in 2026-10 (item 1), wave candles + WVMI kept "qualified" — user 2026-10-05: "we
+  likely will also make the change for wave candles & WVMI, but we'll come back to that later"; one helper since
+  2026-10-26 ("WVMI back on the chart" step 3).
 
 **D.3 — Moved out of Part 1 into Parts 2 / 3 (the user 2026-10-27, after item 5; SYLLABUS Week 9).**
 - **Zone size at entry and stop loss** (was D.1 item 3 / SESSION ORDER item 6, "zone size adjustments") — the zones

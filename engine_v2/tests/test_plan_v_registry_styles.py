@@ -6,6 +6,10 @@ outline (`zone.m15.outline`, audit #7), the hover-label boxes (`hoverlabel.m15_s
 (`wave_candle.hover_line`, `fib.hover_line`). The registry holds the very values the literals had (the landing is
 byte-equal), so a revert to a literal survives the replay by construction: each pin PATCHES the key to a sentinel and
 shows the drawn element follows it. Also §1.3: `run_replay` refuses a non-H1 main timeframe.
+
+PLAN_V 8c (§3, the user 2026-10-28: "Draw it in its vol_dir colour"): a wave candle on a volume-only doji (direction
+0 — a qualified candle since 8c) is drawn in its `vol_dir`'s colour; every renderer skipped it before. None exists on
+the window, so the pins turn the fixture's wave candles into volume-only dojis and show the same verticals draw.
 """
 from __future__ import annotations
 
@@ -305,3 +309,87 @@ def test_run_replay_refuses_a_non_h1_main_timeframe(monkeypatch):
     with pytest.raises(AssertionError, match="H1-main"):
         rr.main()
     assert fetched == []
+
+
+# ---------------------------------------------------------------------------
+# PLAN_V 8c: a wave candle on a volume-only doji draws in its vol_dir colour
+# ---------------------------------------------------------------------------
+
+def _as_volume_only_dojis(df, waves):
+    """Every wave candle's candle -> a volume-only doji in its own direction (direction 0, vol_dir = the old direction)."""
+    out = df.copy()
+    out.attrs = dict(df.attrs)
+    idxs = {int(i) for w in waves for i in (w.last_wave_candle_idx, w.first_wave_candle_idx)
+            if i is not None and int(i) in out.index and int(out.loc[int(i), "direction"]) != 0}
+    for i in idxs:
+        out.loc[i, "vol_dir"] = int(out.loc[i, "direction"])
+        out.loc[i, "direction"] = 0
+    return out, idxs
+
+
+def _wave_verticals(fig, keys):
+    colours = {f"rgba({STYLE[k]['line']['color_rgb']}, {float(STYLE[k].get('opacity', 0.8))})" for k in keys}
+    return sorted((str(s.x0), s.line.color) for s in fig.layout.shapes if s.type == "line" and s.line.color in colours)
+
+
+def test_the_h1_chart_draws_a_volume_only_doji_wave_candle_in_its_vol_dir_colour(tmp_path, monkeypatch, h1_out):
+    go = pytest.importorskip("plotly.graph_objects")
+    from engine_v2.charting.export_plotly import export_chart_plotly
+    from engine_v2.multitf.registry import StructureRegistry
+    res, out = h1_out
+
+    def render(df):
+        df.attrs.update(structure_events=res.events, fib_states=[], poi_zones=[], ic_candidates=[],
+                        kl_zones=list(out["kl_zones"]), wave_candles=out["wave_candles"])
+        reg = StructureRegistry()
+        reg.register("H1", df=df, timeframe="H1", role="main")
+        figs = []
+        monkeypatch.setattr(go.Figure, "write_html", lambda self, *a, **k: figs.append(self))
+        monkeypatch.setattr(go.Figure, "write_image", lambda self, *a, **k: None)
+        cfg = {"structure": {"levels": False}, "struct_state": {"labels": False}, "range_visual": {"rectangles": False},
+               "fib": {"lines": False}, "imbalance": {"highlight": False},
+               "zones": {"wave_candles": True, "POI": False, "KL": False},
+               "volume": {"bars": False, "ema_line": False, "spike_marker": False}}
+        with contextlib.redirect_stdout(io.StringIO()):
+            export_chart_plotly(title="t", registry=reg, path_id="H1", out_dir=tmp_path, cfg=cfg)
+        fig, = figs
+        return _wave_verticals(fig, ("wave_candle.bullish", "wave_candle.bearish"))
+
+    plain = render(res.df.copy())
+    dojis, idxs = _as_volume_only_dojis(res.df, out["wave_candles"])
+    assert plain and idxs
+    assert render(dojis) == plain
+
+
+def test_the_h1_overlay_draws_a_volume_only_doji_wave_candle_in_its_vol_dir_colour(monkeypatch, h1_out):
+    go = pytest.importorskip("plotly.graph_objects")
+    from engine_v2.charting.export_m15_chart import _render_h1_overlay
+    res, out = h1_out
+    m15 = pd.DataFrame({"time": pd.date_range(res.df["time"].iloc[0], periods=len(res.df) * 4, freq="15min",
+                                              tz="UTC")})
+    m15["l"], m15["h"] = float(res.df["l"].min()), float(res.df["h"].max())
+
+    def render(h1):
+        h1.attrs.update(structure_events=res.events, kl_zones=out["kl_zones"], wave_candles=out["wave_candles"])
+        fig = go.Figure()
+        with contextlib.redirect_stdout(io.StringIO()):
+            _render_h1_overlay(fig, m15, h1, {}, {}, {"labels": False}, {"levels": False},
+                               {"KL": False, "POI": False, "wave_candles": True})
+        return _wave_verticals(fig, ("wave_candle.h1_overlay.bullish", "wave_candle.h1_overlay.bearish"))
+
+    plain = render(res.df.copy())
+    dojis, idxs = _as_volume_only_dojis(res.df, out["wave_candles"])
+    assert plain and idxs
+    assert render(dojis) == plain
+
+
+def test_every_wave_candle_renderer_colours_a_direction_0_candle_by_its_vol_dir():
+    """The M15 sub site has no render fixture (as above): counted in the source — the other two are rendered."""
+    from pathlib import Path
+    import engine_v2.charting as charting
+    root = Path(charting.__file__).parent
+    m15 = (root / "export_m15_chart.py").read_text(encoding="utf-8")
+    h1 = (root / "export_plotly.py").read_text(encoding="utf-8")
+    assert m15.count('candle_dir = int(lt_df.iloc[idx]["vol_dir"]) if "vol_dir" in lt_df.columns else 0') == 1
+    assert m15.count('candle_dir = int(h1_df.loc[idx, "vol_dir"]) if "vol_dir" in h1_df.columns else 0') == 1
+    assert h1.count('candle_dir = int(dfx.loc[idx, "vol_dir"]) if "vol_dir" in dfx.columns else 0') == 1

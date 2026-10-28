@@ -1,0 +1,5 @@
+KILLED    v8c_rule_requires_direction        3 failing: test_qualified_rule_is_the_agreed_direction_incl_the_volume_, test_a_volume_only_doji_qualifies_in_its_vol_dir, test_a_volume_only_doji_is_a_candidate
+KILLED    v8c_m15_sub_no_vol_dir_colour      1 failing: test_every_wave_candle_renderer_colours_a_direction_0_candle
+KILLED    v8c_h1ov_no_vol_dir_colour         2 failing: test_every_wave_candle_renderer_colours_a_direction_0_candle, test_the_h1_overlay_draws_a_volume_only_doji_wave_candle_in_
+KILLED    v8c_h1_no_vol_dir_colour           2 failing: test_every_wave_candle_renderer_colours_a_direction_0_candle, test_the_h1_chart_draws_a_volume_only_doji_wave_candle_in_it
+4/4 KILLED  (results: C:\Users\wangj\AppData\Local\Temp\mutant_runner\results.json)

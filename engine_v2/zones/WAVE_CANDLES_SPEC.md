@@ -30,11 +30,14 @@ Direction mapping:
 ## Qualification Criteria
 
 ### Qualified Candle (`_is_qualified`)
-Both must be true:
-1. `candle direction == required_dir`
-2. `vol_dir == required_dir OR vol_dir == 0`
+The candle's **agreed direction** (GLOSSARY; `candles_v2.agreed_direction`) == `required_dir`:
+1. `candle direction == required_dir` AND `vol_dir == required_dir OR vol_dir == 0`, or
+2. a **volume-only doji**: `candle direction == 0` AND `vol_dir == required_dir` (since PLAN_V 8c, 2026-10-28 — the
+   user: "Apply it"; the IP legs' rule since PLAN_H Q-W. On the reference window it moves no wave candle; it adds
+   three WVMI temporary LPs — `plans/PLAN_V_part1_minor_items.md` §3.1).
+A split candle (direction and vol_dir opposite) and a true doji (both 0) never qualify.
 
-**Rationale:** vol_dir == 0 (neutral volume) is allowed because volume data may be incomplete or neutral during legitimate wave transitions.
+**Rationale:** vol_dir == 0 (neutral volume) is allowed because volume data may be incomplete or neutral during legitimate wave transitions; a doji whose close moved is directional by its volume direction.
 
 ### Compound First-Wave (`_is_compound_first_wave`)
 Match ONE of:
@@ -151,7 +154,8 @@ Scan forward from `last_bo_idx + 1` to `CTS_CONFIRMED + 10 candles` (or end of d
 | BIB forward search finds candidate but it's farther from outer than BOS candle | Rejected; falls through to backward fallback |
 | Zone has no events (missing CTS_ESTABLISHED) | BIB event walk yields nothing; fallback ±10 window used |
 | Candle with vol_dir == 0 | Qualifies (neutral volume is acceptable) |
-| Candle with direction == 0 (neutral) | Does NOT qualify for any wave candle role |
+| Candle with direction == 0 and vol_dir == 0 (a true doji) | Does NOT qualify for any wave candle role |
+| Candle with direction == 0 and vol_dir == +-1 (a volume-only doji) | Qualifies in its vol_dir (since PLAN_V 8c) — a last-wave / WVMI LP candidate; the compound first-wave rule is separate (unchanged) |
 
 ---
 

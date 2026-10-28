@@ -231,6 +231,13 @@ class TestTemporaryLpSequence:
         spec = [_q(1.00), _q(0.95), (-1, 1, 0.80), _q(0.85, vol_dir=0), (1, -1, 0.70)]
         assert _seq(spec, 0, _cts_confirmed(1, pattern_anchor_idx=1), 4) == [(1, 1), (3, 3)]
 
+    def test_a_volume_only_doji_is_a_candidate(self):
+        """PLAN_V 8c (2026-10-28): a volume-only doji in the pullback direction (2: direction 0, vol_dir -1, .90) is
+        a qualified candle — a temporary LP; one with vol_dir +1 (3) is not, nor is a split candle (4). Until 8c the
+        sequence stopped at 1 (on the window: sub 3's M15 2907 / 2913 / 3252, PLAN_V §3.1)."""
+        spec = [_q(1.00), _q(0.95), (0, -1, 0.90), (0, 1, 0.80), (-1, 1, 0.70)]
+        assert _seq(spec, 0, _cts_confirmed(1, pattern_anchor_idx=1), 4) == [(1, 1), (2, 2)]
+
     def test_no_qualified_candle_no_lp(self):
         spec = [_q(1.00), _N, _N, (1, 1, 0.95)]
         assert _seq(spec, 0, _cts_confirmed(2, pattern_anchor_idx=1), 3) == []

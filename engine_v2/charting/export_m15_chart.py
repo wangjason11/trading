@@ -1491,6 +1491,8 @@ def export_m15_chart_plotly(
                         if viz is None or not viz[0]:
                             continue
                     candle_dir = int(lt_df.iloc[idx]["direction"])
+                    if candle_dir == 0:  # a volume-only doji (qualified since PLAN_V 8c): its vol_dir
+                        candle_dir = int(lt_df.iloc[idx]["vol_dir"]) if "vol_dir" in lt_df.columns else 0
                     if candle_dir == 0:
                         continue
 
@@ -2473,6 +2475,8 @@ def _render_h1_overlay(fig, dfx, h1_df, h1_to_m15, m15_to_h1, state_cfg, struct_
                     if viz is None or not viz[0]:
                         continue
                 candle_dir = int(h1_df.loc[idx, "direction"])
+                if candle_dir == 0:  # a volume-only doji (qualified since PLAN_V 8c): its vol_dir
+                    candle_dir = int(h1_df.loc[idx, "vol_dir"]) if "vol_dir" in h1_df.columns else 0
                 if candle_dir == 0:
                     continue
 

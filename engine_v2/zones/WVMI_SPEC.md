@@ -275,8 +275,9 @@ the zone's outer edge — 6 records on the reference window, all ended by a reve
 (e.g. H1 sid 0 cycle 1: LP 896 → 901, pullback momentum 0.759 → 0.478). The BOS zone is
 no longer read for the LP (a record still needs one — "Guard Rails").
 
-1. **Candidates**: a qualified candle (GLOSSARY "Qualified candle": the pullback
-   direction AND the volume direction agrees or is 0 — `wave_candles._is_qualified`,
+1. **Candidates**: a qualified candle (GLOSSARY "Qualified candle": its agreed direction = the
+   pullback direction — the volume direction agrees or is 0, or a volume-only doji since PLAN_V 8c —
+   `wave_candles._is_qualified`,
    the one helper every wave-candle role uses) in `[FP_idx + 1, search_end]`, at
    creation AND on every re-scan — never FP, on every route below
    (`WVMITracker._lp_search_end`). `search_end` = the cycle's lifecycle end − 1

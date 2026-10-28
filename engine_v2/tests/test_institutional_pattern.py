@@ -199,16 +199,21 @@ def test_agreed_direction_table(direction, vol_dir, agreed):
     assert list(agreed_direction(np.array([direction] * 3), np.array([vol_dir] * 3))) == [agreed] * 3
 
 
-def test_qualified_rule_reads_the_agreed_direction_unchanged():
-    """`wave_candles._is_qualified` now reads `agreed_direction` — equal to the old formula on the whole grid
-    (incl. a frame without `vol_dir`; byte-identity of wave candles / WVMI on the window: landing A's `/compare`)."""
+def test_qualified_rule_is_the_agreed_direction_incl_the_volume_only_doji():
+    """`wave_candles._is_qualified` = the agreed direction == the required one (PLAN_V 8c, 2026-10-28 — the user:
+    "Apply it"). Until then it ALSO required the candle direction (PLAN_H Q-W kept the old rule for wave candles + WVMI;
+    this test pinned that equality): the only cell that changes is the volume-only doji, qualified in its vol_dir. A
+    split candle never qualifies; a frame without `vol_dir` reads vol 0 (the candle direction decides)."""
     from engine_v2.zones.wave_candles import _is_qualified
     grid = [(d, v) for d in (-1, 0, 1) for v in (-1, 0, 1)]
     df = pd.DataFrame({"direction": [d for d, _ in grid], "vol_dir": [v for _, v in grid]})
     no_vol = df[["direction"]]
+    qualified_in = {(1, 1): 1, (1, 0): 1, (-1, -1): -1, (-1, 0): -1,     # direction, vol the same or 0
+                    (0, 1): 1, (0, -1): -1,                              # the volume-only doji (new in 8c)
+                    (0, 0): 0}                                           # a true doji: agreed 0 (no caller asks 0)
     for i, (d, v) in enumerate(grid):
         for req in (-1, 0, 1):
-            assert _is_qualified(df, i, req) == (d == req and v in (req, 0)), (d, v, req)
+            assert _is_qualified(df, i, req) == (qualified_in.get((d, v)) == req), (d, v, req)
             assert _is_qualified(no_vol, i, req) == (d == req), (d, req)
 
 

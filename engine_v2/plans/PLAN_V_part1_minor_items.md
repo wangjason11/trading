@@ -3,7 +3,7 @@
 **Status: 2026-10-28 — 8a LANDED (`955489b`, = its prediction, §1.5), 8b LANDED (`01f5282`, = its prediction, §2.4);
 one save after both (the user: "Two commits, one save"): S_V8b `20261028_141322_245620c` (source `245620c`, save
 `67c4d05`, trunk `29276a0`; = S_U3b byte for byte; the new `/compare` baseline). 8c MEASURED + DECIDED (§3.1–3.2);
-NEXT: 8c's landing.** Baseline **S_U3b**
+8c LANDED = the variant byte for byte (§3.3; the user's chart look: "looks good go ahead") — item 8 DONE, Week 9 Part 1 complete.** Baseline **S_U3b**
 `artifacts/commits/week9-entries-decisions/20261028_130713_9c3949d` (source `9c3949d`; HEAD at drafting `409c8ac`, code
 = `9c3949d`); suite 2154. The scope is the user's (register `IDEA_PARKING_LOT.md` §D "SESSION ORDER" item 8, 2026-10-28):
 three landings in the order 8a → 8b → 8c, one cause per `/compare` (the two zero-change landings first, so 8c's
@@ -182,7 +182,7 @@ pullback / last breakout searches; the WVMI temporary LP's candidates). The firs
   2907 and 2913, cycle 2 at 3252 — each a volume-only doji (vol_dir +1) closing further in the pullback direction
   than the LP before it, replaced by the next candle; the rows before them end one candle earlier
   (`lp_status_idx` 2908 → 2907, 2914 → 2913, 3253 → 3252) (`v8c_diff.txt`).
-- **The variant replay** (`git archive HEAD` + the one-line change, `%TEMP%8c`; 93.3 s wall, the gate + skip grep
+- **The variant replay** (`git archive HEAD` + the one-line change, `%TEMP%\v8c`; 93.3 s wall, the gate + skip grep
   33 unchanged) = the measurement: 28 / 30 CSVs md5-equal; the two lens `*_wvmi_lps.csv` +3 rows each (215 → 218,
   77 → 80 lines) + the three `lp_status_idx` cells; one trace per M15 chart, 'M15 WVMI LP sell': confluence 112 →
   115 dots, counter 47 → 50 (the three new x: 2025-12-30 04:45, 06:15, 2026-01-05 19:00); the H1 chart and its PNG
@@ -198,8 +198,27 @@ pullback / last breakout searches; the WVMI temporary LP's candidates). The firs
   `vol_dir` when the direction is 0 (only the doji case changes; zero change on this window — no direction-0 wave
   candle exists on it, so no rendered example: CHARTING_SPEC states the rule, a synthetic render pins it).
 
+### 3.3 The landing (2026-10-28) — = the variant byte for byte; the user's chart look: "looks good go ahead"
+
+Code: `zones/wave_candles._is_qualified` (the `direction != required_dir` early return dropped; the docstring); the
+three wave-candle renderers (`export_m15_chart.py` the sub lines + the H1 overlay, `export_plotly.py` the H1 chart):
+a direction-0 candle takes its `vol_dir` (0 without the column), a true doji is still skipped. 0 of the window's 103
+wave-candle indices sits on a direction-0 candle (both rules), so the renderer half is zero change here.
+Replay 103.8 s wall. vs the variant (`%TEMP%\v8c`): 30 / 30 CSVs md5-equal, the figures' full JSON + PNGs equal. vs
+S_V8b (the `/compare`, run mode): the two lens `*_wvmi_lps.csv` (+3 rows each, three `lp_status_idx` cells), one
+trace per M15 chart ('M15 WVMI LP sell': confluence 112 → 115 dots, counter 47 → 50) + their PNGs; the H1 chart,
+its PNG and the other 28 CSVs equal; the gate + skip grep 33 unchanged (`plan_v_inputs/v8c_landing_compare.txt`).
+Tests: the PLAN_H grid pin `test_qualified_rule_reads_the_agreed_direction_unchanged` (it pinned the OLD rule's
+equality) → `test_qualified_rule_is_the_agreed_direction_incl_the_volume_only_doji` (an explicit table); +
+`TestIsQualified` × 2, `test_wvmi.py::…::test_a_volume_only_doji_is_a_candidate` (the real collaborator), the three
+renderer pins (`test_plan_v_registry_styles.py`: the fixture's wave candles turned into volume-only dojis draw the same
+verticals on the H1 chart + the H1 overlay; the M15 sub site by a source count). Suite 2172. Mutants 4 / 4 KILLED
+(`plan_v_inputs/mutants_8c.py` / `.txt`). Docs: GLOSSARY (qualified candle, agreed direction, volume-only doji),
+WAVE_CANDLES_SPEC (the definition + the edge-case table), WVMI_SPEC (the LP candidates), CHARTING_SPEC §10 (the
+colour rule), the register D.2 entry closed.
+
 **Found 2026-10-28 (while building 8a) — a chart question 8c raises:** every wave-candle renderer skips a candle
 whose `direction` is 0 (`export_m15_chart.py:1493-1494` the sub, `:2475-2476` the H1 overlay; `export_plotly.py:2034-2035`
 the H1 chart — the vertical is coloured by the candle's direction). A volume-only doji has direction 0, so under 8c it
 would become a wave candle in the CSVs / WVMI but draw NO vertical on any chart. Show the user with the variant (draw
-it in its agreed direction's colour, or keep it off the chart).
+it in its agreed direction's colour, or keep it off the chart). → DECIDED §3.2 ("Draw it in its vol_dir colour"), LANDED §3.3.

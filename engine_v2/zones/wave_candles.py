@@ -40,14 +40,14 @@ class WaveCandleResult:
 # ---------------------------------------------------------------------------
 
 def _is_qualified(df: pd.DataFrame, idx: int, required_dir: int) -> bool:
-    """Candle direction == required_dir AND vol_dir in (required_dir, 0) — i.e.
-    the candle's direction and its agreed direction are both required_dir
-    (GLOSSARY "Qualified candle"; `candles_v2.agreed_direction`)."""
+    """The candle's AGREED direction == required_dir (GLOSSARY "Qualified candle";
+    `candles_v2.agreed_direction`): direction == required_dir with vol_dir the same
+    or 0, or a volume-only doji (direction 0) whose vol_dir == required_dir. A split
+    candle never qualifies. The volume-only doji joined with PLAN_V 8c (2026-10-28,
+    the user: "Apply it" — the IP legs' rule since PLAN_H Q-W)."""
     if idx not in df.index:
         return False
     direction = int(df.loc[idx, "direction"])
-    if direction != required_dir:
-        return False
     vol_dir = int(df.loc[idx, "vol_dir"]) if "vol_dir" in df.columns else 0
     return int(agreed_direction(direction, vol_dir)) == required_dir
 

@@ -114,6 +114,17 @@ class TestIsQualified:
         df = _make_df([{"direction": 1}])
         assert _is_qualified(df, 99, 1) is False
 
+    def test_a_volume_only_doji_qualifies_in_its_vol_dir(self):
+        """PLAN_V 8c (2026-10-28): the agreed direction — a doji whose close moved (vol_dir +-1) qualifies in that
+        direction; until 8c the candle direction had to match as well."""
+        df = _make_df([{"direction": 0, "vol_dir": 1}, {"direction": 0, "vol_dir": -1}])
+        assert (_is_qualified(df, 0, 1), _is_qualified(df, 0, -1)) == (True, False)
+        assert (_is_qualified(df, 1, -1), _is_qualified(df, 1, 1)) == (True, False)
+
+    def test_a_split_candle_or_a_true_doji_never_qualifies(self):
+        df = _make_df([{"direction": 1, "vol_dir": -1}, {"direction": 0, "vol_dir": 0}])
+        assert not any(_is_qualified(df, i, d) for i in (0, 1) for d in (1, -1))
+
 
 class TestTouchesZone:
     def test_buy_zone_low_touches(self):

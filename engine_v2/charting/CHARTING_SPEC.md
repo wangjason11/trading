@@ -347,7 +347,7 @@ To change any visual element:
 ### 10) Wave candle vertical lines (Week 8)
 - Reads `df.attrs["wave_candles"]` (list of `WaveCandleResult`)
 - Full-height vertical lines at each zone's first and last wave candle — four lines per cycle: FB (`BOS.first`), LP (`BOS.last`, attributed to the previous cycle), LB (`CTS.last`), FP (`CTS.first`); the line → role table and the per-candle cycle-lifecycle visibility gate are canonical in `zones/WAVE_CANDLES_SPEC.md` "Chart Rendering & Lifecycle"
-- Green for bullish candle direction, red for bearish; neutral (dir=0) skipped
+- Green for bullish candle direction, red for bearish; a volume-only doji (direction 0, a qualified candle since PLAN_V 8c) takes its `vol_dir`'s colour (the user 2026-10-28: "Draw it in its vol_dir colour"; none on the reference window); a true doji (both 0) is skipped — every renderer (the H1 chart, the M15 sub lines, the M15 charts' H1 overlay)
 - Uniform opacity (no 3-tier multiplier — WAVE_CANDLES_SPEC "Rendering simplifications")
 - Drawn with `yref="paper"` (y0=0, y1=1) so lines span full chart height
 - Filtered to `selected_sids` (same filter as KL zones)
