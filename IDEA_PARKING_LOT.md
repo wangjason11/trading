@@ -10,7 +10,8 @@ entry outside the syllabus sequence without the user's go.
 Closing one: move its line to "Recently closed" with the date and commit — never delete silently. Memory
 (`MEMORY.md` "Next session priorities") names only what is NEXT and points here for the rest.
 
-**Built 2026-09-30** from a full sweep (every repo `.md`, all 51 memory files, code TODO/FIXME comments; grep for
+**Re-swept 2026-10-28** (Week 9 Part 1 item 10; `engine_v2/plans/part1_sweep_inputs/sweep_grep.py` — re-run it for
+the next full sweep — 1,085 hits, 10 lines added, the list `part1_sweep.md`). **Built 2026-09-30** from a full sweep (every repo `.md`, all 51 memory files, code TODO/FIXME comments; grep for
 deferral wording, each hit read in context, uncertain ones checked against the code). An item phrased without deferral
 wording could still be missing — add it when found. Memory paths are relative to the Claude project memory folder
 (`~/.claude/projects/<project>/memory/`).
@@ -384,8 +385,12 @@ SYLLABUS Week 9 Part 2 "Zone size at entry and stop-loss".
    resets + 9 zones), MS's POI snapshot = as-of (6,326 candles), the full-frame imbalance residual 0 (8 bounded runs),
    the straddling candidate 0 / 12, B5 0 / 13; the fib re-ask: 0 activations dropped, 14 one-candle or
    pre-established-cycle exposures; the double RANGE_STARTED superseded since PLAN_J J1 (what is left is the range
-   label's documented look-ahead, 1 instance). Each line above carries its measurement. NEXT: the user's call —
-   close Part 1?
+   label's documented look-ahead, 1 instance). Each line above carries its measurement. **The user's answers
+   (2026-10-28, AskUserQuestion):** the save — "Save now"; close — "Close the double RANGE_STARTED", "Close the probe
+   BOS_0 read" (both moved to "Recently closed"); "Build the fib re-ask as a variant" (§E "Plan F §7 follow-ups": build
+   the re-check of a failed fib decision at the candle its gap completes, and replay the windows to prove whether any
+   one-candle shift flips an MS decision — PLAN_X X3, to plan); MS's POI snapshot line not closed (stays in §F); Part 1
+   — "Close Part 1".
 
 **D.1 — Ordered (the heavy items):**
 1. **One POI per cycle** (redefine the IC & POI zone logic) — B landed; its chart debugging PAUSED for item 2 (user
@@ -626,14 +631,8 @@ SYLLABUS Week 9 Part 2 "Zone size at entry and stop-loss".
   PARKED by the user 2026-10-28 (shown it as an item 8 leftover): "I think this case is not possible, so let's park
   for now". Re-checked 2026-10-28 (PLAN_X X2, 5 windows): 0 of 13 reversals (and 0 BOS confirmed after a watch froze
   its barrier).
-- **The probe's ad-hoc BOS_0 zone reads past its search bound ("L5b")** (found by Plan A 2026-09-19, "deliberately
-  open"; registered by the item-10 sweep 2026-10-28): at a reset candidate `unified_probe._bos0_inner_at_start` →
-  `build_ad_hoc_bos0_reference_zone` → `identify_base_pattern` reads up to 5 candles past `probe_end_idx` — a
-  reproducibility gap against the stated bound, not live look-ahead; closing it "can move the H1 sid-1 start through
-  the main reversal probe" → its own decision + `/compare`. MEASURED 2026-10-28 (PLAN_X X2, 5 windows): 26 resets + 9
-  ad-hoc reference zones, none within 5 candles of its bound, 0 zones differ when the frame is cut at the bound — 0
-  effect. DECIDE (the user's call: close, or keep as a trigger). Detail: LANDMINES "Probe
-  `end_idx` Is the Supreme Bound"; PLAN_A §8.
+- ~~**The probe's ad-hoc BOS_0 zone reads past its search bound ("L5b")**~~ — CLOSED 2026-10-28 (the user, item 10:
+  "Close the probe BOS_0 read" — measured 0 effect on 5 windows, PLAN_X X2). "Recently closed".
 - ~~**`REVERSAL_CANDIDATE.meta["pattern"]` is always `"?"`**~~ — DONE 2026-10-28 (PLAN_X X1, the user's pick at
   item 10): both sites read the `PatternEvent`'s `name`; = the prediction (6 events-CSV cells + the H1 hover at
   897). "Recently closed"; GOTCHAS "`REVERSAL_CANDIDATE.meta["pattern"]` Is Always `"?"`".
@@ -696,16 +695,11 @@ SYLLABUS Week 9 Part 2 "Zone size at entry and stop-loss".
   activations DROPPED: 5 activations one candle late, 3 de-activations one candle before the re-activation, 2 on the H1
   main sid 0 cycle 0 (carved out of MS's proximity), 2 crosses one candle late, 2 crosses pre-created for a cycle not
   yet established (no POI, no MS read). Not proven: whether a one-candle exposure at a CTS update ever flips a
-  proximity decision (needs the re-ask built, as a variant). Detail:
+  proximity decision (needs the re-ask built, as a variant) — **the user 2026-10-28: "Build the fib re-ask as a
+  variant"** (PLAN_X X3, to plan). Detail:
   `engine_v2/plans/PLAN_F_imbalance_c3_knowability.md` §7.
-- **Double RANGE_STARTED from the offline finalize** — fixture-only, 0 on the reference window. Parked by the user.
-  Detail: memory `project_zones_timing_audit_20260922.md`. **SUPERSEDED (found 2026-10-28, PLAN_X X2):** since PLAN_J
-  J1 (2026-10-09) the fixture emits ONE RANGE_STARTED for the range at 9 (the proximity confirmation no longer opens
-  its own range — `tests/test_meta_key_renames.py` pins it); 0 duplicates in 138 RANGE_STARTED on 5 windows. What the
-  fixture still shows is the range label's documented look-ahead (MARKET_STRUCTURE_SPEC "the range confirmed at `c` is
-  active from `i`"): a range updated / reset before its confirmation moment — 1 on 5 windows (reference window
-  confluence sub 7: the range from 3814, confirmable 3819, reset by the 3817 breakout). That is a live-mode question,
-  with §F's live-mode pattern selection. CONFIRM (close this line).
+- ~~**Double RANGE_STARTED from the offline finalize**~~ — CLOSED 2026-10-28 (the user, item 10: "Close the double
+  RANGE_STARTED" — superseded since PLAN_J J1, PLAN_X X2). "Recently closed"; its remaining look-ahead joined §F.
 - **`REVERSAL_CANDIDATE` straddling a sub's cap** — `knowable_at_idx` keys it on `ev.idx`, not its `apply_idx`, so a
   sub capped by something else (parent end, same-direction replacement) could keep a candidate that applies past the
   cap. 0 on the reference window (2026-09-30); re-checked 2026-10-28 (PLAN_X X2): 0 of 12 kept candidates on 5 windows.
@@ -771,7 +765,11 @@ SYLLABUS Week 9 Part 2 "Zone size at entry and stop-loss".
 - Ad-hoc zone wait-for-candles (a zone whose neighbour candle is past the live edge) — memory
   `project_ad_hoc_zone_wait_for_candles.md`.
 - Moment-order event processing + live-mode pattern selection — PLAN_E Q3; memory
-  `project_zones_timing_audit_20260922.md` item (b).
+  `project_zones_timing_audit_20260922.md` item (b). + the range label's look-ahead (joined 2026-10-28 from the closed
+  "double RANGE_STARTED" line): a range is in force from its start candle though confirmable up to 5 candles later
+  (MARKET_STRUCTURE_SPEC "the range confirmed at `c` is active from `i`") — on 5 windows 1 range updated / reset
+  before its confirmation moment (reference window confluence sub 7: from 3814, reset by the 3817 breakout,
+  confirmable 3819; `engine_v2/plans/plan_x_inputs/x2_range_reset_case_sub7.txt`).
 - A live / incremental probe (candle-by-candle) — `engine_v2/plans/PLAN_B_double_cts_early_stop.md` §7.
 - The WVMI batch `update_temporary_lp` pass is dead in batch mode (creation already searched the same bounded range)
   — it only matters live. Detail: `engine_v2/plans/plan_e_inputs/review_scripts/mutants_plan_g.py` (equivalent N11 /
@@ -858,6 +856,16 @@ detailed sweep.") — the chart revamp, the dot-hover quirks, the hovers not on 
 ---
 
 ## Recently closed (history pointers)
+
+- **The probe's ad-hoc BOS_0 zone reads past its search bound ("L5b")** (§D.2; Plan A 2026-09-19, registered by the
+  item-10 sweep) — CLOSED 2026-10-28 by the user ("Close the probe BOS_0 read") on PLAN_X X2's measurement: at a reset
+  `unified_probe._bos0_inner_at_start` → `identify_base_pattern` CAN read up to 5 candles past `probe_end_idx`, but on 5
+  windows none of 26 resets / 9 ad-hoc zones lies within 5 candles of its bound and 0 differ when the frame is cut
+  there. LANDMINES "Probe `end_idx` Is the Supreme Bound" keeps the mechanism.
+- **Double RANGE_STARTED from the offline finalize** (§E; parked by the user 2026-09-28) — CLOSED 2026-10-28 by the
+  user ("Close the double RANGE_STARTED"): superseded since PLAN_J J1 (2026-10-09) — its fixture now emits one
+  RANGE_STARTED per range (`tests/test_meta_key_renames.py`), 0 duplicates in 138 on 5 windows (PLAN_X X2). The range
+  label's look-ahead it exposed stays, in §F (live-mode pattern selection).
 
 - **`REVERSAL_CANDIDATE.meta["pattern"]` is always `"?"`** (§D.2; found 2026-09-19 by Plan A, registered by the item-10
   sweep) — FIXED 2026-10-28 by PLAN_X X1 (`engine_v2/plans/PLAN_X_part1_ms_checks.md`): `_schedule_reversal_from_anchor`
