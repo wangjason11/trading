@@ -58,7 +58,8 @@ per-candle plumbing + columns + hover, U2 the rolling floor (natural window), U3
 after seeing both, natural kept as a switch — and U3b, the floor seed guard steps back until final mode converges,
 all landed 2026-10-28; NOW the remaining minor
 pre-Part-2 items (register §D SESSION ORDER item 8, scoped by the user 2026-10-28: 8a the §A hygiene trio, 8b the
-replacement-chain `ended_by` fix, 8c the agreed direction for wave candles + WVMI; the candle-direction confirmation,
+replacement-chain `ended_by` fix — both DONE 2026-10-28, `plans/PLAN_V_part1_minor_items.md`, zero change — 8c the
+agreed direction for wave candles + WVMI (measured; the user: apply it); the candle-direction confirmation,
 zone strength scoring and the M5 layer moved to Parts 2 / 3), which complete Part 1),
 Part 2 entry decisions, Part 3 other decisions.
 
