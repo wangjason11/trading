@@ -1,0 +1,30 @@
+== 2025-06-01 -> 2025-07-20  (H1 840 candles, M15 3356)
+  1.1 probe BOS_0 vs bound : 4 resets / 1 ad-hoc zones; past bound 0; DIFFER 0
+  1.3 POI snapshot vs as-of: 362 candles (107 with a POI); inner differs 0; DECISION differs 0
+  2.1 gap one candle late  : 35 False answers; 4 turn True 1 candle later (downstream decisions: {'ACTIVATION -> DELAY': 1})
+  1.2 bounded-run gaps     : 1 bounded runs, 325 gaps; bounds differ 0; DEGENERACY differs 0
+  1.6 / 1.7 / 1.8          : streams 6, reversals 2, RANGE_STARTED 24, candidates 2; straddle 0; B5 exact 0; B5-info 0; duplicate range 0; range reset before its confirmation 0
+== 2025-08-01 -> 2025-09-20  (H1 861 candles, M15 3440)
+  1.1 probe BOS_0 vs bound : 7 resets / 3 ad-hoc zones; past bound 0; DIFFER 0
+  1.3 POI snapshot vs as-of: 2305 candles (2022 with a POI); inner differs 0; DECISION differs 0
+  2.1 gap one candle late  : 15 False answers; 14 turn True 1 candle later (downstream decisions: {'UPDATE re-check': 1, 'ACTIVATION -> DELAY': 1})
+  1.2 bounded-run gaps     : 2 bounded runs, 830 gaps; bounds differ 1; DEGENERACY differs 0
+  1.6 / 1.7 / 1.8          : streams 6, reversals 2, RANGE_STARTED 19, candidates 2; straddle 0; B5 exact 0; B5-info 0; duplicate range 0; range reset before its confirmation 0
+== 2025-10-01 -> 2025-11-15  (H1 789 candles, M15 3152)
+  1.1 probe BOS_0 vs bound : 1 resets / 2 ad-hoc zones; past bound 0; DIFFER 0
+  1.3 POI snapshot vs as-of: 818 candles (777 with a POI); inner differs 0; DECISION differs 0
+  2.1 gap one candle late  : 13 False answers; 12 turn True 1 candle later (downstream decisions: {"CROSS: the target cycle's own gap read missing -> no cross / an active cross ends here": 2})
+  1.2 bounded-run gaps     : 2 bounded runs, 487 gaps; bounds differ 0; DEGENERACY differs 0
+  1.6 / 1.7 / 1.8          : streams 3, reversals 0, RANGE_STARTED 18, candidates 0; straddle 0; B5 exact 0; B5-info 0; duplicate range 0; range reset before its confirmation 0
+== 2025-12-01 -> 2026-01-20  (H1 1058 candles, M15 4228)
+  1.1 probe BOS_0 vs bound : 9 resets / 1 ad-hoc zones; past bound 0; DIFFER 0
+  1.3 POI snapshot vs as-of: 1442 candles (1066 with a POI); inner differs 0; DECISION differs 0
+  2.1 gap one candle late  : 112 False answers; 35 turn True 1 candle later (downstream decisions: {'UPDATE re-check': 3, 'ACTIVATION -> DELAY': 2, "CROSS: the target cycle's own gap read missing -> no cross / an active cross ends here": 1})
+  1.2 bounded-run gaps     : 1 bounded runs, 273 gaps; bounds differ 0; DEGENERACY differs 0
+  1.6 / 1.7 / 1.8          : streams 11, reversals 6, RANGE_STARTED 53, candidates 5; straddle 0; B5 exact 0; B5-info 0; duplicate range 0; range reset before its confirmation 1
+== 2026-02-01 -> 2026-03-20  (H1 819 candles, M15 3272)
+  1.1 probe BOS_0 vs bound : 5 resets / 2 ad-hoc zones; past bound 0; DIFFER 0
+  1.3 POI snapshot vs as-of: 1399 candles (684 with a POI); inner differs 0; DECISION differs 0
+  2.1 gap one candle late  : 61 False answers; 25 turn True 1 candle later (downstream decisions: {'ACTIVATION -> DELAY': 1, "CROSS: the target cycle's own gap read missing -> no cross / an active cross ends here": 1, 'UPDATE re-check': 1})
+  1.2 bounded-run gaps     : 2 bounded runs, 625 gaps; bounds differ 0; DEGENERACY differs 0
+  1.6 / 1.7 / 1.8          : streams 6, reversals 3, RANGE_STARTED 24, candidates 3; straddle 0; B5 exact 0; B5-info 0; duplicate range 0; range reset before its confirmation 0

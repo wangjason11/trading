@@ -1,0 +1,17 @@
+== confluence sub 7: events with idx or moment in [3808, 3824], emission order ==
+  row  1180 idx  3812 CTS_UPDATED            cycle_id=0, via=replay_raw
+  row  1181 idx  3813 RANGE_RESET            reason=range_breakout, pat=one_maru_continuous
+  row  1182 idx  3813 CTS_UPDATED            confirmed_at=3813, cycle_id=0, via=one_maru_continuous, cts_anchor_idx=3813
+  row  1183 idx  3813 STATE_CHANGED          reason=breakout_pattern, from=range, to=breakout, pat=one_maru_continuous
+  row  1184 idx  3819 RANGE_STARTED          confirmed_at=3819, range_anchor_idx=3814, cts_anchor_idx=3813, lo=0.57422, hi=0.5746
+  row  1185 idx  3819 STATE_CHANGED          reason=range_confirmed, from=breakout, to=range
+  row  1186 idx  3815 RANGE_UPDATED          lo=0.57422, hi=0.57508
+  row  1187 idx  3816 CTS_UPDATED            cycle_id=0, via=replay_raw
+  row  1188 idx  3817 RANGE_RESET            reason=range_breakout, pat=one_maru_continuous
+  row  1189 idx  3817 CTS_UPDATED            confirmed_at=3817, cycle_id=0, via=one_maru_continuous, cts_anchor_idx=3817
+  row  1190 idx  3817 STATE_CHANGED          reason=breakout_pattern, from=range, to=breakout, pat=one_maru_continuous
+  row  1191 idx  3821 RANGE_STARTED          confirmed_at=3821, range_anchor_idx=3818, cts_anchor_idx=3817, lo=0.57351, hi=0.5743
+  row  1192 idx  3821 STATE_CHANGED          reason=range_confirmed, from=breakout, to=range
+  row  1193 idx  3819 RANGE_UPDATED          lo=0.57351, hi=0.57452
+  row  1194 idx  3820 RANGE_UPDATED          lo=0.57351, hi=0.57466
+(no M15 final CSV in the save)

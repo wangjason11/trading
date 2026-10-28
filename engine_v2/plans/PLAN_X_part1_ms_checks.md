@@ -1,6 +1,7 @@
 # PLAN_X — the item-10 picks: the REVERSAL_CANDIDATE pattern fix + the MS risk census (Week 9 Part 1)
 
-**Status: X1 BUILT = its prediction (§X1 "Result") · X2 PLANNED (method below).** Register `IDEA_PARKING_LOT.md` §D SESSION
+**Status: X1 LANDED `6764bde` = its prediction (§X1 "Result") · X2 MEASURED (§X2 "X2 result": every check 0 in
+effect on 5 windows).** Register `IDEA_PARKING_LOT.md` §D SESSION
 ORDER item 10 — the user's pick 2026-10-28 (verbatim there and in `part1_sweep_inputs/part1_sweep.md` "The user's
 pick"): "Measure 3 MS risks", "Fix the '?' pattern meta", "Re-check parked latent cases". The sweep list's numbers
 (1.1, 1.3, …) are its section numbers. Baseline: S_W9d `20261028_182318_7c9477e` (HEAD `93e8304` = S_W9d's code +
@@ -119,3 +120,38 @@ not (a DROP)?
 
 **Outputs.** `plan_x_inputs/x2_census_<START>_<END>.txt` per window + `x2_census_summary.txt`; the tables shown to the
 user = these files. **Cost:** five in-process replays (~1–2 min each); solo, no subagents.
+
+### X2 result (2026-10-28, HEAD `6764bde`; `x2_census_summary.py` → `x2_census_summary.txt`)
+
+Five windows (H1 840 / 861 / 789 / 1058 / 819 candles; every fetch and floor seed complete — the per-window files
+print them). The fixture self-check passed on every run (the range-reset detector flags `_make_double_rewind_data`'s
+(9, 13, 12)). Totals:
+
+| Check | Examined | Result |
+|---|---|---|
+| 1.1 the probe's BOS_0 vs its bound | 26 resets + 9 ad-hoc reference zones | 0 resets with `candidate + 5 > probe_end_idx`; 0 zones differ when the frame is cut at the bound |
+| 1.3 MS's POI snapshot vs as-of | 6,326 checked candles, 4,656 with a POI | 0 inners differ, 0 decisions differ |
+| 2.1 a gap one candle late | 236 False answers → 14 distinct decisions (downstream; the MS-embedded tracker saw the same ones) | 0 activations DROPPED — see below |
+| 1.2 bounded-run gaps | 8 bounded MS runs (the FC probes' Phase 2), 2,540 gaps formed by the bound | 0 degeneracy differs (1 merged-bounds difference, Aug–Sep: harmless by LANDMINES' own analysis) |
+| 1.6 the cap-straddling candidate | 12 kept REVERSAL_CANDIDATEs | 0 |
+| 1.7 B5 | 13 reversals (32 structure streams) | 0 (and 0 BOS confirmed after a watch froze its barrier) |
+| 1.8 the double RANGE_STARTED | 138 RANGE_STARTED | 0 duplicates (superseded since PLAN_J J1 — its fixture no longer emits one); 1 range reset before its confirmation moment (below) |
+
+**2.1 — the 14 decisions.** 5 ACTIVATIONS, each one candle late (the fib activated at the next candle's CTS update:
+53 → 54, 61 → 62, 60 → 61, 54 → 55, 55 → 56); 5 UPDATE re-checks — 3 a de-activation one candle before the
+re-activation (133 / 134, 56 / 57, 55 / 56: successive CTS updates) and 2 on the H1 main sid 0 cycle 0 (deactivated
+at 117, reactivated at 172 though a gap formed at 164 — the cycle-0 carve-out keeps MS's proximity off there); 4
+CROSS decisions — 2 one candle late (cycles 4 and 1: activated at moment + 1) and 2 crosses PRE-CREATED for a cycle
+not yet established: reference window counter sub 6 at M15 3806 (cycle 1 never establishes; the cross only forms at
+4179, after the sub's end 4143 — exactly Plan D §7.3's case) and Oct–Nov sub 1 at M15 2210 (cycle 3 establishes at
+2259, where the cross re-activated; confirmed by pullback at 2264; all before the sub's live start 2339 —
+`x2_cross_case_check.py` → `x2_cross_case_2025-10-01_sub1.txt`). A pre-established cycle has no POI (option N,
+2026-09-29) and no CTS for MS to confirm. Not proven here: whether a one-candle exposure at a CTS update ever flips a
+proximity decision (the 1.3 shadow cannot see it — it reads the tracker's fib as decided) — answerable exactly only by
+a variant with the re-ask built.
+
+**1.8 — the one range reset before its confirmation** (reference window confluence sub 7, cycle 0, sell;
+`x2_range_reset_case.py` on S_W9d): the 3813 breakout; the range label's range from 3814 is confirmable at 3819 but
+in force from 3814 (RANGE_UPDATED 3815); the 3817 breakout resets it (`range → breakout`). This is the documented
+range-label look-ahead (MARKET_STRUCTURE_SPEC "the range confirmed at `c` is active from `i`"; J1 undid it only for
+the RE-STEPPED candles) — a live-mode question, with §F's live-mode pattern selection.

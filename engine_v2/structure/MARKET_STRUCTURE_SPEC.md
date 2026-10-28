@@ -448,13 +448,17 @@ check uses a per-cycle POI snapshot, NOT a full per-candle activity check.
 Refresh points are CTS_ESTABLISHED and CTS_UPDATED only — between those,
 POI inners stay fixed (the embedded tracker's state can still move at a
 CTS_CONFIRMED / CTS_THRESHOLD_UPDATED, but the check is gated off once the
-cycle's CTS is confirmed). Trade-off: a POI whose IC qualification changes
-between two CTS_UPDATED events (e.g., an imbalance fill mid-cycle that
-disqualifies an IC candidate) is not reflected immediately by the
-snapshot. In practice the deviation is small — POIs typically materialize
-at CTS_ESTABLISHED time and don't shift much during the cycle. The
-performance cost of full per-candle recomputation (Fib + IC scan + variant
-selection) is substantial. The major refactor may revisit this.
+cycle's CTS is confirmed). What can go stale between two refreshes (read
+from the code, PLAN_X X2, 2026-10-28): NOT the IC pick's fill questions —
+`select_ic` takes no moment and asks them as of the fib's CTS anchor, which
+a refresh already follows (so "an imbalance fill mid-cycle that disqualifies
+an IC candidate", this paragraph's example until 2026-10-28, cannot move it)
+— only the embedded tracker's REPRESENTATIVE fib of the cycle and the IC
+reference (`ic_reference(…, evaluated_at=)`). **Measured** (PLAN_X X2, a shadow
+that re-reads the inner as of every checked candle, five windows): 6,326
+checked candles, 4,656 with a POI — the as-of inner = the snapshot every
+time, 0 proximity decisions differ. Full per-candle recomputation stays a
+live-mode item (register §F) for its cost, not for a measured deviation.
 
 **Snapshot fib on SUBS ≠ the drawn sub fib — RESOLVED by PLAN_I S5 (2026-10-08; found 2026-10-01, user
 2026-10-02):** the retired resolver read the INTRA-cycle fib for every sub (and, after PLAN_I S4, for main wherever a

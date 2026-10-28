@@ -1,0 +1,32 @@
+fixture self-check (_make_double_rewind_data, sd +1): duplicate range starts {} (none expected since PLAN_J J1); range reset before its confirmation [(9, 13, 12)] (expected [(9, 13, 12)])
+window 2025-10-01 -> 2025-11-15 (H1 from 2025-10-01 00:00:00+00:00); H1 frame 789 candles 2025-10-01 00:00 -> 2025-11-14 21:00
+  [floor_seed] H1: 864 candles 2025-08-12 00:00:00+00:00 -> 2025-09-30 23:00:00+00:00, 3 steps, 370 body-% pinbars (need 180), the final window converged
+  [floor_seed] M15: 816 candles 2025-09-18 12:00:00+00:00 -> 2025-09-30 23:45:00+00:00, 3 steps, 338 body-% pinbars (need 180), the final window converged
+  [data_bridge] Fetched 3152 M15 candles for NZD_USD in 4 chunks
+
+== 1.1 the probe's BOS_0 vs its bound (probe_end_idx) ==
+  {'ref_adhoc_examined': 2, 'resets_examined': 1}
+  (no differing zone)
+
+== 1.3 MS's POI-inner snapshot vs as of the checked candle ==
+  {'candles_examined': 818, 'candles_with_asof_poi': 777, 'candles_with_snapshot_poi': 777}
+  (no differing decision)
+
+== 2.1 a False imbalance answer that turns True 1..5 candles later ==
+  {'EXPOSED_cross_cycle_fib_k1': 12, 'false_answers_cross_cycle_fib': 12, 'false_answers_fib_tracker': 1}
+  M15 downstream frame-from 2025-10-29 03:15 n=1219 cross_cycle_fib.py:resolve_cross_cycle_eligibility:273 sid=0 cycle=3 moment=277 (2025-11-03 01:30 = M15 2210) window=(239, 277) k=1 -> CROSS: the target cycle's own gap read missing -> no cross / an active cross ends here
+      final fib: cross 50..330 act=231 on=None react=326 deact=277 locked=True end=333
+  M15 downstream frame-from 2025-10-29 03:15 n=1219 cross_cycle_fib.py:resolve_cross_cycle_eligibility:273 sid=0 cycle=4 moment=332 (2025-11-03 15:15 = M15 2265) window=(332, 332) k=1 -> CROSS: the target cycle's own gap read missing -> no cross / an active cross ends here
+      final fib: cross 50..686 act=333 on=None react=None deact=None locked=True end=None
+  M15 MS-embedded frame-from 2025-10-29 03:15 n=1219 cross_cycle_fib.py:resolve_cross_cycle_eligibility:273 sid=0 cycle=3 moment=277 (2025-11-03 01:30 = M15 2210) window=(239, 277) k=1 -> CROSS: the target cycle's own gap read missing -> no cross / an active cross ends here
+      final fib: cross 50..330 act=231 on=None react=326 deact=277 locked=True end=None
+  M15 MS-embedded frame-from 2025-10-29 03:15 n=1219 cross_cycle_fib.py:resolve_cross_cycle_eligibility:273 sid=0 cycle=4 moment=332 (2025-11-03 15:15 = M15 2265) window=(332, 332) k=1 -> CROSS: the target cycle's own gap read missing -> no cross / an active cross ends here
+      final fib: cross 50..686 act=333 on=None react=None deact=None locked=True end=None
+
+== latent: 1.2 bounded MS runs vs the full-frame imbalance list ==
+  {'bounded_runs': 2, 'instances_formed_by_bound': 487}
+  (no differing degeneracy)
+
+== latent: 1.6 / 1.7 / 1.8 on the final event streams ==
+  streams 3, reversals 0, RANGE_STARTED 18
+  1.6 kept REVERSAL_CANDIDATEs examined (both lenses): 0

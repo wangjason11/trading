@@ -1,0 +1,34 @@
+fixture self-check (_make_double_rewind_data, sd +1): duplicate range starts {} (none expected since PLAN_J J1); range reset before its confirmation [(9, 13, 12)] (expected [(9, 13, 12)])
+window 2025-08-01 -> 2025-09-20 (H1 from 2025-08-01 00:00:00+00:00); H1 frame 861 candles 2025-08-01 00:00 -> 2025-09-19 20:00
+  [floor_seed] H1: 1168 candles 2025-05-26 08:00:00+00:00 -> 2025-07-31 23:00:00+00:00, 4 steps, 506 body-% pinbars (need 180), the final window converged
+  [floor_seed] M15: 608 candles 2025-07-23 16:00:00+00:00 -> 2025-07-31 23:45:00+00:00, 2 steps, 261 body-% pinbars (need 180), the final window converged
+  [data_bridge] Fetched 3440 M15 candles for NZD_USD in 4 chunks
+
+== 1.1 the probe's BOS_0 vs its bound (probe_end_idx) ==
+  {'ref_adhoc_examined': 3, 'ref_source_cts_confirmed': 3, 'resets_examined': 7}
+  (no differing zone)
+
+== 1.3 MS's POI-inner snapshot vs as of the checked candle ==
+  {'candles_examined': 2305, 'candles_with_asof_poi': 2022, 'candles_with_snapshot_poi': 2022}
+  (no differing decision)
+
+== 2.1 a False imbalance answer that turns True 1..5 candles later ==
+  {'EXPOSED_fib_tracker_k1': 14, 'false_answers_fib_tracker': 15}
+  M15 MS-embedded frame-from 2025-08-01 00:00 n=1562 fib_tracker.py:_update_fib_cts:1218 sid=0 cycle=0 moment=1496 (2025-08-22 14:00 = M15 1496) window=(1490, 1496) k=1 -> UPDATE re-check (the fib's re- / de-activation decided before the gap formed)
+      final fib: single 1490..1561 act=1493 on=None react=1497 deact=1496 locked=False end=None
+  M15 downstream frame-from 2025-08-22 00:00 n=2000 fib_tracker.py:_update_fib_cts:1218 sid=0 cycle=0 moment=56 (2025-08-22 14:00 = M15 1496) window=(50, 56) k=1 -> UPDATE re-check (the fib's re- / de-activation decided before the gap formed)
+      final fib: single 50..121 act=53 on=None react=57 deact=56 locked=True end=452
+  M15 MS-embedded frame-from 2025-08-22 00:00 n=2000 fib_tracker.py:_update_fib_cts:1218 sid=0 cycle=0 moment=56 (2025-08-22 14:00 = M15 1496) window=(50, 56) k=1 -> UPDATE re-check (the fib's re- / de-activation decided before the gap formed)
+      final fib: single 50..121 act=53 on=None react=57 deact=56 locked=True end=None
+  M15 downstream frame-from 2025-08-25 02:00 n=1896 fib_tracker.py:_on_cts_established:853 sid=0 cycle=0 moment=54 (2025-08-25 15:30 = M15 1598) window=(50, 54) k=1 -> ACTIVATION -> DELAY (activated at [55])
+      final fib: single 50..103 act=55 on=update react=None deact=None locked=True end=218
+  M15 MS-embedded frame-from 2025-08-25 02:00 n=1896 fib_tracker.py:_on_cts_established:853 sid=0 cycle=0 moment=54 (2025-08-25 15:30 = M15 1598) window=(50, 54) k=1 -> ACTIVATION -> DELAY (activated at [55])
+      final fib: single 50..103 act=55 on=update react=None deact=None locked=True end=None
+
+== latent: 1.2 bounded MS runs vs the full-frame imbalance list ==
+  {'bounded_runs': 2, 'bounds_differ': 1, 'instances_formed_by_bound': 830}
+  (no differing degeneracy)
+
+== latent: 1.6 / 1.7 / 1.8 on the final event streams ==
+  streams 6, reversals 2, RANGE_STARTED 19
+  1.6 kept REVERSAL_CANDIDATEs examined (both lenses): 2

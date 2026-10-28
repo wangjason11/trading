@@ -1,0 +1,29 @@
+ sub_id  direction  starting_idx  start_idx  end_idx end_reason
+      0         -1           367        505   2339.0 parent_end
+      1         -1          1983       2339      NaN        NaN
+== sub 1: CTS_ESTABLISHED / CTS_CONFIRMED / BOS_CONFIRMED / CTS_THRESHOLD_UPDATED in [2150, 2345]
+  2164 CTS_THRESHOLD_UPDATED cycle=2 method=None price=0.5714
+  2210 CTS_THRESHOLD_UPDATED cycle=2 method=None price=0.5713
+  2259 CTS_ESTABLISHED cycle=3 method=None price=0.57078
+  2259 BOS_CONFIRMED cycle=3 method=None price=0.57325
+  2264 CTS_CONFIRMED cycle=3 method=pullback price=0.56972
+  2265 CTS_THRESHOLD_UPDATED cycle=3 method=None price=0.56934
+  2266 CTS_THRESHOLD_UPDATED cycle=3 method=None price=0.56924
+  2304 CTS_THRESHOLD_UPDATED cycle=3 method=None price=0.56904
+  2305 CTS_THRESHOLD_UPDATED cycle=3 method=None price=0.56858
+  2320 CTS_THRESHOLD_UPDATED cycle=3 method=None price=0.56846
+  2321 CTS_THRESHOLD_UPDATED cycle=3 method=None price=0.56814
+  2323 CTS_THRESHOLD_UPDATED cycle=3 method=None price=0.56792
+  2324 CTS_THRESHOLD_UPDATED cycle=3 method=None price=0.5673
+  2337 CTS_ESTABLISHED cycle=4 method=None price=0.5666
+  2337 BOS_CONFIRMED cycle=4 method=None price=0.57123
+== the lens fib records (the LIVE window only)
+ structure_id  cycle_id  version  start_idx  end_idx end_reason  active  locked  bos_idx  cts_idx
+            0         0      NaN      505.0    734.0  new_cycle    True    True      367      505
+            0         1      NaN      734.0   2337.0  new_cycle    True    True      595      905
+            0         2      NaN     2337.0   2339.0 parent_end    True   False     1983     2339
+            0         0      NaN        NaN   2066.0  new_cycle    True    True     1983     1998
+            0         1      0.0        NaN   2133.0  new_cycle    True    True     1983     2068
+            0         2      0.0        NaN   2164.0  new_cycle    True    True     1983     2140
+            0         3      0.0        NaN   2266.0  new_cycle    True    True     1983     2263
+            0         4      0.0     2339.0      NaN        NaN    True    True     1983     2619

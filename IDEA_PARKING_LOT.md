@@ -616,12 +616,15 @@ SYLLABUS Week 9 Part 2 "Zone size at entry and stop-loss".
   Both reversal builders take the most recent BOS_CONFIRMED with moment ≤ the reversal (inclusive, pinned) — such a
   BOS's threshold would not be `P`, so its anchor would not be "the anchor behind `P`". DECIDE only if reachable.
   PARKED by the user 2026-10-28 (shown it as an item 8 leftover): "I think this case is not possible, so let's park
-  for now".
+  for now". Re-checked 2026-10-28 (PLAN_X X2, 5 windows): 0 of 13 reversals (and 0 BOS confirmed after a watch froze
+  its barrier).
 - **The probe's ad-hoc BOS_0 zone reads past its search bound ("L5b")** (found by Plan A 2026-09-19, "deliberately
   open"; registered by the item-10 sweep 2026-10-28): at a reset candidate `unified_probe._bos0_inner_at_start` →
   `build_ad_hoc_bos0_reference_zone` → `identify_base_pattern` reads up to 5 candles past `probe_end_idx` — a
   reproducibility gap against the stated bound, not live look-ahead; closing it "can move the H1 sid-1 start through
-  the main reversal probe" → its own decision + `/compare`. Never measured. DECIDE. Detail: LANDMINES "Probe
+  the main reversal probe" → its own decision + `/compare`. MEASURED 2026-10-28 (PLAN_X X2, 5 windows): 26 resets + 9
+  ad-hoc reference zones, none within 5 candles of its bound, 0 zones differ when the frame is cut at the bound — 0
+  effect. DECIDE (the user's call: close, or keep as a trigger). Detail: LANDMINES "Probe
   `end_idx` Is the Supreme Bound"; PLAN_A §8.
 - ~~**`REVERSAL_CANDIDATE.meta["pattern"]` is always `"?"`**~~ — DONE 2026-10-28 (PLAN_X X1, the user's pick at
   item 10): both sites read the `PatternEvent`'s `name`; = the prediction (6 events-CSV cells + the H1 hover at
@@ -680,13 +683,25 @@ SYLLABUS Week 9 Part 2 "Zone size at entry and stop-loss".
   later"); ~~the MS vs FibTracker activation divergence~~ (retired by PLAN_I S5 — MS reads FibTracker's decision;
   found stale by the item-10 sweep 2026-10-28); latent: `inst.meta` mutated on imbalance
   instances shared across projections, the chart hover picks a POI by nearest inner price, single-candle stretches
-  dropped. TRIGGER (chart review shows a dropped fib) / parked by the user. Detail:
+  dropped. TRIGGER (chart review shows a dropped fib) / parked by the user. MEASURED 2026-10-28 (PLAN_X X2, 5
+  windows; the user's pick at item 10): 236 False answers → 14 decisions a gap one candle later would flip — 0
+  activations DROPPED: 5 activations one candle late, 3 de-activations one candle before the re-activation, 2 on the H1
+  main sid 0 cycle 0 (carved out of MS's proximity), 2 crosses one candle late, 2 crosses pre-created for a cycle not
+  yet established (no POI, no MS read). Not proven: whether a one-candle exposure at a CTS update ever flips a
+  proximity decision (needs the re-ask built, as a variant). Detail:
   `engine_v2/plans/PLAN_F_imbalance_c3_knowability.md` §7.
 - **Double RANGE_STARTED from the offline finalize** — fixture-only, 0 on the reference window. Parked by the user.
-  Detail: memory `project_zones_timing_audit_20260922.md`.
+  Detail: memory `project_zones_timing_audit_20260922.md`. **SUPERSEDED (found 2026-10-28, PLAN_X X2):** since PLAN_J
+  J1 (2026-10-09) the fixture emits ONE RANGE_STARTED for the range at 9 (the proximity confirmation no longer opens
+  its own range — `tests/test_meta_key_renames.py` pins it); 0 duplicates in 138 RANGE_STARTED on 5 windows. What the
+  fixture still shows is the range label's documented look-ahead (MARKET_STRUCTURE_SPEC "the range confirmed at `c` is
+  active from `i`"): a range updated / reset before its confirmation moment — 1 on 5 windows (reference window
+  confluence sub 7: the range from 3814, confirmable 3819, reset by the 3817 breakout). That is a live-mode question,
+  with §F's live-mode pattern selection. CONFIRM (close this line).
 - **`REVERSAL_CANDIDATE` straddling a sub's cap** — `knowable_at_idx` keys it on `ev.idx`, not its `apply_idx`, so a
   sub capped by something else (parent end, same-direction replacement) could keep a candidate that applies past the
-  cap. 0 on the reference window (2026-09-30). TRIGGER: a window where one is kept with `apply_idx > cap`. Detail:
+  cap. 0 on the reference window (2026-09-30); re-checked 2026-10-28 (PLAN_X X2): 0 of 12 kept candidates on 5 windows.
+  TRIGGER: a window where one is kept with `apply_idx > cap`. Detail:
   PART4 §17.12.
 - **Performance** — TRIGGER: runtime hurts. Entity-direct MS compute (no slice + lookback; needs an MS refactor —
   LANDMINES "slice-elimination is a deferred optimization"), same-TF feature sharing by reference (PART4 §9.6),
@@ -722,7 +737,8 @@ SYLLABUS Week 9 Part 2 "Zone size at entry and stop-loss".
 - **A bounded MS run sees the full-frame imbalance list** (Plan A 2026-09-19, narrowed by Plan F 2026-09-24;
   registered by the item-10 sweep 2026-10-28): `df.attrs["imbalances"]` is built on the whole frame, so a run ending
   at B sees a gap whose c3 is B+1; only a prefix-vs-merged degeneracy mismatch can reach an output — 0 cases on the
-  reference data; sub builds immune. TRIGGER: the property test trips on it → record and decide. Detail: LANDMINES
+  reference data; sub builds immune. MEASURED 2026-10-28 (PLAN_X X2): 8 bounded MS runs on 5 windows, 2,540 gaps formed
+  by the bound, 0 degeneracy differs. TRIGGER: the property test trips on it → record and decide. Detail: LANDMINES
   "Bounded MS Runs Must Not Read Past `end_idx`" (Known residual).
 - **The probe's iteration cap is H1's on every TF** (PART4 §15 "Open Items"; registered by the item-10 sweep
   2026-10-28): `unified_probe` gives up at `max_iterations = 10` (all resets → `pending`), calibrated for H1; the M15
@@ -739,7 +755,9 @@ SYLLABUS Week 9 Part 2 "Zone size at entry and stop-loss".
   FIB_LIFECYCLE_SPEC §13 (live per-candle fib evaluation).
 - Incremental imbalance detection (instances created at `formed_at`, grown by explicit extension events) — GOTCHAS
   (the imbalance-prefix note, "When to revisit").
-- Per-candle (not snapshot) POI inners in MS — MARKET_STRUCTURE_SPEC (~:350).
+- Per-candle (not snapshot) POI inners in MS — MARKET_STRUCTURE_SPEC "Snapshot vs per-candle". MEASURED 2026-10-28
+  (PLAN_X X2, 5 windows): the as-of read = the snapshot on all 6,326 checked candles (4,656 with a POI), 0 decisions
+  differ — `select_ic` asks its fill questions as of the fib's CTS anchor; a live-mode item for its cost only.
 - Phase 3 per-candle dual-lens driver (the sweep's step body is its loop body) and live-mode pool GC (evict when the
   parent ended + no live reference) — PART4 §17.12.
 - Ad-hoc zone wait-for-candles (a zone whose neighbour candle is past the live edge) — memory
