@@ -34,8 +34,9 @@ The open lines below carry over (fold in when their files are next touched); D a
   zero output change): #7 `zone.m15.outline`, #8 `hoverlabel.m15_structure` / `hoverlabel.zone_proximity`, #9 the
   M15 zone hitboxes read `zone.kl.hover_line` / `zone.poi.hover_line` (+ the twins `wave_candle.hover_line`,
   `fib.hover_line` on every chart), #11 the dead key + `watch_y` deleted, the 8 F841 locals (+ their orphans) deleted,
-  the unused `zone.h1_overlay.*` + `fib.label` keys deleted. **Still OPEN — the audit's unverified list, each a
-  rendered-figure change (not zero change; the user's call when touched):** the H1 chart draws a collapsed cycle's fib;
+  the unused `zone.h1_overlay.*` + `fib.label` keys deleted. **LONG-TERM PARKED 2026-10-28** (the user at the item-10
+  sweep: "any remaining charting items … "long term" parked … unless I specifically mention something about doing
+  another detailed sweep" — §D item 10) **— the audit's unverified list, each a rendered-figure change:** the H1 chart draws a collapsed cycle's fib;
   proximity markers on collapsed-cycle zones; the opt-in M15.counter KL overlay on H1 has no collapsed skip; the H1
   chart drops the `wave_candle.*` `dash`; the wave verticals at forming candles take the live style; the H1 chart vs
   H1 overlay filter quirks; a sub whose confirmed points are all forming draws no live segment; PART4 §16.7 (zone text
@@ -361,6 +362,22 @@ SYLLABUS Week 9 Part 2 "Zone size at entry and stop-loss".
    zone correctness (the user: "make sure our overall MS is totally solid") and the ones scheduled for Week 10 —
    saved with its script into the plan's inputs folder; (4) the user picks what to cover before Part 2. Part 1
    closes after that. The push stays the user's call ("no need to push yet", 2026-10-28).
+   **Progress 2026-10-28 (the next session):** the SWEEP DONE — `engine_v2/plans/part1_sweep_inputs/part1_sweep.md`
+   (the full list, 7 groups, ★ = MS / zone correctness; the grep `sweep_grep.py` → `sweep_grep_output.txt`, 1,085
+   hits in 121 files, each read in context; the on-window facts `sweep_checks.py` → `sweep_checks_output.txt`). 10
+   items were not in this register and got their lines (D.2: L5b, the `REVERSAL_CANDIDATE` `pattern` "?"; E: the
+   full-frame imbalances residual, the probe iteration cap, the provisional pinbar floor; G: the dot-hover quirks, the
+   hovers not yet on the conventions, M15 elements on H1, Plan E's optional renames; I: PART4 §15's validation
+   strategy); 5 stale notes fixed (the file's last section). **The user's pick (2026-10-28, AskUserQuestion):**
+   (1) "Measure 3 MS risks" — the probe's BOS_0 read past its bound, MS's POI-inner snapshot vs as-of, fibs dropped
+   when a gap completes a candle late: measured on the reference window + other windows, no code change, fixes decided
+   after; (2) "Fix the '?' pattern meta" — its own `/compare`; (3) "Re-check parked latent cases" — the BOS on a
+   reversal's apply candle, the double RANGE_STARTED, the cap-straddling reversal candidate, the full-frame imbalance
+   residual, counted on other windows; not picked: the POI-less re-count. PART4 §15: "Close it" (closed above).
+   **Charts — LONG-TERM PARKED** (the user, verbatim): "The overall charts look good for now. We can consider any
+   remaining charting items mentioned in the documentation to be "long term" parked. These we may not come back to
+   unless I specifically mention something about doing another detailed sweep." — every chart / hover item in §A
+   (the charting audit's unverified list) and §G; do not raise them again unasked.
 
 **D.1 — Ordered (the heavy items):**
 1. **One POI per cycle** (redefine the IC & POI zone logic) — B landed; its chart debugging PAUSED for item 2 (user
@@ -600,6 +617,17 @@ SYLLABUS Week 9 Part 2 "Zone size at entry and stop-loss".
   BOS's threshold would not be `P`, so its anchor would not be "the anchor behind `P`". DECIDE only if reachable.
   PARKED by the user 2026-10-28 (shown it as an item 8 leftover): "I think this case is not possible, so let's park
   for now".
+- **The probe's ad-hoc BOS_0 zone reads past its search bound ("L5b")** (found by Plan A 2026-09-19, "deliberately
+  open"; registered by the item-10 sweep 2026-10-28): at a reset candidate `unified_probe._bos0_inner_at_start` →
+  `build_ad_hoc_bos0_reference_zone` → `identify_base_pattern` reads up to 5 candles past `probe_end_idx` — a
+  reproducibility gap against the stated bound, not live look-ahead; closing it "can move the H1 sid-1 start through
+  the main reversal probe" → its own decision + `/compare`. Never measured. DECIDE. Detail: LANDMINES "Probe
+  `end_idx` Is the Supreme Bound"; PLAN_A §8.
+- **`REVERSAL_CANDIDATE.meta["pattern"]` is always `"?"`** (found 2026-09-19; registered by the item-10 sweep
+  2026-10-28): `market_structure.py` `_schedule_reversal_from_anchor` (:811) and the `[RV_APPLY]` line (:848) read
+  `.pat` / `.pattern`, the name is `.name` — all 6 candidates on S_W9d (H1 1, confluence 5). Meta only (no decision
+  reads it; STATE_CHANGED's `meta["pat"]` is right); a one-line fix with its own `/compare` (the 3 events CSVs).
+  OPEN. Detail: GOTCHAS "`REVERSAL_CANDIDATE.meta["pattern"]` Is Always `"?"`".
 - ~~**The agreed direction for wave candles + WVMI**~~ (PLAN_H Q-W) — DONE 2026-10-28 (SESSION ORDER item 8c, PLAN_V §3):
   `wave_candles._is_qualified` = the agreed direction == the required one, so a volume-only doji qualifies (the user,
   after the variant replay: "Apply it"); a wave candle on a direction-0 candle is drawn in its `vol_dir` colour on
@@ -651,7 +679,8 @@ SYLLABUS Week 9 Part 2 "Zone size at entry and stop-loss".
   `engine_v2/zones/CROSS_CYCLE_FIB_SPEC.md` §11b + §13, memory `project_cross_cycle_fib_unification.md`.
   2026-10-06: likely absorbed by §D.1 item 2 — CONFIRMED (the revamp COMPLETE 2026-10-09: PLAN_I S1–S6 + PLAN_J).
 - **Plan F §7 follow-ups** — re-ask a failed fib decision when a relevant gap's c3 closes ("dropped" → "one candle
-  later"); the MS vs FibTracker activation divergence (measure first); latent: `inst.meta` mutated on imbalance
+  later"); ~~the MS vs FibTracker activation divergence~~ (retired by PLAN_I S5 — MS reads FibTracker's decision;
+  found stale by the item-10 sweep 2026-10-28); latent: `inst.meta` mutated on imbalance
   instances shared across projections, the chart hover picks a POI by nearest inner price, single-candle stretches
   dropped. TRIGGER (chart review shows a dropped fib) / parked by the user. Detail:
   `engine_v2/plans/PLAN_F_imbalance_c3_knowability.md` §7.
@@ -692,6 +721,20 @@ SYLLABUS Week 9 Part 2 "Zone size at entry and stop-loss".
   end, and the check does not know the end. TRIGGER: a reason to doubt a first_confluence sub's lifecycle start →
   hand the check the probe's `probe_end_idx` (in the pool's `ProbeCacheEntry`) and compare exactly.
 
+- **A bounded MS run sees the full-frame imbalance list** (Plan A 2026-09-19, narrowed by Plan F 2026-09-24;
+  registered by the item-10 sweep 2026-10-28): `df.attrs["imbalances"]` is built on the whole frame, so a run ending
+  at B sees a gap whose c3 is B+1; only a prefix-vs-merged degeneracy mismatch can reach an output — 0 cases on the
+  reference data; sub builds immune. TRIGGER: the property test trips on it → record and decide. Detail: LANDMINES
+  "Bounded MS Runs Must Not Read Past `end_idx`" (Known residual).
+- **The probe's iteration cap is H1's on every TF** (PART4 §15 "Open Items"; registered by the item-10 sweep
+  2026-10-28): `unified_probe` gives up at `max_iterations = 10` (all resets → `pending`), calibrated for H1; the M15
+  probes use it too. S_W9d: 24 probe runs, ≤ 4 iterations each, none `max_iterations`. TRIGGER: a probe finalizes
+  `max_iterations`, or the M5 layer's probes.
+- **The pinbar body floor stays provisional** (CANDLE_BODY_FLOOR_NOTES "Open / may-revisit"; was only inside the
+  closed D.1 item 4 — registered by the item-10 sweep 2026-10-28): the 90 / p90 window, the reclassify-to-pinbar
+  approach itself, the `one_maru_opposite` / `one_maru_continuous` interaction. TRIGGER: strategy optimization (Week
+  10). Detail: PLAN_U §7.
+
 ## F. Week 10 — live readiness
 
 - Incremental `is_filled` (per-instance fill state machine) — IMBALANCE_FILL_SEMANTICS "When to revisit";
@@ -711,6 +754,12 @@ SYLLABUS Week 9 Part 2 "Zone size at entry and stop-loss".
   N12).
 
 ## G. Idea backlog (no slot yet)
+
+**Every chart / hover line below is LONG-TERM PARKED** (the user 2026-10-28, at the item-10 sweep, verbatim: "The
+overall charts look good for now. We can consider any remaining charting items mentioned in the documentation to be
+"long term" parked. These we may not come back to unless I specifically mention something about doing another
+detailed sweep.") — the chart revamp, the dot-hover quirks, the hovers not on the conventions, M15 elements on H1,
+3-tier opacity, the stepped proximity-reference line, the breadcrumb header. Do not raise them unasked.
 
 - **Fib storage unification** (`_cross_cycle_data` → versioned `_fibs`) — "DEFERRED, not closed (user 2026-05-27):
   may revisit". Detail: `engine_v2/zones/FIB_LIFECYCLE_SPEC.md` §13.
@@ -761,17 +810,34 @@ SYLLABUS Week 9 Part 2 "Zone size at entry and stop-loss".
   need probes / records outside the real-time pool. Detail: `engine_v2/plans/qa_opp_sd_zones_inputs/qa_findings.md`
   rounds 4–6.
 
+- **The BOS / CTS dot hover quirks (5)** (the user 2026-10-21: "Let's come back to it later to address them in more
+  detail"; registered as its own line by the item-10 sweep 2026-10-28): the PB `cycle_id` placeholder 0; PB = a
+  pullback or a replacement break; `idx` = the anchor (the confirmation moment / method / pattern not shown, `phase`
+  judged at the anchor); `time_1H` never shown, `layer=recent` constant; the M15 overlay's unconfirmed CTS label.
+  Detail: `engine_v2/plans/qa_chart_edits_inputs/user_spec_20261022_dot_hover.md` "Quirks".
+- **The hovers not yet on the hover conventions** (registered by the item-10 sweep 2026-10-28): the OHLC candle (but
+  its body-floor line), volume / EMA, the range top / bottom lines, the reversal candidate, the state / `bo` labels,
+  the structure-pattern markers. Detail: CHARTING_SPEC "Hover label conventions".
+- **M15 POIs / fibs / confluence zones on the H1 chart** (CHARTING_SPEC §11 "Not yet rendered on H1 (future work)";
+  registered by the item-10 sweep 2026-10-28) — each a `subordinate_overlays` key + a render block + style keys.
+- **Plan E's optional big renames** (PLAN_E_inputs §2.8, "deferred", 2026-09-24; registered by the item-10 sweep
+  2026-10-28): `probe_end_idx`, `creation_event_idx`, `enforce_cts0_new_extreme`, the test constant `CONF`.
+
 ## H. Deferred indefinitely
 
 - `armed_idx` chart surfacing; consumer-specific fill predicates (IMBALANCE_FILL_SEMANTICS "When to revisit").
 
 ## I. Needs confirmation (possibly superseded)
 
-- (none — the last item was closed 2026-09-30; see "Recently closed")
+- (none — the last item, PART4 §15 "Validation strategy", was closed 2026-10-28; see "Recently closed")
 
 ---
 
 ## Recently closed (history pointers)
+
+- **PART4 §15 "Validation strategy"** (§I; registered by the item-10 sweep 2026-10-28) — CLOSED 2026-10-28 as
+  superseded (the user: "Close it"): the suite (2,173 tests incl. the pool / sweep / registry / per-entity suites),
+  the mutant runs and `/compare`. PART4 §15 marked.
 
 - **SESSION ORDER item 9 — the last Part 1 backlog picks** (§D) — CLOSED 2026-10-28 (PLAN_W:
   `35e827e` the fill checks require a 0..n−1 frame, `aff21f8` the POI record gate `active OR locked`, `321667a` a sub

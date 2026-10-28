@@ -2466,10 +2466,13 @@ Remaining open work:
   calibrated for H1. Lower-TF probes (M15 parent of M5 sub, etc.) may need
   different caps based on candle count per cycle. Revisit when wiring up
   the TF-keyed thresholds (see §4.4).
-- **Validation strategy** — how to systematically validate per-entity
+- ~~**Validation strategy** — how to systematically validate per-entity
   isolation, registry correctness, event-bus ordering, and recursive
   triggering. Likely needs new test infrastructure since today's tests
-  assume single global df.
+  assume single global df.~~ CLOSED 2026-10-28 as superseded (the user, at
+  the Week 9 Part 1 item-10 sweep: "Close it"): the suite (2,173 tests incl.
+  the pool / sweep / registry / per-entity suites), the mutant runs and the
+  `/compare` protocol are that strategy.
 
 ### Closed since early drafts
 
@@ -3601,8 +3604,10 @@ sibling dfs. `test_sub_id_is_monotonic_and_stable` must survive unchanged. [PLAN
   window end (the reversal that ends the sub: 1940 / 2470 / 2829 / 4200), and the
   subs capped for another reason (3 `parent_end`, 4 and 5 `same_dir_replacement`)
   hold none. A trigger item in the register (`IDEA_PARKING_LOT.md` §E).
-- Whether subs should receive the **derived** CTS KL zone as a probe reference
-  (§17.8 — the branch is dead for subs today).
+- ~~Whether subs should receive the **derived** CTS KL zone as a probe reference
+  (§17.8 — the branch is dead for subs today).~~ DONE 2026-10-28 (PLAN_W 9c-2, the user: "Derived, as of the
+  read"): a CTS_CONFIRMED winner's own sub's CTS KL zone as of the read; the sub CTS zones are also exported + drawn
+  hidden (9c-1).
 
 ---
 

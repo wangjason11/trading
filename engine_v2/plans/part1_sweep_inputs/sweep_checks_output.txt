@@ -1,0 +1,10 @@
+== REVERSAL_CANDIDATE meta['pattern'] per events CSV (GOTCHAS: always '?') ==
+  M15_confluence_structure_events.csv: 5 candidates, pattern values {'?': 5}
+  M15_counter_structure_events.csv: 0 candidates, pattern values {}
+  structure_events.csv: 1 candidates, pattern values {'?': 1}
+== unified_probe iterations + finalize conditions (run.log) ==
+  iter=: {1: 12, 2: 7, 3: 3, 4: 2}
+  cond=: {'no_retrace': 12, 'second_cts_reached': 1}
+  max_iterations hits: 0
+  M15_confluence_triggers.csv: probe_finalize_condition {'no_retrace': 9, 'second_cts_reached': 1}
+  M15_counter_triggers.csv: probe_finalize_condition {'no_retrace': 4}
