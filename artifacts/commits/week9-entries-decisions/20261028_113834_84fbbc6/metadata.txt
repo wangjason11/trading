@@ -1,0 +1,4 @@
+commit_hash=84fbbc6
+timestamp=20261028_113834
+branch=week9-entries-decisions
+commit_message=PLAN_U U2 (SESSION ORDER item 7): the rolling pinbar body floor, natural window; the user's chart look: "charts look good, go ahead and commit-save"
