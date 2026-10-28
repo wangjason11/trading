@@ -79,9 +79,6 @@ STYLE = {
     },
 
     # Week 5: reversal watch visuals
-    "structure.reversal_watch_line": {
-        "line": {"width": 2, "dash": "dot", "color": "purple"},
-    },
     "structure.reversal_watch_start": {
         "marker": {"size": 8, "symbol": "x", "opacity": 0.95, "color": "purple"},
     },
@@ -169,8 +166,9 @@ STYLE = {
         "line": {"width": 1.5, "dash": "dot", "color": "rgba(0, 0, 139, 0.4)"},  # dark blue border, faded
         "fillcolor": "rgba(0, 0, 139, 0.0)",  # transparent fill
     },
-    "fib.label": {
-        "font": {"size": 9, "color": "gray"},
+    # Transparent hover "hitbox" line along a fib box's 61.8–80 band (both charts)
+    "fib.hover_line": {
+        "line": {"width": 6, "color": "rgba(0,0,0,0)"},
     },
 
     # -----------------------------
@@ -348,45 +346,22 @@ STYLE = {
         "line": {"width": 1, "color_rgb": "220, 0, 0", "dash": "dash"},
         "opacity": 0.8,
     },
+    # Transparent hover "hitbox" line along a wave candle's vertical (every chart)
+    "wave_candle.hover_line": {
+        "line": {"width": 8, "color": "rgba(0,0,0,0)"},
+    },
+
+    # The sub-native (M15) KL + POI zone outline: thin black, its opacity = the zone's
+    # confirm-line opacity (tier-faded) — `rgba(<rgb>, line_op)`.
+    "zone.m15.outline": {
+        "rgb": "0, 0, 0",
+        "width": 0.5,
+    },
 
     # -----------------------------
     # Week 8: H1 overlay styles for M15 chart
-    # Color fill (same as standard zones), no border
+    # (the H1 overlay's zones read `zone.kl.*` / `zone.poi.*` × the main-TF tier)
     # -----------------------------
-    "zone.h1_overlay.kl.buy": {
-        "rgb": "0, 180, 0",
-        "fill_opacity_active": 0.4,
-        "fill_opacity_inactive": 0.15,
-        "confirm_line_width": 2,
-        "confirm_opacity_active": 0.9,
-        "confirm_opacity_inactive": 0.30,
-    },
-    "zone.h1_overlay.kl.sell": {
-        "rgb": "220, 0, 0",
-        "fill_opacity_active": 0.4,
-        "fill_opacity_inactive": 0.15,
-        "confirm_line_width": 2,
-        "confirm_opacity_active": 0.9,
-        "confirm_opacity_inactive": 0.30,
-    },
-    "zone.h1_overlay.poi.buy": {
-        "rgb": "255, 215, 0",
-        "fill_opacity_active": 0.9,
-        "fill_opacity_inactive": 0.12,
-        "confirm_line_rgb": "101, 67, 33",
-        "confirm_line_width": 2,
-        "confirm_opacity_active": 0.9,
-        "confirm_opacity_inactive": 0.25,
-    },
-    "zone.h1_overlay.poi.sell": {
-        "rgb": "255, 215, 0",
-        "fill_opacity_active": 0.9,
-        "fill_opacity_inactive": 0.12,
-        "confirm_line_rgb": "101, 67, 33",
-        "confirm_line_width": 2,
-        "confirm_opacity_active": 0.9,
-        "confirm_opacity_inactive": 0.25,
-    },
     "structure.m15.swing_line": {
         "line": {"width": 2, "color": "royalblue"},
         "opacity": 0.9,
@@ -423,6 +398,16 @@ STYLE = {
     },
     "prev_bos_line.m15": {
         "line": {"width": 2, "color": "royalblue"},
+    },
+    # The hover-label box of the M15 structure elements (every dot layer, the prev-BOS line)
+    "hoverlabel.m15_structure": {
+        "bgcolor": "royalblue",
+        "font_color": "white",
+    },
+    # The hover-label box of the H1 zone proximity triggers on the M15 charts
+    "hoverlabel.zone_proximity": {
+        "bgcolor": "black",
+        "font_color": "white",
     },
     "structure.h1_overlay.swing_line": {
         "line": {"width": 1, "color": "black"},

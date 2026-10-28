@@ -30,23 +30,25 @@ The open lines below carry over (fold in when their files are next touched); D a
 **Chart review with the user** — all items closed 2026-09-30 (see "Recently closed").
 
 **Hygiene** — the 2026-09-30 pass is done (see "Recently closed"); what is left:
-- **Charting audit 2026-09-21 — the style / code items** — #7 sub-native zone outline hardcoded (no `zone.m15.poi.*`
-  key), #8 hover-label colours hardcoded, #9 the M15 zone-hover hitbox lines hardcoded (H1 reads the registry), #11 the
-  unused `structure.reversal_watch_line` key + the never-plotted `watch_y` series; plus the audit's still-unverified
-  list. Also: 8 unused locals in `charting/export_m15_chart.py` (ruff F841, pre-existing). OPEN — **SESSION ORDER
-  item 8a (the user 2026-10-28)**. Detail: memory `project_charting_audit_20260921.md`.
-- **Two dead reads found by the Week 9 /prepare + item-1 talk** — `_run_multi_tf_dual(poi_zones=...)` is never read
-  (`pipeline/orchestrator.py` ~:837; fold into item 1's landing B, which touches the orchestrator's `POIConfig`);
-  `wvmi._find_temporary_lp` computes `fp_vol_dir` and never reads it (fold into "The agreed direction for wave candles
-  + WVMI", D.2) — GONE 2026-10-26 with the function ("WVMI back on the chart" step 3, §D item 5). The first: OPEN —
-  **SESSION ORDER item 8a (the user 2026-10-28)**.
-- **The H1-main frame is classified and stamped "H1" whatever the config timeframe** — `orchestrator.run_pipeline`
-  calls `apply_candle_classification(df)` with its default (`timeframe="H1"`), so a re-enabled M15-main window
-  (`config.py` keeps them commented out) would get the institutional pattern's H1 cap through the frame's
-  `attrs["timeframe"]` (PLAN_H landing review, 2026-10-06; the H1 pinbar floor and params went with PLAN_U U2 —
-  the rolling floor is TF-agnostic, `CandleParams()` on every frame; `run_pipeline` keys its floor seed "H1"). Pass `CONFIG.timeframe` (or assert H1)
-  when such a window comes back. OPEN; not reachable on the current config — **SESSION ORDER item 8a (the user
-  2026-10-28)**: assert H1 or pass `CONFIG.timeframe`.
+- ~~**Charting audit 2026-09-21 — the style / code items**~~ — DONE 2026-10-28 (SESSION ORDER item 8a, PLAN_V §1,
+  zero output change): #7 `zone.m15.outline`, #8 `hoverlabel.m15_structure` / `hoverlabel.zone_proximity`, #9 the
+  M15 zone hitboxes read `zone.kl.hover_line` / `zone.poi.hover_line` (+ the twins `wave_candle.hover_line`,
+  `fib.hover_line` on every chart), #11 the dead key + `watch_y` deleted, the 8 F841 locals (+ their orphans) deleted,
+  the unused `zone.h1_overlay.*` + `fib.label` keys deleted. **Still OPEN — the audit's unverified list, each a
+  rendered-figure change (not zero change; the user's call when touched):** the H1 chart draws a collapsed cycle's fib;
+  proximity markers on collapsed-cycle zones; the opt-in M15.counter KL overlay on H1 has no collapsed skip; the H1
+  chart drops the `wave_candle.*` `dash`; the wave verticals at forming candles take the live style; the H1 chart vs
+  H1 overlay filter quirks; a sub whose confirmed points are all forming draws no live segment; PART4 §16.7 (zone text
+  labels specified, none rendered — build or drop). Detail: memory `project_charting_audit_20260921.md`.
+- ~~**Two dead reads found by the Week 9 /prepare + item-1 talk**~~ — both closed: `wvmi._find_temporary_lp`'s
+  `fp_vol_dir` GONE 2026-10-26 with the function ("WVMI back on the chart" step 3, §D item 5);
+  `_run_multi_tf_dual(poi_zones=...)` is READ since PLAN_R step 2 (`817d2a9`, `build_cycle_proximity_scans`,
+  `pipeline/orchestrator.py` ~:1126) — the entry was stale (found at SESSION ORDER item 8a, 2026-10-28; PLAN_V §1.2).
+- ~~**The H1-main frame is classified and stamped "H1" whatever the config timeframe**~~ — DONE 2026-10-28 (SESSION
+  ORDER item 8a, PLAN_V §1.3): `run_replay.main()` asserts `CONFIG.timeframe == "H1"` — the orchestrator is H1-main
+  throughout (the "H1" classification stamp + floor-seed key, `"H1.main"`, `parent_tf="H1"`), so passing
+  `CONFIG.timeframe` to the classifier alone would have made an M15-main run look supported. A re-enabled M15-main
+  window (`config.py` keeps them commented out) now fails at the start.
 
 ## B. Week 8 scope — decided 2026-09-30 (the M5 layer moved to D; the syllabus extras dropped — "Recently closed")
 

@@ -116,7 +116,6 @@ from engine_v2.charting.export_plotly import (
     _zone_style,
     _style,
     _deep_merge,
-    _get_reversal_confirmed_by_sid,
     ChartExportPaths,
 )
 from engine_v2.multitf.registry import StructureRegistry
@@ -812,7 +811,6 @@ def export_m15_chart_plotly(
     all_kl_zones: list = list(m15_df.attrs.get("kl_zones", []))
     all_poi_zones: list = list(m15_df.attrs.get("poi_zones", []))
     all_wave_candles: list = list(m15_df.attrs.get("wave_candles", []))
-    all_wvmi_records: list = list(m15_df.attrs.get("wvmi", []))
     all_prev_bos_lines: list = list(m15_df.attrs.get("prev_bos_lines", []))
     all_fib_states: list = list(m15_df.attrs.get("fib_states", []))
     # Each fib record's IC outcome (the picked / no-IC row), keyed by sub_id
@@ -826,7 +824,6 @@ def export_m15_chart_plotly(
     kls_by_sid: dict = defaultdict(list)
     pois_by_sid: dict = defaultdict(list)
     waves_by_sid: dict = defaultdict(list)
-    wvmis_by_sid: dict = defaultdict(list)
     prev_bos_by_sid: dict = defaultdict(list)
     fibs_by_sid: dict = defaultdict(list)
     for ev in all_events:
@@ -845,10 +842,6 @@ def export_m15_chart_plotly(
         ident = _sub_identity(w.meta)
         if ident is not None:
             waves_by_sid[ident].append(w)
-    for r in all_wvmi_records:
-        ident = _sub_identity(r.meta)
-        if ident is not None:
-            wvmis_by_sid[ident].append(r)
     for ln in all_prev_bos_lines:
         ident = _sub_identity(ln.get("meta") or {}) if isinstance(ln, dict) else None
         if ident is not None:
@@ -1076,9 +1069,6 @@ def export_m15_chart_plotly(
     # ===================================================================
     # Phase B: M15 structure elements (per identity-tuple view of m15_df.attrs)
     # ===================================================================
-    time_by_idx_m15 = {int(i): t for i, t in zip(dfx.index.to_numpy(), dfx[COL_TIME])}
-    idx_set_m15 = set(map(int, dfx.index.to_numpy()))
-
     # Entity-wide aliases (idx is entity-absolute — no slice offset).
     lt_df = m15_df
     slice_begin = 0  # noqa: F841 — kept: entity-absolute idx, no offset
@@ -1125,7 +1115,6 @@ def export_m15_chart_plotly(
             continue
 
         eid = _sid_record_identity(sid_rec)
-        sub_dir = int(sid_rec.starting_sd)
         sub_records = records_by_sub.get(eid, [])
         p_sid, p_cycle = _sid_parent(sid_rec)   # informational (first record)
         _records_sorted = sorted(sub_records, key=lambda r: (r.start_idx, r.seq))
@@ -1142,7 +1131,6 @@ def export_m15_chart_plotly(
         sid_kls = kls_by_sid.get(eid, [])
         sid_pois = pois_by_sid.get(eid, [])
         sid_waves = waves_by_sid.get(eid, [])
-        sid_wvmis = wvmis_by_sid.get(eid, [])
         sid_prev_bos = prev_bos_by_sid.get(eid, [])
         sid_fibs = fibs_by_sid.get(eid, [])
 
@@ -1284,10 +1272,11 @@ def export_m15_chart_plotly(
 
                 fillcolor = _rgba_from_rgb(rgb, fill_op)
                 confirm_color = _rgba_from_rgb(rgb, line_op)
-                # Sub-native outline keeps the thin black 0.5px styling, opacity
+                # Sub-native outline (`zone.m15.outline`: thin black 0.5px), opacity
                 # tracks the line opacity for tier-consistent dimming.
-                sub_outline_color = f"rgba(0, 0, 0, {line_op})"
-                sub_outline_w = 0.5
+                outline_st = _style("zone.m15.outline")
+                sub_outline_color = _rgba_from_rgb(str(outline_st.get("rgb", "0, 0, 0")), line_op)
+                sub_outline_w = float(outline_st.get("width", 0.5))
 
                 x0 = pd.to_datetime(zone.start_time, utc=True)
                 x1 = pd.to_datetime(zone.end_time, utc=True) if zone.end_time else t_last_m15
@@ -1377,7 +1366,7 @@ def export_m15_chart_plotly(
                         zone, _sub_zone_id_lines(sub_id, cycle_id, first_record_str), sy1, sy0, pip_size,
                     )] * len(seg_times)
 
-                    kl_hover_line = {"width": 6, "color": "rgba(0,0,0,0)"}
+                    kl_hover_line = _style("zone.kl.hover_line").get("line", {"width": 6, "color": "rgba(0,0,0,0)"})
                     for yval in (sy1, sy0):
                         fig.add_trace(go.Scatter(
                             x=seg_times, y=[yval] * len(seg_times),
@@ -1543,7 +1532,7 @@ def export_m15_chart_plotly(
                     fig.add_trace(go.Scatter(
                         x=[wc_time] * _n_pts, y=_y_pts,
                         mode="lines", showlegend=False,
-                        line=dict(width=8, color="rgba(0,0,0,0)"),
+                        line=_style("wave_candle.hover_line").get("line", dict(width=8, color="rgba(0,0,0,0)")),
                         hovertemplate=wc_hover,
                     ))
 
@@ -1571,9 +1560,10 @@ def export_m15_chart_plotly(
                 line_op = base_line_op * op_mult
                 fillcolor = _rgba_from_rgb(rgb, fill_op)
                 confirm_color = _rgba_from_rgb(confirm_rgb, line_op)
-                # Sub-native outline keeps thin black 0.5px (tier-faded).
-                sub_outline_color = f"rgba(0, 0, 0, {line_op})"
-                sub_outline_w = 0.5
+                # Sub-native outline (`zone.m15.outline`: thin black 0.5px, tier-faded).
+                outline_st = _style("zone.m15.outline")
+                sub_outline_color = _rgba_from_rgb(str(outline_st.get("rgb", "0, 0, 0")), line_op)
+                sub_outline_w = float(outline_st.get("width", 0.5))
 
                 x0 = pd.to_datetime(poi.start_time, utc=True)
                 x1 = pd.to_datetime(poi.end_time, utc=True) if poi.end_time else t_last_m15
@@ -1661,7 +1651,7 @@ def export_m15_chart_plotly(
                     poi, _sub_zone_id_lines(eid, int(poi.meta["cycle_id"]), first_record_str), y1, y0, pip_size,
                 )] * len(seg_times)
 
-                poi_hover_line = {"width": 6, "color": "rgba(0,0,0,0)"}
+                poi_hover_line = _style("zone.poi.hover_line").get("line", {"width": 6, "color": "rgba(0,0,0,0)"})
                 for yval in (y1, y0):
                     fig.add_trace(go.Scatter(
                         x=seg_times, y=[yval] * len(seg_times),
@@ -1706,7 +1696,7 @@ def export_m15_chart_plotly(
                 fig.add_trace(go.Scatter(
                     x=seg_times, y=[(price_618 + price_80) / 2] * len(seg_times),
                     mode="lines", name="M15 fib", showlegend=False, legendgroup="m15_fib",
-                    line=dict(width=6, color="rgba(0,0,0,0)"),  # invisible hover hitbox
+                    line=_style("fib.hover_line").get("line", dict(width=6, color="rgba(0,0,0,0)")),  # invisible hover hitbox
                     line_shape="hv",
                     hovertemplate=fib_hovertemplate("15M"),
                     customdata=fib_cd,
@@ -1729,7 +1719,7 @@ def export_m15_chart_plotly(
                 fig.add_trace(go.Scatter(
                     x=[t0, t1], y=[price, price], mode="lines", line=line_s,
                     name=f"M15 Prev BOS h1s{p_sid}c{p_cycle}", showlegend=False,
-                    hoverlabel=dict(bgcolor="royalblue", font_color="white"),
+                    hoverlabel=dict(_style("hoverlabel.m15_structure")),
                     hovertemplate=(
                         f"TF=15M<br>"
                         f"Prev BOS Line<br>"
@@ -1924,7 +1914,7 @@ def _render_m15_dots_layer(
         name=f"M15 {kind_label} sub{sub_id}" + (" (prior)" if layer == "prior" else ""),
         showlegend=False,
         customdata=cd,
-        hoverlabel=dict(bgcolor="royalblue", font_color="white"),
+        hoverlabel=dict(_style("hoverlabel.m15_structure")),
         hovertemplate=(
             "TF=15M<br>"
             "idx=%{customdata[0]}<br>"
@@ -2034,8 +2024,6 @@ def _render_h1_overlay(fig, dfx, h1_df, h1_to_m15, m15_to_h1, state_cfg, struct_
             all_h1_sids.add(int(sid))
     most_recent_h1_sid = max(all_h1_sids) if all_h1_sids else 0
 
-    rev_confirmed_by_sid = _get_reversal_confirmed_by_sid(structure_events)
-
     # --- H1 breakout labels ("bo") ---
     if state_cfg.get("labels", False) or True:  # Always show H1 labels on M15 chart
         bo_events = [
@@ -2101,7 +2089,7 @@ def _render_h1_overlay(fig, dfx, h1_df, h1_to_m15, m15_to_h1, state_cfg, struct_
                 customdata=cd,
             ))
 
-    # --- H1 structure swing lines (dashed) ---
+    # --- H1 structure swing lines ---
     if struct_cfg.get("levels", False):
         cts_events = [ev for ev in structure_events if ev.type == "CTS_CONFIRMED"]
         bos_events = [ev for ev in structure_events if ev.type == "BOS_CONFIRMED"]
@@ -2271,7 +2259,6 @@ def _render_h1_overlay(fig, dfx, h1_df, h1_to_m15, m15_to_h1, state_cfg, struct_
         all_kl_sids = sorted(by_struct.keys(), reverse=True)
         num_structures = int(zone_cfg.get("num_structures", 99))
         selected_kl_sids = set(all_kl_sids[:num_structures])
-        most_recent_kl_sid = all_kl_sids[0] if all_kl_sids else 0
 
         # Per-TF tier for H1 zones on M15 chart = main_tf (0.2).
         h1_overlay_tier = select_subordinate_tf_tier("H1", primary_sub_tf="M15")
@@ -2284,8 +2271,8 @@ def _render_h1_overlay(fig, dfx, h1_df, h1_to_m15, m15_to_h1, state_cfg, struct_
                 continue          # collapsed (retroactive) cycle — never active; not drawn
 
             side = str(z.side)
-            # Read unified base values from zone.kl.* (Item 5: legacy
-            # zone.h1_overlay.kl.* bases supersede per-TF tier multiplication).
+            # Read unified base values from zone.kl.* x the per-TF tier (Item 5 replaced the
+            # legacy zone.h1_overlay.kl.* bases; those keys were deleted 2026-10-28, PLAN_V 8a).
             stz = STYLE.get(f"zone.kl.{side}", {})
 
             rgb = str(stz.get("rgb", "0,180,0" if side == "buy" else "220,0,0"))
@@ -2376,7 +2363,7 @@ def _render_h1_overlay(fig, dfx, h1_df, h1_to_m15, m15_to_h1, state_cfg, struct_
 
                 hover_cd = [kl_zone_customdata(z, main_zone_id_line(z.meta), sy1, sy0, pip_size)] * len(seg_times)
 
-                h1_hover_line = {"width": 6, "color": "rgba(0,0,0,0)"}
+                h1_hover_line = _style("zone.kl.hover_line").get("line", {"width": 6, "color": "rgba(0,0,0,0)"})
                 for yval in (sy1, sy0):
                     fig.add_trace(go.Scatter(
                         x=seg_times, y=[yval] * len(seg_times),
@@ -2423,7 +2410,7 @@ def _render_h1_overlay(fig, dfx, h1_df, h1_to_m15, m15_to_h1, state_cfg, struct_
                         )
                         break
 
-    # --- H1 Wave candle verticals (dashed; per-candle lifecycle gating) ---
+    # --- H1 Wave candle verticals (per-candle lifecycle gating) ---
     h1_wave_candles = h1_df.attrs.get("wave_candles", [])
     if zone_cfg.get("wave_candles", True) and h1_wave_candles:
         from engine_v2.zones.structure_lifecycle import compute_cycle_lifecycle
@@ -2523,16 +2510,13 @@ def _render_h1_overlay(fig, dfx, h1_df, h1_to_m15, m15_to_h1, state_cfg, struct_
                 fig.add_trace(go.Scatter(
                     x=[wc_time] * _n_pts, y=_y_pts,
                     mode="lines", showlegend=False,
-                    line=dict(width=8, color="rgba(0,0,0,0)"),
+                    line=_style("wave_candle.hover_line").get("line", dict(width=8, color="rgba(0,0,0,0)")),
                     hovertemplate=wc_hover,
                 ))
 
     # --- H1 POI zones (color fill) ---
     h1_poi_zones = h1_df.attrs.get("poi_zones", [])
     if zone_cfg.get("POI", False) and h1_poi_zones:
-        all_poi_sids = set(int(z.meta.get("structure_id", 0)) for z in h1_poi_zones)
-        most_recent_poi_sid = max(all_poi_sids) if all_poi_sids else 0
-
         # Per-TF tier for H1 POI on M15 chart = main_tf (0.2).
         h1_overlay_tier_poi = select_subordinate_tf_tier("H1", primary_sub_tf="M15")
 
@@ -2630,7 +2614,7 @@ def _render_h1_overlay(fig, dfx, h1_df, h1_to_m15, m15_to_h1, state_cfg, struct_
 
             poi_cd = [poi_zone_customdata(poi, main_zone_id_line(poi.meta), y1, y0, pip_size)] * len(seg_times)
 
-            h1_hover_line = {"width": 6, "color": "rgba(0,0,0,0)"}
+            h1_hover_line = _style("zone.poi.hover_line").get("line", {"width": 6, "color": "rgba(0,0,0,0)"})
             for yval in (y1, y0):
                 fig.add_trace(go.Scatter(
                     x=seg_times, y=[yval] * len(seg_times),
@@ -2640,7 +2624,7 @@ def _render_h1_overlay(fig, dfx, h1_df, h1_to_m15, m15_to_h1, state_cfg, struct_
                     customdata=poi_cd,
                 ))
 
-    # --- H1 Prev BOS lines (dashed) ---
+    # --- H1 Prev BOS lines ---
     h1_prev_bos = h1_df.attrs.get("prev_bos_lines", [])
     for line_info in h1_prev_bos:
         start_idx = line_info["start_idx"]
@@ -2651,7 +2635,7 @@ def _render_h1_overlay(fig, dfx, h1_df, h1_to_m15, m15_to_h1, state_cfg, struct_
         if t0 is not None and t1 is not None:
             fig.add_trace(go.Scatter(
                 x=[t0, t1], y=[price, price], mode="lines",
-                line=_style("prev_bos_line.h1_overlay").get("line", {"width": 2, "color": "black", "dash": "dash"}),
+                line=_style("prev_bos_line.h1_overlay").get("line", {"width": 1, "color": "black"}),
                 name=f"H1 Prev BOS (sid={line_info.get('prev_structure_id', '?')})",
                 showlegend=False,
                 hovertemplate=(
@@ -2689,8 +2673,6 @@ def _render_proximity_triggers_overlay(fig, dfx, h1_df, wick_offset):
     zpt_style = _style("zone_proximity.trigger")
     zpt_marker = zpt_style.get("marker", {"size": 7, "symbol": "x", "color": "black"})
     offset_mult = float(zpt_style.get("offset_mult", 2.5))
-
-    h1_times = pd.to_datetime(h1_df[COL_TIME], utc=True)
 
     # struct_direction lookup by (sid, cycle_id) from H1 CTS_CONFIRMED events.
     structure_events = h1_df.attrs.get("structure_events", [])
@@ -2821,7 +2803,7 @@ def _render_proximity_triggers_overlay(fig, dfx, h1_df, wick_offset):
             name="zone_proximity:trigger",
             marker=zpt_marker,
             customdata=customdata,
-            hoverlabel=dict(bgcolor="black", font_color="white"),
+            hoverlabel=dict(_style("hoverlabel.zone_proximity")),
             # The user's spec 2026-10-23 / 24 (CHARTING_SPEC §12): the H1 trigger on its M15 candle — no
             # struct_direction line (decision 2), the parent's identity without a `first record:` prefix (decision 1).
             hovertemplate=(

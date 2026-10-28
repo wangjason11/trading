@@ -53,18 +53,18 @@ All visual formatting (colors, opacities, line widths, marker sizes) lives in `s
 | Structure markers | `structure.success.*`, `structure.confirmed.*` | Breakout pattern triangles |
 | Range | `range.candle`, `range.rect` | Range candle dots, rectangles |
 | Structure lines | `structure.swing_line`, `structure.cts`, `structure.bos` | Confirmed swing line/dots |
-| Reversal | `structure.reversal_watch_line`, `structure.reversal_watch_start` | Reversal candidate markers |
+| Reversal | `structure.reversal_watch_start` | Reversal candidate markers |
 | KL Zones | `zone.kl.buy`, `zone.kl.sell`, `zone.kl.hover_line` | Zone fills, confirm lines |
 | POI Zones | `zone.poi.buy`, `zone.poi.sell`, `zone.poi.hover_line` | POI zone fills |
-| Fibonacci | `fib.anchor_line.active` / `.historical`, `fib.zone_rect.active` / `.historical` | Fib box (H1 chart + the M15 lens charts) |
+| Fibonacci | `fib.anchor_line.active` / `.historical`, `fib.zone_rect.active` / `.historical`, `fib.hover_line` | Fib box (H1 chart + the M15 lens charts), its hover hitbox |
 | Imbalance | `imbalance.bullish`, `imbalance.bearish` | Imbalance candle colors |
 | Volume | `volume.bar.up/down/neutral`, `volume.ema_line`, `volume.spike_marker`, `volume.headroom` | Volume bars, EMA, spike markers, the axis headroom |
 | WVMI LP marks | `wvmi.lp_row`, `wvmi.lp_dot.sub.buy/sell`, `wvmi.lp_dot.main.buy/sell` | The rows above the volume bars, the sub dots, the H1 circles (§13) |
-| Wave candles | `wave_candle.bullish`, `wave_candle.bearish` | Wave candle vertical lines |
-| M15 structure | `structure.m15.swing_line`, `structure.m15.cts/bos` | M15 chart blue elements |
-| M15 zones | `zone.m15.kl.buy/sell` | M15 zones on H1 chart (dashed) |
-| H1 overlay | `zone.h1_overlay.kl.*`, `zone.h1_overlay.poi.*` | H1 zones on M15 chart |
-| Hover lines | `hover_line.range` | Invisible hitbox lines |
+| Wave candles | `wave_candle.bullish`, `wave_candle.bearish`, `wave_candle.hover_line` | Wave candle vertical lines, their hover hitbox (every chart) |
+| M15 structure | `structure.m15.swing_line`, `structure.m15.cts/bos`, `structure.m15.swing_line_prior`, `structure.m15.cts_prior/bos_prior`, `prev_bos_line.m15`, `hoverlabel.m15_structure` | M15 chart blue elements (the recent / prior layers), their hover-label box |
+| M15 zones | `zone.m15.kl.buy/sell`; `zone.m15.outline` | M15 zones on H1 chart (dashed); the sub-native KL / POI zone outline on the M15 charts |
+| H1 overlay | `structure.h1_overlay.swing_line`, `prev_bos_line.h1_overlay`, `wave_candle.h1_overlay.*`, `hoverlabel.zone_proximity` (zones: `zone.kl.*` / `zone.poi.*` x the main-TF tier) | H1 elements on the M15 charts; the H1 proximity triggers' hover-label box |
+| Hover lines | `hover_line.range`, `zone.kl.hover_line`, `zone.poi.hover_line`, `wave_candle.hover_line`, `fib.hover_line` | Invisible hitbox lines (every chart reads them; no hitbox literal in the chart code since PLAN_V 8a, 2026-10-28) |
 | Chart layout | `chart.layout`, `chart.axis` | Background, grid, axis styling |
 | Chart controls | `chart.controls` (`idx_half_window`, `price_pad`, `min_candles`, `wheel_step`, `idx_mark_color`) | The control bar above each chart (§14) |
 
@@ -563,8 +563,8 @@ All zone rectangles (KL + POI, both charts) follow these rules:
 | POI active stretches | N stretches, one per `A → next D` pair in `meta["activation_history"]`. Trailing `A` with no `D` extends to `end_idx`. |
 | KL confirm line | One vertical line at `confirmed_idx`. |
 | POI confirm lines | N vertical lines, one per `A` event in `activation_history`. Fallback to single line at `confirmed_idx` for legacy zones without history. |
-| Outline color (KL) | Side color: green `rgb(0,180,0)` (buy) / red `rgb(220,0,0)` (sell). Sub-native M15 zones use thin black `rgba(0,0,0, line_op)` width 0.5. |
-| Outline color (POI) | Side confirm-line colour: dark olive `rgb(60,90,20)` (buy) / dark brick `rgb(120,45,15)` (sell). Sub-native M15 zones use thin black `rgba(0,0,0, line_op)` width 0.5. |
+| Outline color (KL) | Side color: green `rgb(0,180,0)` (buy) / red `rgb(220,0,0)` (sell). Sub-native M15 zones use thin black `rgba(0,0,0, line_op)` width 0.5 (`zone.m15.outline`). |
+| Outline color (POI) | Side confirm-line colour: dark olive `rgb(60,90,20)` (buy) / dark brick `rgb(120,45,15)` (sell). Sub-native M15 zones use thin black `rgba(0,0,0, line_op)` width 0.5 (`zone.m15.outline`). |
 
 Implementation: shared helpers in `engine_v2/charting/_zone_render.py`:
 - `compute_kl_active_stretches(zone, render_end_idx)`
@@ -627,9 +627,9 @@ Implementation: shared helpers in `engine_v2/charting/_zone_render.py`:
 |---|---|---|
 | Main H1 chart, KL | `rgb(0,180,0)` (buy) / `rgb(220,0,0)` (sell) at `confirm_opacity_active × tier` | 2 |
 | Main H1 chart, POI | side confirm colour — olive `rgb(60,90,20)` (buy) / brick `rgb(120,45,15)` (sell) — at `confirm_opacity_active × tier` | 2 |
-| Sub M15 chart, sub-native KL/POI (M15) | `rgba(0,0,0, line_op)` (thin black) | 0.5 |
+| Sub M15 chart, sub-native KL/POI (M15) | `rgba(0,0,0, line_op)` (thin black; `zone.m15.outline`) | 0.5 |
 | Sub M15 chart, main-TF overlay KL | side color at `confirm_opacity_active × main_tf_tier` | 2 |
-| Sub M15 chart, main-TF overlay POI | brown at `confirm_opacity_active × main_tf_tier` | 2 |
+| Sub M15 chart, main-TF overlay POI | side confirm colour (olive / brick, `zone.poi.*`) at `confirm_opacity_active × main_tf_tier` | 2 |
 
 These tables are derived from `style_registry.py` + the rendering code in `export_plotly.py` / `export_m15_chart.py` — keep in sync when those values change.
 
@@ -658,7 +658,7 @@ A separate chart file renders M15 candles with both M15 structure and H1 overlay
 |---------|------------------|----------------------|
 | Swing lines / dots | Royalblue | Black |
 | Prev BOS lines | Royalblue | Black |
-| Hover background | Royalblue | Default |
+| Hover background | Royalblue (`hoverlabel.m15_structure`) | Default (the proximity triggers: black, `hoverlabel.zone_proximity`) |
 | Wave candle (WVMI) lines | Dashed | Solid |
 | KL/POI zone outline (Item 5) | Thin black 0.5px (tier-faded) | Matches confirm color, width 2 |
 | KL/POI zone fill (Item 5) | Active stretches only, sub_tf tier (×0.5) | Active stretches only, main_tf tier (×0.2) |
@@ -672,7 +672,10 @@ A separate chart file renders M15 candles with both M15 structure and H1 overlay
 | `structure.h1_overlay.swing_line` | H1 swing line on M15 chart (black, width 1) |
 | `prev_bos_line.h1_overlay` | H1 prev BOS line on M15 chart (black, width 1) |
 | `wave_candle.h1_overlay.*` | H1 wave candle lines on M15 chart (solid) |
-| `zone.h1_overlay.kl.*` / `.poi.*` | **Deprecated by Item 5** — H1 overlay zones now read base values from `zone.kl.*` / `zone.poi.*` and apply the `main_tf` per-TF tier. Entries remain in `style_registry.py` but are no longer consumed by the rendering code. |
+| `hoverlabel.m15_structure` | The hover-label box of every M15 dot layer and the M15 prev BOS line (royalblue / white) |
+| `hoverlabel.zone_proximity` | The hover-label box of the H1 proximity triggers on the M15 charts (black / white) |
+| `zone.m15.outline` | The sub-native KL / POI zone outline (`rgb` 0, 0, 0 at the zone's confirm-line opacity; width 0.5) |
+| (H1 overlay zones) | Read `zone.kl.*` / `zone.poi.*` x the `main_tf` per-TF tier (Item 5); the legacy `zone.h1_overlay.kl.*` / `.poi.*` keys were deleted 2026-10-28 (PLAN_V 8a) |
 
 ### Opacity
 - All swing/connector lines use **flat opacity** from the style (no per-sid multiplier).

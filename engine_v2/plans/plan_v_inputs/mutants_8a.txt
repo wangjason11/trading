@@ -1,0 +1,16 @@
+KILLED    v8a_kl_outline_literal             1 failing: test_the_sub_kl_zone_outline_and_both_kl_hitboxes_read_the_r
+KILLED    v8a_poi_outline_literal            1 failing: test_the_sub_poi_zone_outline_and_both_poi_hitboxes_read_the
+KILLED    v8a_m15_kl_hitbox_literal          1 failing: test_the_sub_kl_zone_outline_and_both_kl_hitboxes_read_the_r
+KILLED    v8a_m15_poi_hitbox_literal         1 failing: test_the_sub_poi_zone_outline_and_both_poi_hitboxes_read_the
+KILLED    v8a_h1ov_kl_hitbox_literal         1 failing: test_the_sub_kl_zone_outline_and_both_kl_hitboxes_read_the_r
+KILLED    v8a_h1ov_poi_hitbox_literal        1 failing: test_the_sub_poi_zone_outline_and_both_poi_hitboxes_read_the
+KILLED    v8a_m15_sub_wave_hitbox_literal    1 failing: test_every_wave_candle_hitbox_site_reads_the_registry
+KILLED    v8a_h1ov_wave_hitbox_literal       2 failing: test_every_wave_candle_hitbox_site_reads_the_registry, test_the_h1_overlays_wave_candle_hitbox_reads_the_registry
+KILLED    v8a_h1_wave_hitbox_literal         2 failing: test_every_wave_candle_hitbox_site_reads_the_registry, test_the_h1_charts_fib_and_wave_candle_hitboxes_read_the_reg
+KILLED    v8a_m15_fib_hitbox_literal         1 failing: test_the_m15_fib_hitbox_reads_the_registry
+KILLED    v8a_h1_fib_hitbox_literal          1 failing: test_the_h1_charts_fib_and_wave_candle_hitboxes_read_the_reg
+KILLED    v8a_prev_bos_label_literal         1 failing: test_the_m15_prev_bos_hover_label_reads_the_registry
+KILLED    v8a_dot_label_literal              1 failing: test_the_m15_dot_hover_label_reads_the_registry
+KILLED    v8a_proximity_label_literal        1 failing: test_the_m15_proximity_trigger_hover_label_reads_the_registr
+KILLED    v8a_h1_assert_removed              1 failing: test_run_replay_refuses_a_non_h1_main_timeframe
+15/15 KILLED  (results: C:\Users\wangj\AppData\Local\Temp\mutant_runner\results.json)

@@ -1336,10 +1336,6 @@ def export_chart_plotly(
         # sort by point index (time order)
         points.sort(key=lambda x: x[0])
 
-        # Build reversal confirmed idx per structure_id (lines end at reversal)
-        # Use events instead of df columns (df columns get overwritten by subsequent structures)
-        rev_confirmed_by_sid_lines = _get_reversal_confirmed_by_sid(structure_events)
-
         if len(points) >= 1:
             # Group points by structure_id - don't connect across structures
             from collections import defaultdict
@@ -1582,13 +1578,9 @@ def export_chart_plotly(
                     )
 
     # -------------------------------------------------
-    # Reversal watch overlay (frozen BOS barrier)
+    # Reversal candidates (drawn when the frame carries the reversal-watch columns)
     # -------------------------------------------------
     if all(c in dfx.columns for c in ["reversal_watch_active", "reversal_bos_th_frozen"]):
-        watch_active = dfx["reversal_watch_active"].astype(bool)
-        prev_active = watch_active.shift(1, fill_value=False)
-        watch_y = dfx["reversal_bos_th_frozen"].where(watch_active, float("nan"))
-
         # -------------------------------------------------
         # Reversal candidate labels (rc)
         # Label EVERY candle that closes beyond bos_threshold
@@ -2084,7 +2076,7 @@ def export_chart_plotly(
                     y=_y_pts,
                     mode="lines",
                     showlegend=False,
-                    line=dict(width=8, color="rgba(0,0,0,0)"),
+                    line=_style("wave_candle.hover_line").get("line", dict(width=8, color="rgba(0,0,0,0)")),
                     hovertemplate=wc_hover,
                 ))
                 wc_rendered += 1
@@ -2569,7 +2561,7 @@ def export_chart_plotly(
                     mode="lines",
                     name=f"fib:sid{fib_st.structure_id}:c{fib_st.cycle_id}",
                     showlegend=False,
-                    line=dict(width=6, color="rgba(0,0,0,0)"),  # Invisible hover hitbox
+                    line=_style("fib.hover_line").get("line", dict(width=6, color="rgba(0,0,0,0)")),  # Invisible hover hitbox
                     line_shape="hv",
                     hovertemplate=fib_hovertemplate("1H"),
                     customdata=hover_customdata,

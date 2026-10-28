@@ -288,6 +288,11 @@ def fetch_history_with_auto_extend(
 
 
 def main() -> None:
+    # The pipeline is H1-main: `run_pipeline` classifies the frame as "H1" and reads its floor seed under "H1", the
+    # registry entity is "H1.main", every sub's parent TF is "H1" — an M15-main window (config.py keeps them commented
+    # out) would run with the H1 rules on M15 candles. Register §A, SESSION ORDER item 8a (PLAN_V §1.3).
+    assert CONFIG.timeframe == "H1", f"[run_replay] the pipeline is H1-main; config.timeframe={CONFIG.timeframe!r}"
+
     # df = get_history(
     #     pair=CONFIG.pair,
     #     timeframe=CONFIG.timeframe,

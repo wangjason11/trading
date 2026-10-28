@@ -1,0 +1,12 @@
+# PLAN_V 8a /compare vs S_U3b (run mode, 2026-10-28T13:44:24-04:00)
+CSVs: baseline 30, current 30, common 30, md5-different 0
+FIG NZD_USD_H1_2025-11-15_2026-01-20_sd-1_eps0p0001_rk2-5.html: traces 79/79 differing-traces(all attrs)=0 layout_equal=True
+FIG NZD_USD_H1_2025-11-15_2026-01-20_sd-1_eps0p0001_rk2-5_M15_confluence.html: traces 302/302 differing-traces(all attrs)=0 layout_equal=True
+FIG NZD_USD_H1_2025-11-15_2026-01-20_sd-1_eps0p0001_rk2-5_M15_counter.html: traces 154/154 differing-traces(all attrs)=0 layout_equal=True
+PNG equal NZD_USD_H1_2025-11-15_2026-01-20_sd-1_eps0p0001_rk2-5.png
+PNG equal NZD_USD_H1_2025-11-15_2026-01-20_sd-1_eps0p0001_rk2-5_M15_confluence.png
+PNG equal NZD_USD_H1_2025-11-15_2026-01-20_sd-1_eps0p0001_rk2-5_M15_counter.png
+[floor_seed] H1: 840 candles 2025-09-28 21:00:00+00:00 -> 2025-11-14 21:00:00+00:00, 3 steps, 355 body-% pinbars (need 180), the final window converged
+[floor_seed] M15: 816 candles 2025-11-04 10:00:00+00:00 -> 2025-11-14 21:45:00+00:00, 3 steps, 310 body-% pinbars (need 180), the final window converged
+skip grep: 33
+8b measure: 'which never started'=0 'started records for'=0 'same-idx start collision'=0
