@@ -217,7 +217,9 @@ renderer pins (`test_plan_v_registry_styles.py`: the fixture's wave candles turn
 verticals on the H1 chart + the H1 overlay; the M15 sub site by a source count). Suite 2172. Mutants 4 / 4 KILLED
 (`plan_v_inputs/mutants_8c.py` / `.txt`). Docs: GLOSSARY (qualified candle, agreed direction, volume-only doji),
 WAVE_CANDLES_SPEC (the definition + the edge-case table), WVMI_SPEC (the LP candidates), CHARTING_SPEC §10 (the
-colour rule), the register D.2 entry closed.
+colour rule), the register D.2 entry closed. The earlier landings' mutant anchors in the three files 8c touched
+(`wave_candles.py`, `export_m15_chart.py`, `export_plotly.py`; 8a's + 8b's files included): 0 stale of 128 that
+matched once at `e5617a0` (`plan_v_inputs/anchor_scan_8c.py` / `.txt`).
 
 **Found 2026-10-28 (while building 8a) — a chart question 8c raises:** every wave-candle renderer skips a candle
 whose `direction` is 0 (`export_m15_chart.py:1493-1494` the sub, `:2475-2476` the H1 overlay; `export_plotly.py:2034-2035`

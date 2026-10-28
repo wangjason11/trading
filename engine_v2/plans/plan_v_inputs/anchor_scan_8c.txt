@@ -1,0 +1,1 @@
+0 stale of 128 anchors that matched once at the base (49 mutants files read)
