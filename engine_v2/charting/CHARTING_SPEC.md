@@ -316,7 +316,8 @@ To change any visual element:
     anchor), prefixed with `sub_id` on a lens — a sub's sid restarts at 0) → `ic_idx=NA (<reason>)` (`no_ic_candidate`
     / `all_ic_candidates_pinbar`, POI_ZONES_SPEC §3.5; PLAN_H C1) + ` | ic_zone=80-100 (fallback)` when Step 1A
     searched 80–100 too (PLAN_P: no IC in either zone; the row's band is asserted); no row → `ic_idx=NA (not
-    evaluated: no POI record)` (the POI record gate skipped it: ended before locking, or no CTS_ESTABLISHED). On the
+    evaluated: no POI record)` (its cycle has no CTS_ESTABLISHED — the POI record gate's one skip of a live version since
+    PLAN_W 9b, 2026-10-28; before it also a cycle that ended before its fib locked). On the
     window: H1 sid 0 cycle 0, confluence sub 1 cycle 3 and sub 2 cycle 0.
   - Until 2026-10-23: `sid=` / `cycle=` on two lines (M15: `sub_id=… | first record parent_sid=… parent_cycle_id=…`,
     `sub window=`, `records:`, `cycle_id=`), the levels before a status cell of `status` / `life=[start, end] reason`

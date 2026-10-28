@@ -2176,3 +2176,11 @@ appears once per sub (its one real projection, mirrored into every lens it is on
 unique-sub records), but a WARNING-class line once more per proximity-view cap. Step 3's lock warning
 (one collapsed record, confluence sub 1 cycle 0) prints 10 times, predicted 2: the prediction script deduplicated its
 per-run captures by content, which merged the identical proximity-view runs. Slice-local indices in every such line.
+
+**The same holds for a census that wraps `_run_downstream_pipeline`** (PLAN_W 9b, 2026-10-28): the proximity-view
+runs (`log_prefix` `PROX_VIEW<pool idx>`, `cap_reason="proximity_view"`) are snapshots, not final records — the
+cap ENDS the cycle live at that moment, so its unlocked fib looks "ended, never locked" (9–22 per window on five
+windows, vs 0–2 in the final records). The overlay reads only the BOS zone from a view capped at a BOS_CONFIRMED
+moment and the POI only from one capped at the cycle's CTS_CONFIRMED (when the fib is locked), so those records
+never reach a trigger. Filter the views out (or key on `structure_path_id` + the lens) before counting
+(`plans/plan_w_inputs/w9b_gate_census.py`).

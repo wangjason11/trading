@@ -124,3 +124,50 @@ Options shown for the rule: (1) a full POI record — IC evaluated + exported, P
 live unlocked fib at the data edge gets today). Separately, **the CTS_ESTABLISHED requirement: "Keep it"** (a cycle
 without one — only a pre-created cross fib — still gets no record: its POI would have no activation floor). And
 for the saves: **"Commit now, save after 9b"** — 9a's commit now, one `/commit-save` after 9b lands.
+
+### 2.4 The change + prediction
+
+- `zones/poi_zones._poi_record_gate`: `(active AND end_idx is None) OR locked` → **`active OR locked`** — the cycle's
+  condition-active version passes whether or not its cycle ended; still per-record (a superseded cross version or a
+  condition-inactive record carries `active=False` and stays out; a locked record always passes). It now equals
+  `select_ic`'s own validity check (`not (active or locked)` → no candidates — the Week 7 rule). The CTS_ESTABLISHED
+  check in `select_ic_records` is unchanged (the user: "Keep it"); its docstring: reached by a pre-created cross fib
+  whose cycle never established, live OR ended. No other reader holds the gate: MS's in-flight read
+  (`poi_inner_for_fib`) never had it; the proximity overlay reads a sub's POI only as of its cycle's CTS_CONFIRMED
+  (§2.2). The POI's end = its cycle's end (`compute_cycle_lifecycle`, unchanged).
+- **Prediction, the reference window: ZERO output change** — measured by the in-process variant (`w9b_variant_diff_
+  2025-12-01.txt`: POIs, IC records, events, KL zones, subs ALL EQUAL); so 30 / 30 CSVs + the figures + the PNGs
+  byte-equal to S_V8c, the gate + skip grep 33 unchanged. The fib hover's `ic_idx=NA (not evaluated: no POI record)`
+  stays only for a cycle without CTS_ESTABLISHED.
+- **The chart look — a variant replay on 2025-08-01 → 09-20** (base = `35e827e`, variant = 9b; scratch trees in a
+  short `%TEMP%` dir): = §2.2 — sub 2 cycle 1's POI (IC 2447, active 2542 → 3143) on both M15 lenses + its IC rows
+  in both `*_ic_candidates.csv`; its fib hover loses the "not evaluated" line; nothing else.
+- Tests: `test_institutional_pattern.py::test_records_gate_none_rows_and_tiebreak_on_the_pick` pins TODAY's skip
+  (`ended … → gated out`) → its `ended` record now gets its rows (= cycle 0's); + a condition-inactive ended record
+  (no rows) so the gate cannot become "every record"; + a new test: the ended record's POI ends at its cycle's end
+  (`lifecycle_cap`, `parent_end`) — the harm before 9b: no POI. Mutants: the old gate back; `active AND locked`;
+  "every record" (`True`).
+- Docs: FIB_LIFECYCLE_SPEC §11 (the POI row + its reconciliation note), CHARTING_SPEC §8 (the "not evaluated" line's
+  cause), POI_ZONES_SPEC (where the gate is stated), the register item 9b + D.2 note.
+
+### 2.5 Result (2026-10-28) — = the prediction
+
+- **The reference window** (the repo replay, 65.7 s wall: data_fetch 3.91, multi_tf_dual 13.00, chart_h1 7.45,
+  chart_m15_counter 11.26, chart_m15_confluence 28.74) vs S_V8c: 30 / 30 CSVs md5-equal, the three figures' full JSON
+  equal, the PNGs equal; fetch gate PASS, skip grep 33 (`plan_w_inputs/w9b_compare.txt`).
+- **2025-08-01 → 09-20** (`w9b_window_replay.py`: base = `35e827e`, variant = the working tree; 34.0 / 36.7 s wall; the
+  same `[floor_seed]` / fetch lines — H1 1168 / 506, 4 steps; M15 608 / 261, 2 steps; 3440 M15 candles):
+  `w9b_census/w9b_aug_sep_replay_compare.txt` — exactly 4 of 30 CSVs differ, rows ADDED only: both lenses'
+  `*_ic_candidates.csv` +362 (sub 2 cycle 1, fib 2362 → 3142) and `*_poi_zones.csv` +1 (IC 2447, buy 0.5872–0.5874,
+  3C.i, confirmed 2542, `end_idx` 3143 `parent_end`, status `ended`); the H1 chart identical (121 / 153); each M15 chart
+  +2 'M15 POI zone' traces + 3 shapes (confluence 204 → 206 / 141 → 144, counter 165 → 167 / 121 → 124) and the
+  'M15 fib' trace's customdata — on all 781 points one change only, the sub 2 cycle 1 fib's
+  `<br>ic_idx=NA (not evaluated: no POI record)` gone (`w9b_aug_sep_hover_check.txt`); the new POI's hover:
+  `ic_reason=IP 3C.i · legs 1-3-1 (2444 | 2445–2447 | 2448)`, `ic_prior_imbalance=2430 unfilled · preferred 2 of 3 IC
+  candidates (over pattern 2B.iv at 2501)`, `lifecycle=[2542, 3143] | end_reason=parent_end`.
+- Suite 2165 (+ the new POI-end test; the records test's `ended` record now has its rows); mutants 4 / 4 KILLED
+  (`plan_w_inputs/mutants_9b.py` / `.txt`).
+- Docs: FIB_LIFECYCLE_SPEC §11 (the POI row + the 9b update to its reconciliation note), LANDMINES "FibState
+  Lifecycle Gate Is Per-Record" (the POI gate line), POI_ZONES_SPEC (option N's reach), CHARTING_SPEC §8 (the "not
+  evaluated" line's one cause), the register item 9 progress.
+- **The user's chart look (2026-10-28, the Aug–Sep 9b charts): "charts look good, go ahead and commit-save".**

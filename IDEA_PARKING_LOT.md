@@ -330,7 +330,11 @@ SYLLABUS Week 9 Part 2 "Zone size at entry and stop-loss".
    Part 1 is complete → push (the user: "don't push just yet") → Part 2.
    **Progress 2026-10-28 (PLAN_W, `engine_v2/plans/PLAN_W_part1_last_items.md`):** 9a DECIDED ("Require 0..n−1" —
    both fill checks raise on a frame not indexed 0..n−1, the label-based code deleted) and BUILT = its prediction
-   (zero change vs S_V8c, PLAN_W §1.5).
+   (zero change vs S_V8c, PLAN_W §1.5), committed `35e827e` (the user: "Commit now, save after 9b"). 9b MEASURED
+   (PLAN_W §2.2: 0 on the reference window; 0–2 sub cycles per other window, never the H1 main; the proximity views
+   unaffected — the overlay reads a sub's POI only as of its CTS_CONFIRMED) and DECIDED: "Full POI record" (the gate
+   `active OR locked` — a cycle that ends before its fib locks gets its IC rows + its POI, ending at the cycle's
+   end) + the CTS_ESTABLISHED requirement "Keep it" (PLAN_W §2.3).
 
 **D.1 — Ordered (the heavy items):**
 1. **One POI per cycle** (redefine the IC & POI zone logic) — B landed; its chart debugging PAUSED for item 2 (user
@@ -372,8 +376,9 @@ SYLLABUS Week 9 Part 2 "Zone size at entry and stop-loss".
    candidates, the conditions filtering together > the IP > fallbacks) and the reasons (RX1-N); waiting on that
    write-up (all DONE by PLAN_L L1 + the decisions below): POI_ZONES_SPEC §3's step structure, the code's
    "candidates" names (`find_ic_candidates`, `*_ip_candidates.csv` → `*_ic_candidates.csv`), the fallbacks (Step 3
-   the ranking rules, L2; Step 4 — D.2 "Step 4 of IC identification", deferred). Still open from the debugging log: sub 3 cyc 3
-   has no POI record (PLAN_H §8.9; 0 instances of its case on S_V8c, 2026-10-28 — SESSION ORDER item 9b, the record gate itself, the user's to revisit). **The write-up RECEIVED 2026-10-09** (verbatim
+   the ranking rules, L2; Step 4 — D.2 "Step 4 of IC identification", deferred). The debugging log's "sub 3 cyc 3
+   has no POI record" (PLAN_H §8.9) — CLOSED 2026-10-28 by SESSION ORDER item 9b (PLAN_W §2): its case, a cycle that ends
+   before its fib locks, now gets a full POI record (the gate `active OR locked`; 0 on the reference window). **The write-up RECEIVED 2026-10-09** (verbatim
    `engine_v2/plans/plan_h_inputs/ic_identification_revamp_spec.md`; the reading + the measurement: PLAN_H §8.9 "The
    IC identification revamp"): Step 1 the IC candidates, Step 2 the IP (both as built), **Step 3 NEW — the general
    ranking when no pattern exists** (its own four ranking rules over the unfiltered Step 1 list — a separate rule set

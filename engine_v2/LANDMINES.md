@@ -1945,7 +1945,10 @@ shared by every version record of a cycle. The consumer gates therefore use
 **raw per-record `active`/`locked` for version distinction** and `status` (or
 `end_idx`) ONLY for the cycle-level ended/disappeared terminal:
 
-- **POI gate** (`zones/poi_zones.py`): `(fib.active AND fib.end_idx is None) OR fib.locked`
+- **POI gate** (`zones/poi_zones._poi_record_gate`): `fib.active OR fib.locked` since PLAN_W 9b (2026-10-28, the
+  user: "Full POI record" — a cycle that ends before its fib locks gets its IC rows + its POI, ending at the cycle's
+  end); was (Session 2) `(fib.active AND fib.end_idx is None) OR fib.locked`, which skipped such a cycle entirely.
+  Either form is per-record: the terminal is no longer in it, the version distinction (`active`) still is
 - **Chart gate** (`charting/_zone_render.fib_record_drawn`, the H1 chart AND the M15 lens charts since PLAN_H §8.9 F1,
   2026-10-06): `status != "disappeared" AND the cycle is not collapsed AND (locked OR active)` — an ended never-locked
   record is drawn (faded), a collapsed cycle's is hidden even when locked; canonical `FIB_LIFECYCLE_SPEC.md` §9.1

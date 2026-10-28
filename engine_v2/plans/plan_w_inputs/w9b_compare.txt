@@ -1,0 +1,8 @@
+     A      B      d  element / (parent_sid,parent_cycle,sub_id)
+CSVs: baseline 30, current 30, common 30, md5-different 0
+FIG NZD_USD_H1_2025-11-15_2026-01-20_sd-1_eps0p0001_rk2-5.html: traces 79/79 differing-traces(all attrs)=0 layout_equal=True
+FIG NZD_USD_H1_2025-11-15_2026-01-20_sd-1_eps0p0001_rk2-5_M15_confluence.html: traces 302/302 differing-traces(all attrs)=0 layout_equal=True
+FIG NZD_USD_H1_2025-11-15_2026-01-20_sd-1_eps0p0001_rk2-5_M15_counter.html: traces 154/154 differing-traces(all attrs)=0 layout_equal=True
+PNG NZD_USD_H1_2025-11-15_2026-01-20_sd-1_eps0p0001_rk2-5.png equal
+PNG NZD_USD_H1_2025-11-15_2026-01-20_sd-1_eps0p0001_rk2-5_M15_confluence.png equal
+PNG NZD_USD_H1_2025-11-15_2026-01-20_sd-1_eps0p0001_rk2-5_M15_counter.png equal

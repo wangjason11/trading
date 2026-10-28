@@ -1,0 +1,5 @@
+KILLED    v9b_old_gate                       2 failing: test_a_cycle_that_ends_before_its_fib_locks_gets_a_poi_endin, test_records_gate_none_rows_and_tiebreak_on_the_pick
+KILLED    v9b_and                            40 failing: test_h1_chart_hides_a_collapsed_cycles_fib_and_hovers_the_li, test_a_cycle_that_ends_before_its_fib_locks_gets_a_poi_endin, test_a_locked_fib_without_its_cts_established_fails_loudly, test_downstream_pipeline_returns_the_selection_of_its_own_fi
+KILLED    v9b_locked_only                    38 failing: test_h1_chart_hides_a_collapsed_cycles_fib_and_hovers_the_li, test_a_cycle_that_ends_before_its_fib_locks_gets_a_poi_endin, test_downstream_pipeline_returns_the_selection_of_its_own_fi, test_export_header_none_row_and_legs
+KILLED    v9b_every_record                   1 failing: test_records_gate_none_rows_and_tiebreak_on_the_pick
+4/4 KILLED  (results: C:/Users/wangj/AppData/Local/Temp/mr9b\results.json)

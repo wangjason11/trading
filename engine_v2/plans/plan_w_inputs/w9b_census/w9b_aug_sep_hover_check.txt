@@ -1,0 +1,18 @@
+confluence: 'M15 fib' differs in ['customdata']; 781 of 781 points changed, 1 distinct change(s):
+   x781: base ["lifecycle=[2525, 3143] | end_reason=parent_end<br>ic_idx=NA (not evaluated: no POI record)"]
+         9b   ["lifecycle=[2525, 3143] | end_reason=parent_end"]
+confluence: NEW 'M15 POI zone' trace, 697 points, x 2025-09-05T11:45:00.000000000 .. 2025-09-16T17:45:00.000000000
+   hovertemplate: TF=15M<br><b>POI Zone</b><br>side=%{customdata[0]}<br>%{customdata[1]}<br>ic_idx=%{customdata[2]}<br>confirmed_idx=%{customdata[3]}<br>%{customdata[4]}<br>%{customdata[5]}<br>top=%{customdata[6]:.5f}<br>bottom=%{customdata[7]:.5f}<br>zone_size=%{customdata[8]}<br>struct_direction=%{customdata[9]}<ex
+   customdata[0]: ['buy', 'sub_id=2 | cycle_id=1<br>first record: lens=confluence | parent_sid=0 | parent_cycle_id=0', 2447, 2542, 'ic_reason=IP 3C.i · legs 1-3-1 (2444 | 2445–2447 | 2448)<br>ic_prior_imbalance=2430 unfilled · preferred 2 of 3 IC candidates (over pattern 2B.iv at 2501)', 'lifecycle=[2542, 3143] | end_reason=parent_end', 0.5874, 0.5872, '2.0 pips', 1]
+confluence: NEW 'M15 POI zone' trace, 697 points, x 2025-09-05T11:45:00.000000000 .. 2025-09-16T17:45:00.000000000
+   hovertemplate: TF=15M<br><b>POI Zone</b><br>side=%{customdata[0]}<br>%{customdata[1]}<br>ic_idx=%{customdata[2]}<br>confirmed_idx=%{customdata[3]}<br>%{customdata[4]}<br>%{customdata[5]}<br>top=%{customdata[6]:.5f}<br>bottom=%{customdata[7]:.5f}<br>zone_size=%{customdata[8]}<br>struct_direction=%{customdata[9]}<ex
+   customdata[0]: ['buy', 'sub_id=2 | cycle_id=1<br>first record: lens=confluence | parent_sid=0 | parent_cycle_id=0', 2447, 2542, 'ic_reason=IP 3C.i · legs 1-3-1 (2444 | 2445–2447 | 2448)<br>ic_prior_imbalance=2430 unfilled · preferred 2 of 3 IC candidates (over pattern 2B.iv at 2501)', 'lifecycle=[2542, 3143] | end_reason=parent_end', 0.5874, 0.5872, '2.0 pips', 1]
+counter: 'M15 fib' differs in ['customdata']; 781 of 781 points changed, 1 distinct change(s):
+   x781: base ["lifecycle=[2525, 3143] | end_reason=parent_end<br>ic_idx=NA (not evaluated: no POI record)"]
+         9b   ["lifecycle=[2525, 3143] | end_reason=parent_end"]
+counter: NEW 'M15 POI zone' trace, 697 points, x 2025-09-05T11:45:00.000000000 .. 2025-09-16T17:45:00.000000000
+   hovertemplate: TF=15M<br><b>POI Zone</b><br>side=%{customdata[0]}<br>%{customdata[1]}<br>ic_idx=%{customdata[2]}<br>confirmed_idx=%{customdata[3]}<br>%{customdata[4]}<br>%{customdata[5]}<br>top=%{customdata[6]:.5f}<br>bottom=%{customdata[7]:.5f}<br>zone_size=%{customdata[8]}<br>struct_direction=%{customdata[9]}<ex
+   customdata[0]: ['buy', 'sub_id=2 | cycle_id=1<br>first record: lens=confluence | parent_sid=0 | parent_cycle_id=0', 2447, 2542, 'ic_reason=IP 3C.i · legs 1-3-1 (2444 | 2445–2447 | 2448)<br>ic_prior_imbalance=2430 unfilled · preferred 2 of 3 IC candidates (over pattern 2B.iv at 2501)', 'lifecycle=[2542, 3143] | end_reason=parent_end', 0.5874, 0.5872, '2.0 pips', 1]
+counter: NEW 'M15 POI zone' trace, 697 points, x 2025-09-05T11:45:00.000000000 .. 2025-09-16T17:45:00.000000000
+   hovertemplate: TF=15M<br><b>POI Zone</b><br>side=%{customdata[0]}<br>%{customdata[1]}<br>ic_idx=%{customdata[2]}<br>confirmed_idx=%{customdata[3]}<br>%{customdata[4]}<br>%{customdata[5]}<br>top=%{customdata[6]:.5f}<br>bottom=%{customdata[7]:.5f}<br>zone_size=%{customdata[8]}<br>struct_direction=%{customdata[9]}<ex
+   customdata[0]: ['buy', 'sub_id=2 | cycle_id=1<br>first record: lens=confluence | parent_sid=0 | parent_cycle_id=0', 2447, 2542, 'ic_reason=IP 3C.i · legs 1-3-1 (2444 | 2445–2447 | 2448)<br>ic_prior_imbalance=2430 unfilled · preferred 2 of 3 IC candidates (over pattern 2B.iv at 2501)', 'lifecycle=[2542, 3143] | end_reason=parent_end', 0.5874, 0.5872, '2.0 pips', 1]

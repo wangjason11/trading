@@ -45,6 +45,7 @@ from engine_v2.zones.poi_zones import (
     ICCandidateRecord,
     POIConfig,
     derive_ic_candidates,
+    derive_poi_zones,
     fib_zone_bounds,
     find_ic_variant_candidates,
     ic_touches_zone,
@@ -779,15 +780,21 @@ def test_records_gate_none_rows_and_tiebreak_on_the_pick():
     df.attrs["imbalances"] = [_bos_gap(6), _far_gap(10), _far_gap(12)]       # 1B-neutral (PLAN_S step 3)
     live = _fib_over(df, 6, 12, 0.5, 0.7)
     no_touch = dataclasses.replace(_fib_over(df, 6, 12, 0.70, 0.71), cycle_id=1)  # a zone above every IC
-    ended = dataclasses.replace(live, cycle_id=2, end_idx=12)                    # active but ended → gated out
+    # active, its cycle ended before it locked → a record like a live one (PLAN_W 9b, the user: "Full POI record";
+    # was gated out — no IC rows, no POI)
+    ended = dataclasses.replace(live, cycle_id=2, end_idx=12, end_reason="parent_end")
     no_est = dataclasses.replace(live, cycle_id=3)                               # no CTS_ESTABLISHED → skipped
-    recs = derive_ic_candidates(df, [_est(0, 0), _est(0, 1), _est(0, 2)], _Tracker([live, no_touch, ended, no_est]),
+    inactive = dataclasses.replace(live, cycle_id=4, active=False, end_idx=12)   # condition-inactive, unlocked → none
+    recs = derive_ic_candidates(df, [_est(0, 0), _est(0, 1), _est(0, 2), _est(0, 4)],
+                                _Tracker([live, no_touch, ended, no_est, inactive]),
                                 POIConfig(), structure_path_id="H1.main")
     assert recs, "the gate kept the live records"
     assert [(r.cycle_id, r.ic_idx, r.touches_zone, r.picked, r.reason) for r in recs] == [
         (0, 7, True, False, None), (0, 9, True, True, None), (0, 11, True, False, None),
         (1, 7, False, False, None), (1, 9, False, False, None), (1, 11, False, False, None),   # misses: never picked
-        (1, None, None, False, "no_ic_candidate")]          # nothing touches: no IC candidate (PLAN_H RX1-N)
+        (1, None, None, False, "no_ic_candidate"),          # nothing touches: no IC candidate (PLAN_H RX1-N)
+        (2, 7, True, False, None), (2, 9, True, True, None), (2, 11, True, False, None)]   # the ended one = cycle 0
+    recs = recs[:7]
     pick = recs[1]
     assert (pick.ip_tiebreak, pick.ip_tb_runner_up_ic_idx, pick.ip_tied_count, pick.ip_tb_imbalance_first_c2_idx) \
         == (MOST_RECENT, 11, 2, 10)
@@ -795,6 +802,27 @@ def test_records_gate_none_rows_and_tiebreak_on_the_pick():
     # the per-candidate immediate gap, on every candidate row (misses too), none on the no-IC row
     assert [r.immediate_imbalance_first_c2_idx for r in recs] == [None, 10, 12, None, 10, 12, None]
     assert pick.meta == {"structure_path_id": "H1.main"} and pick.pattern_confirmed_idx == 11   # 10 + the next candle
+
+
+def test_a_cycle_that_ends_before_its_fib_locks_gets_a_poi_ending_at_the_cycle_end():
+    """PLAN_W 9b (the user 2026-10-28: "Full POI record"): a fib whose cycle ENDS before its CTS confirms — active,
+    never locked — gets its POI like a live fib on the same bounds (IC 9, the pick of the test above), ending at its
+    cycle's end (here the sub's lifecycle cap, `parent_end`). Before 9b the record gate skipped it — no IC rows and no
+    POI for a cycle that was live until its end (Aug–Sep 2025 sub 2 cycle 1: 8 days, `plan_w_inputs/w9b_census/`). A
+    condition-inactive record still gets none, and so does a cycle without CTS_ESTABLISHED (the user kept it)."""
+    df = _tb2_frame()
+    df.attrs["imbalances"] = [_bos_gap(6), _far_gap(10), _far_gap(12)]       # 1B-neutral (PLAN_S step 3)
+    ended = dataclasses.replace(_fib_over(df, 6, 12, 0.5, 0.7), end_idx=12, end_reason="parent_end")
+
+    def pois(fib, est):
+        with contextlib.redirect_stdout(io.StringIO()):
+            return derive_poi_zones(df, est, fib_tracker=_Tracker([fib]), config=POIConfig(), lifecycle_cap=12,
+                                    cap_reason="parent_end")
+
+    (poi,) = pois(ended, [_est(0, 0)])
+    assert (poi.ic_idx, poi.meta["cycle_id"], poi.meta["end_idx"], poi.meta["end_reason"]) == (9, 0, 12, "parent_end")
+    assert pois(dataclasses.replace(ended, active=False), [_est(0, 0)]) == []
+    assert pois(ended, []) == []
 
 
 def test_export_header_none_row_and_legs(tmp_path):

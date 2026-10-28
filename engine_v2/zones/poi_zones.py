@@ -936,19 +936,23 @@ def _steps_2_and_3(
 
 def _poi_record_gate(fib_state: FibState) -> bool:
     """The per-record lifecycle gate of the POI records (FIB_LIFECYCLE_SPEC §11): the
-    live condition-active version (active AND its cycle not ended) OR a locked
-    record.
+    cycle's condition-active version (`active`, its cycle ended or not) OR a locked
+    record — `select_ic`'s own validity check.
 
-    This is the byte-identical-PRESERVING per-record form, NOT the cycle-level
-    `status == "active" OR locked`: `status` is shared by all version records of
-    a live cycle, so a status-keyed gate would wrongly process superseded (dead)
-    cross versions of a still-live cycle (same reason the chart gate, §9.1, uses
-    raw per-record flags). `active` is condition-only post-Session-2, so
-    `end_idx is None` (cycle not ended) is added (the pre-Session-2 `active` was
-    also False once a cycle ended). Locked records — confirmed historical ones,
-    ended-locked included — always pass; `disappeared` records never reach here
-    (filtered by `get_fibs_for_charting`)."""
-    return bool((fib_state.active and fib_state.end_idx is None) or fib_state.locked)
+    A cycle that ENDS before its fib locks (its CTS never confirmed) passes like a
+    live one: its IC rows and its POI, the POI ending at its cycle's end like every
+    POI (`compute_cycle_lifecycle`) — PLAN_W 9b, the user 2026-10-28: "Full POI
+    record". Until then the gate was `active AND end_idx is None` (FibState Session
+    2, `310c395`, keeping Week 7's effect: `active` then went False once a cycle
+    ended), which gave such a cycle no IC and no POI at all.
+
+    Per-record, NOT the cycle-level `status == "active" OR locked`: `status` is
+    shared by all version records of a live cycle, so a status-keyed gate would
+    wrongly process superseded (dead) cross versions, which carry per-record
+    `active=False` (same reason the chart gate, §9.1, uses raw per-record flags).
+    Locked records — ended-locked included — always pass; `disappeared` records
+    never reach here (filtered by `get_fibs_for_charting`)."""
+    return bool(fib_state.active or fib_state.locked)
 
 
 @dataclass(frozen=True)
@@ -981,8 +985,9 @@ def select_ic_records(
        `cts_established_idx`, NOT the CTS anchor (Plan D, 2026-09-23). Direct
        index, no `.get` fallback: a missing moment fails loudly. A cycle with no
        CTS_ESTABLISHED gets NO record (user decision 2026-09-29, zones-audit
-       "fallback POI" option N: its POIs could never activate) — reached only by
-       a still-LIVE pre-created cross fib (an open-ended sub). A LOCKED fib there
+       "fallback POI" option N: its POIs could never activate; kept by the user
+       2026-10-28, PLAN_W 9b) — reached only by a pre-created cross fib whose
+       cycle never established, live or ended. A LOCKED fib there
        breaks the event contract (a fib locks at its cycle's CTS_CONFIRMED, after
        the establishment): AssertionError — checked BEFORE the selection, so it
        fires whatever the pattern;

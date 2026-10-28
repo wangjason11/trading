@@ -643,7 +643,7 @@ ordinary active/inactive flicker is just the condition axis driving the gate.
 
 | Consumer | Reads today | Post-migration |
 |---|---|---|
-| **POI** (`poi_zones.derive_poi_zones`, its fib gate) | geometry + final `active`/`locked` as gate (`if not active and not locked: skip`); derives its OWN `end_idx` + activation history | **per-record** gate `(active AND end_idx is None) OR locked` — see reconciliation note |
+| **POI** (`poi_zones.derive_poi_zones`, its fib gate) | geometry + final `active`/`locked` as gate (`if not active and not locked: skip`); derives its OWN `end_idx` + activation history | **per-record** gate `active OR locked` since PLAN_W 9b (2026-10-28; Session 2 to then: `(active AND end_idx is None) OR locked`) — see the reconciliation note + its 9b update |
 | **Chart H1** (`export_plotly.py`, the "Fib Lines from FibTracker" block) | geometry + `is_active = active and not locked`; hover label "active/locked/inactive" | per-record gate (Section 9.1); `is_active` (bright) = `active AND not locked AND status=="active"`; hover label from `status`+`locked` |
 | **Chart M15** (`export_m15_chart.py`) | fib lines OFF by default (`"fib": {"lines": False}`); `sid_fibs` fetched but unused | unchanged — no fib rendering to gate |
 | **Cap** (`entity_df_mutation.py` open-sub-fib cap) | sets `active=False` + `deactivated_by` on `active and not locked` fibs | set `end_idx` + `end_reason` + `status` instead (leave `active`); recompute cycle `status` across all version records of capped cycles |
@@ -667,6 +667,16 @@ implemented byte-identical-preserving form is therefore per-record:
 (b) dead cross versions still carry `active=False` and skip; (c) ended-**locked**
 fibs still pass via `locked` (feed IC detection). **`ended` must not leak into
 the gate as an active-pass** — `locked` stays the pass-through.
+
+**Update 2026-10-28 (PLAN_W 9b, SESSION ORDER item 9b) — the gate is `active OR locked`.** The user, shown that a
+cycle which ENDS before its fib locks (its CTS never confirms — on subs a `parent_end` / replacement / reversal
+cap) got no IC rows and no POI at all, not even for the candles it was live ("I'm not sure that is what I want"),
+picked "Full POI record": such a record passes like a live one, its POI ending at its cycle's end (inherited,
+`compute_cycle_lifecycle`). So `ended` now DOES pass with `active` — the Session-2 rule above preserved bytes,
+not a decision. Still per-record: (b) holds (a dead cross version carries `active=False`), and a condition-
+inactive record stays out. The CTS_ESTABLISHED requirement is unchanged (the user: "Keep it"). Measured: 0 on
+the reference window; 0–2 sub cycles per other window, never the H1 main (`plans/PLAN_W_part1_last_items.md`
+§2.2).
 
 ---
 
@@ -1026,9 +1036,10 @@ candidates are:
    candidate, the fib stays live. This RESTORES a cap that §15.6 (b) dropped: the removed
    post-hoc sub loop capped every `active and not locked` fib, these included, while the
    pass-through only reached cycles with a table row (a regression since `559db50`,
-   2026-05-27, found by the zones audit). Its POIs then follow `poi_zones`' "ended + unlocked fib →
-   no POIs" rule, as after a reversal; a still-LIVE one (no cap: an open-ended sub) builds no POIs either
-   since 2026-09-29 — a cycle without `CTS_ESTABLISHED` builds none (POI_ZONES_SPEC `cts_established_idx`).
+   2026-05-27, found by the zones audit). It builds no POIs, ended or live: a cycle without
+   `CTS_ESTABLISHED` builds none since 2026-09-29 (POI_ZONES_SPEC `cts_established_idx`; kept by the user at PLAN_W
+   9b, 2026-10-28). Until 9b an ended one was also skipped by the POI record gate's "ended + unlocked fib → no
+   POIs" (gone: a cycle that ends before its fib locks now gets its POI, §11).
    0 such fibs on the reference window; pins `tests/test_fib_never_established_cap.py`.
 
 Because earliest-wins, fib's own terminals still win when they fire **before** the

@@ -843,8 +843,9 @@ still holds; the register item "Opposite-direction POIs" is closed by this.
   `CTS_ESTABLISHED` builds NO POI (user decision 2026-09-29, zones-audit "fallback POI" option N)** — always a moment
   since then. Such a cycle's fib is the pre-established cross FibTracker pre-creates for a next cycle that never
   establishes (subordinate-only; FIB_LIFECYCLE_SPEC §6): a reversal or the sub's lifecycle cap ends it (§15.4
-  candidates 1 / 3) and an ended, unlocked fib builds no POIs, so only a still-LIVE one (an open-ended sub, at the data
-  edge) reached this case — and its POIs could never activate (the floor's cycle term is the establishment moment; the
+  candidates 1 / 3); until PLAN_W 9b (2026-10-28) an ended, unlocked fib built no POIs, so only a still-LIVE one (an
+  open-ended sub, at the data edge) reached this case — since 9b an ended one reaches it too (1 on 2025-08-01 →
+  09-20, counter sub 1 cycle 1 ended by reversal; none on the reference window), and the user kept the rule ("Keep it") — and its POIs could never activate (the floor's cycle term is the establishment moment; the
   sweep's progression comes only from the cycle's own CTS events). Its POIs now appear once the cycle establishes,
   exactly as for a pre-established cross that does establish (their floor is that moment either way). A LOCKED fib
   without `CTS_ESTABLISHED` breaks the event contract (a fib locks at its cycle's `CTS_CONFIRMED`) and fails loudly.
