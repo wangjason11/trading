@@ -1,0 +1,4 @@
+commit_hash=538cd2f
+timestamp=20261028_180228
+branch=week9-entries-decisions
+commit_message=PLAN_W 9c-2 (321667a, a sub probe reads its derived CTS zone as of the read - zero change) + 9c-1 (538cd2f, the sub CTS KL zones exported + drawn hidden behind the M15 Sub CTS zones button) - Week 9 Part 1 complete
