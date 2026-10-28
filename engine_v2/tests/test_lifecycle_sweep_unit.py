@@ -2161,11 +2161,12 @@ def test_sub_ids_follow_lifecycle_start_not_creation_and_ended_by_is_remapped():
     _assert_sweep_invariants(pool)
 
 
-def test_a_replacer_that_never_starts_leaves_ended_by_empty_and_warns():
-    """PLAN_I S1 landing review (lens A finding 1; the latent quirk is parked in the register, D.2): record A
-    (pool#0) is live from 200; B (pool#1, fired 300, lagged to 400) and C (pool#2, fired 400) both start at 400 —
-    C (the later seq) replaces both, so B never starts. Phase 3 takes the FIRST equal-priority end entry for A: B.
-    A's `ended_by` therefore names a sub with no `sub_id`: the cell is None and the sweep WARNs."""
+def test_a_same_candle_replacement_chain_names_the_replacer_that_survives():
+    """PLAN_V 8b (SESSION ORDER item 8b, the user 2026-10-28: "`ended_by` = the replacer that survives"; found by
+    PLAN_I S1's landing review, lens A finding 1): record A (pool#0) is live from 200; B (pool#1, fired 300, lagged to
+    400) and C (pool#2, fired 400) both start at 400 — C (the later seq) replaces both, so B never starts. Phase 3 has
+    two equal-priority end entries for A (B's, then C's) and takes the LAST: A's `ended_by` = C, which starts (sub 1).
+    Until 8b it took the first — B, a sub with no `sub_id` (the cell None + the `which never started` WARNING)."""
     pool = SubStructurePool()
     tables = _tables({(1, 0): (100, None)}, {1: -1})
     resolve = _resolver({
@@ -2184,11 +2185,80 @@ def test_a_replacer_that_never_starts_leaves_ended_by_empty_and_warns():
     )
     A, B, C = _sub(pool, -1, 150), _sub(pool, -1, 250), _sub(pool, -1, 350)
     assert [(s.pool_idx, s.start_idx, s.sub_id) for s in (A, B, C)] == [(0, 200, 0), (1, None, None), (2, 400, 1)]
-    (ra,) = A.records
+    (ra,), (rb,) = A.records, B.records
     assert (ra.end_idx, ra.end_reason, ra.ended_by_pool_idx, ra.ended_by_sub_id) == (
-        400, "same_dir_replacement", 1, None)
-    warn = [l for l in logs if "which never started" in l]
-    assert warn == [f"WARNING [sweep] record {ra.identity} ended by pool#1, which never started — ended_by_sub_id None"]
+        400, "same_dir_replacement", 2, 1)
+    assert (rb.end_idx, rb.end_reason, rb.ended_by_pool_idx, rb.ended_by_sub_id) == (
+        400, "same_dir_replacement", 2, 1)
+    assert not [l for l in logs if "which never started" in l]
+    _assert_sweep_invariants(pool)
+
+
+def test_three_co_starters_all_name_the_last_one():
+    """PLAN_V 8b, one level down: A live from 200; B (fired 300, lagged to 400), C and D (both fired 400) all start at
+    400 in that seq order. C freezes B (B's `ended_by` = C), then D freezes C — and re-points B, which C had frozen at
+    this candle, to D: A, B and C all name D; B and C never start. Without the re-point B would name C (no `sub_id`).
+    An opposite-direction pair on the same candle (E fired 300 lagged to 400, F fired 400 — F freezes E between C and
+    D) is untouched: E still names F."""
+    pool = SubStructurePool()
+    tables = _tables({(1, 0): (100, None)}, {1: -1})
+    resolve = _resolver_by_event_idx({1: _rs(150, 200), 2: _rs(250, 400), 3: _rs(260, 400), 4: _rs(300, 400),
+                                      5: _rs(310, 400), 6: _rs(350, 400)})
+    geom = _geom(pool, {(-1, 150): None, (-1, 250): None, (+1, 260): None, (-1, 300): None, (+1, 310): None,
+                        (-1, 350): None})
+    _result, logs = _run(
+        [   # the triggers sharing a candle fire in `trigger_event_idx` order
+            _dc_replace(_trig(CONF, 1, 0, "first_confluence", 200, -1), trigger_event_idx=1),
+            _dc_replace(_trig(CONF, 1, 0, "first_confluence", 300, -1), trigger_event_idx=2),
+            _dc_replace(_trig(CONF, 1, 0, "first_confluence", 300, +1), trigger_event_idx=3),
+            _dc_replace(_trig(CONF, 1, 0, "subsequent_confluence", 400, -1), trigger_event_idx=4),
+            _dc_replace(_trig(CONF, 1, 0, "subsequent_confluence", 400, +1), trigger_event_idx=5),
+            _dc_replace(_trig(CONF, 1, 0, "subsequent_confluence", 400, -1), trigger_event_idx=6),
+        ],
+        pool=pool, tables=tables, resolve=resolve, geom=geom,
+    )
+    A, B, C, D = (_sub(pool, -1, s) for s in (150, 250, 300, 350))
+    E, F = _sub(pool, +1, 260), _sub(pool, +1, 310)
+    assert [(s.pool_idx, s.start_idx, s.sub_id) for s in (A, B, E, C, F, D)] == [
+        (0, 200, 0), (1, None, None), (2, None, None), (3, None, None), (4, 400, 1), (5, 400, 2)]
+    for s in (A, B, C):
+        (r,) = s.records
+        assert (r.end_idx, r.end_reason, r.ended_by_pool_idx, r.ended_by_sub_id) == (
+            400, "same_dir_replacement", 5, 2), s.pool_idx
+    (re,) = E.records
+    assert (re.end_idx, re.end_reason, re.ended_by_pool_idx, re.ended_by_sub_id) == (400, "same_dir_replacement", 4, 1)
+    assert not [l for l in logs if "which never started" in l]
+    _assert_sweep_invariants(pool)
+
+
+def test_the_re_point_leaves_a_record_ended_at_an_earlier_candle():
+    """PLAN_V 8b's re-point touches only the records the frozen co-starter froze AT THIS candle. Q (pool#0) live from
+    200 on confluence; P (pool#1) replaces it at 300 → Q ends 300, `ended_by` P. A counter trigger at 350 resolves to
+    Q → a post-end zero-length record R, `ended_by` P (copied from Q's ender). At 400 P's counter record and D
+    (pool#2), both fired 400, start: D freezes P's record. R still names P — Q's ender; P started (sub 1)."""
+    pool = SubStructurePool()
+    tables = _tables({(1, 0): (100, None)}, {1: -1})
+    resolve = _resolver_by_event_idx({1: _rs(150, 200), 2: _rs(250, 300), 3: _rs(150, 350), 4: _rs(250, 400),
+                                      5: _rs(350, 400)})
+    geom = _geom(pool, {(-1, 150): None, (-1, 250): None, (-1, 350): None})
+    _result, _logs = _run(
+        [   # P's counter record and D share the candle 400: fired in `trigger_event_idx` order (4 before 5)
+            _dc_replace(_trig(CONF, 1, 0, "first_confluence", 200, -1), trigger_event_idx=1),
+            _dc_replace(_trig(CONF, 1, 0, "subsequent_confluence", 300, -1), trigger_event_idx=2),
+            _dc_replace(_trig(CTR, 1, 0, "subsequent_counter", 350, -1), trigger_event_idx=3),
+            _dc_replace(_trig(CTR, 1, 0, "subsequent_counter", 400, -1), trigger_event_idx=4),
+            _dc_replace(_trig(CTR, 1, 0, "subsequent_counter", 400, -1), trigger_event_idx=5),
+        ],
+        pool=pool, tables=tables, resolve=resolve, geom=geom,
+    )
+    Q, P, D = _sub(pool, -1, 150), _sub(pool, -1, 250), _sub(pool, -1, 350)
+    (q_conf,) = [r for r in Q.records if r.lens == CONF]
+    (R,) = [r for r in Q.records if r.lens == CTR]
+    (p_ctr,) = [r for r in P.records if r.lens == CTR]
+    assert (q_conf.end_idx, q_conf.ended_by_pool_idx) == (300, P.pool_idx)
+    assert R.is_zero_length and (R.trigger_end_idx, R.ended_by_pool_idx, R.ended_by_sub_id) == (
+        300, P.pool_idx, P.sub_id)
+    assert (p_ctr.end_idx, p_ctr.ended_by_pool_idx) == (400, D.pool_idx)
     _assert_sweep_invariants(pool)
 
 

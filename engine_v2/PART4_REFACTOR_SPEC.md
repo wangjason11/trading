@@ -537,7 +537,7 @@ completion before the next:
 | 0 | `TRIGGER_FIRE` (an H1 trigger at its `trigger_idx`) / `REVERSAL_SPAWN` (a built sub's `natural_reversal_idx`) | resolve: collapsed-cycle check (§17.7) → probe (behind the cache, §17.8) → `build_or_get_geometry` → create the `TriggerRecord` (or absorb into the existing record of the same `(lens, S, C)` → same sub) → queue its `RECORD_START` and any end already known |
 | 1 | `RECORD_START` | if the sub already ended **before** this idx → freeze the record zero-length; else mark active and queue a `same_dir_replacement` `RECORD_END` for the same-lens, same-`(S, C, direction)` incumbent of a *different* sub at this idx |
 | 2 | `SUB_START` | set `sub.start_idx` if unset and a live record started here |
-| 3 | `RECORD_END` | for a record not yet ended: apply the highest-priority end entry at this idx (`reversal > parent_end > same_dir_replacement`); entries for an already-ended record are stale and dropped |
+| 3 | `RECORD_END` | for a record not yet ended: apply the highest-priority end entry at this idx (`reversal > parent_end > same_dir_replacement`; of equal ones the LAST queued — the replacer that survives the idx, PLAN_V 8b 2026-10-28; see the same-idx collision paragraph below); entries for an already-ended record are stale and dropped |
 | 4 | `SUB_END` | re-evaluate the §17.5 sub-end rule for every sub that had a live record start or end at this idx |
 
 **Order within a phase.** `TRIGGER_FIRE` sorts by `(lens_rank, type_rank,
@@ -3146,6 +3146,13 @@ moment is still queued; a collision incumbent (`start_idx == t`) is frozen
 zero-length **in phase 1** rather than queued for phase 3, so phase 2 never
 reads it as live. `pool.active_record` (the interval rule, asserting ≤ 1) is
 the post-sweep query (used by the tests; no production reader yet).
+`ended_by` names the replacer that SURVIVES the idx (PLAN_V 8b, 2026-10-28): when
+several co-starters replace one incumbent, phase 3 takes the LAST of its
+equal-priority end entries (the last starter froze the earlier ones), and a
+co-starter frozen at `t` whose own freezer is frozen later at `t` is re-pointed
+to that later starter (phase 1). Until then the first entry won, naming a sub
+that never starts (`ended_by_sub_id` None + `WARNING [sweep] … which never
+started`, still the guard for any other path).
 
 **Start-before-end at the same idx is load-bearing** (§17.5's handover case).
 The heap is idx-monotone: a moment is never queued in the past (a reversal

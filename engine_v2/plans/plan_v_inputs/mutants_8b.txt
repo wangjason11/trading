@@ -1,0 +1,5 @@
+KILLED    v8b_phase3_first_entry             2 failing: test_a_same_candle_replacement_chain_names_the_replacer_that, test_three_co_starters_all_name_the_last_one
+KILLED    v8b_no_repoint                     1 failing: test_three_co_starters_all_name_the_last_one
+KILLED    v8b_repoint_any_candle             1 failing: test_the_re_point_leaves_a_record_ended_at_an_earlier_candle
+KILLED    v8b_repoint_any_ender              1 failing: test_three_co_starters_all_name_the_last_one
+4/4 KILLED  (results: C:\Users\wangj\AppData\Local\Temp\mutant_runner\results.json)

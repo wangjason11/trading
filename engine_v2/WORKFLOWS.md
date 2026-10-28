@@ -115,8 +115,9 @@ non-grep lines worth reading in the same pass: `[probe_cache] hit|APPROX hit`
 and `[probe_cache] REF-ZONE DIFFERS …` (the accepted-approximation tripwire —
 a probe skipped because an earlier same-direction, same-input probe already
 finalized) and `WARNING [sweep] bos0_inner mismatch` / `same-idx start
-collision` / `record … ended by pool#k, which never started` (a same-candle
-replacement chain — register D.2; PLAN_I S1). Since PLAN_I S2: `WARNING [ms]
+collision` / `record … ended by pool#k, which never started` (since PLAN_V 8b,
+2026-10-28, a same-candle replacement chain names its surviving replacer — this line
+would now mean another path; PLAN_I S1). Since PLAN_I S2: `WARNING [ms]
 cts_frozen …` (a breakout established against a threshold other than the one MS
 froze — 0 on the reference window), `WARNING [cross_fib_limit] sub k: stored P …`
 (the R6-2 tripwire; its summary line `[cross_fib_limit] tripwire: N subs

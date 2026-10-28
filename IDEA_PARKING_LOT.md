@@ -463,14 +463,14 @@ SYLLABUS Week 9 Part 2 "Zone size at entry and stop-loss".
   filter; triggers stay structural). The May trigger filter (`47e7532`, reverted `2afd3b2`) is the reference form:
   trigger candle body opposing the zone side. DECIDE when Entries are designed. Detail: this register's "Recently
   closed" (the 2026-09-30 measurement).
-- **A same-candle replacement chain names a replacer that never starts** (PLAN_I S1's landing review, 2026-10-07;
-  latent since Plan C, 0 on the window): when two records start on the same candle and the later one replaces both
-  the incumbent and its co-starter, the sweep's phase 3 takes the FIRST equal-priority end entry, so the incumbent's
-  `ended_by` names the co-starter that was itself replaced — a sub that never starts. Before S1 the triggers CSV
-  carried that sub's creation id (a sub no chart draws); since S1 the cell is empty and the sweep logs `WARNING
-  [sweep] record … ended by pool#k, which never started`. Candidate fix: `ended_by` = the replacer that survives.
-  Pinned: `test_lifecycle_sweep_unit.py::test_a_replacer_that_never_starts_leaves_ended_by_empty_and_warns`. **DECIDED
-  2026-10-28 — SESSION ORDER item 8b** (the user): the candidate fix, its own landing (0 on the window).
+- ~~**A same-candle replacement chain names a replacer that never starts**~~ — DONE 2026-10-28 (SESSION ORDER item
+  8b, PLAN_V §2; 0 on the window — zero output change): `ended_by` = the replacer that survives the candle — phase 3
+  takes the LAST of the equal-priority end entries, and phase 1 re-points a co-starter frozen at the candle when its
+  freezer is frozen there too. Was (PLAN_I S1's landing review, 2026-10-07; latent since Plan C): the FIRST entry, so
+  the incumbent named the replaced co-starter — a sub that never starts (empty `ended_by` + `WARNING [sweep] record …
+  ended by pool#k, which never started`). Pins: `test_lifecycle_sweep_unit.py::test_a_same_candle_replacement_chain_
+  names_the_replacer_that_survives` (was `…_leaves_ended_by_empty_and_warns`, which pinned the old behaviour),
+  `test_three_co_starters_all_name_the_last_one`, `test_the_re_point_leaves_a_record_ended_at_an_earlier_candle`.
 - **The fill check's label-based paths disagree on a frame with a missing label** (PLAN_S step 2's landing review,
   2026-10-21; unreachable — every engine frame is a contiguous 0..n−1 index, 0 on the window): `is_filled`'s fallback
   loop skips a missing label (`continue`; a `break` mutant there survives the suite), while

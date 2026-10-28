@@ -23,8 +23,9 @@ filter of §17.5):
 |       |                   | else mark active + queue a same_dir_replacement candidate     |
 |       |                   | for the same-lens incumbent (different sub)                   |
 | 2     | SUB_START         | set sub.start_idx if unset and a live record started here     |
-| 3     | RECORD_END        | apply the highest-priority end entry at this idx; entries     |
-|       |                   | for an already-ended record are stale and dropped             |
+| 3     | RECORD_END        | apply the highest-priority end entry at this idx (of equal    |
+|       |                   | ones the LAST queued: the replacer that survives, PLAN_V      |
+|       |                   | 8b); entries for an already-ended record are stale, dropped   |
 | 4     | SUB_END           | re-evaluate the §17.5 end rule for every sub touched here     |
 | 5     | PROXIMITY_TICK    | (PLAN_R step 2, when a `proximity` driver is injected) one    |
 |       |                   | per non-collapsed parent cycle and H1 candle h of its scan,   |
@@ -508,6 +509,10 @@ class _Sweep:
                 inc.ended_by_pool_idx = rec.pool_idx
                 inc.end_idx = max(int(t), inc.start_idx)
                 self._active.discard(inc.seq)
+                # The replacer that survives (PLAN_V 8b): a co-starter `inc` froze at this idx now names `rec`.
+                for r in self.pool.records_for(rec.lens, rec.parent_sid, rec.parent_cycle_id):
+                    if r.trigger_end_idx == int(t) and r.ended_by_pool_idx == inc.pool_idx:
+                        r.ended_by_pool_idx = rec.pool_idx
             else:
                 self.log(
                     f"[sweep] replace {inc.identity} pool#{inc.pool_idx} by pool#{rec.pool_idx} at {t}"
@@ -532,7 +537,11 @@ class _Sweep:
                            entries: List[Tuple[int, str, Optional[int]]]) -> None:
         if rec.trigger_end_idx is not None:
             return                                  # stale entries (ended earlier)
-        best = min(entries, key=lambda e: _END_REASON_PRIORITY.get(e[1], 99))
+        # Of the highest-priority entries, the LAST queued names the replacer that survives (PLAN_V 8b): equal-priority
+        # `same_dir_replacement` entries at one idx come from that idx's RECORD_STARTs in seq order, and each later
+        # starter freezes the earlier co-starters (the same-idx collision rule) — the first may never start.
+        top = min(_END_REASON_PRIORITY.get(e[1], 99) for e in entries)
+        best = [e for e in entries if _END_REASON_PRIORITY.get(e[1], 99) == top][-1]
         rec.trigger_end_idx = int(t)
         rec.end_reason = best[1]
         rec.ended_by_pool_idx = best[2]
