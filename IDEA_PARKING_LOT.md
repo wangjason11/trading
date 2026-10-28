@@ -390,7 +390,9 @@ SYLLABUS Week 9 Part 2 "Zone size at entry and stop-loss".
    BOS_0 read" (both moved to "Recently closed"); "Build the fib re-ask as a variant" (§E "Plan F §7 follow-ups": build
    the re-check of a failed fib decision at the candle its gap completes, and replay the windows to prove whether any
    one-candle shift flips an MS decision — PLAN_X X3, to plan); MS's POI snapshot line not closed (stays in §F); Part 1
-   — "Close Part 1".
+   — "Close Part 1". **The order (the user, asked next): "Variant first, then close"** — the NEXT session designs +
+   builds the fib re-ask as a variant (PLAN_X X3) and replays the 5 windows; Week 9 Part 1 closes right after it
+   ("MS totally solid before Part 2" stays the gate). Saved meanwhile: S_X1 `20261028_195331_ebbf223`.
 
 **D.1 — Ordered (the heavy items):**
 1. **One POI per cycle** (redefine the IC & POI zone logic) — B landed; its chart debugging PAUSED for item 2 (user
