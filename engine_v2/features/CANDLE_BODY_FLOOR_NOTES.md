@@ -35,9 +35,9 @@ The settings (`CandleParams`; the user, 2026-10-27 / 28; read by `features/pinba
 | `pinbar_floor_window` | 90 | the pinbars in the window |
 | `pinbar_floor_percentile` | 90.0 | the percentile of their bodies (numpy linear) |
 | `pinbar_floor_window_source` | `"final"` | `"final"` = the body-% pinbars + the ones the floor demoted fill the window, candle by candle (the user's pick at PLAN_U U3, 2026-10-28, after seeing both); `"natural"` = the body-% pinbars only (U2; kept as a switch) |
-| `pinbar_floor_seed_windows` | 2 | the history fetched before a replay's frame holds 2 × 90 = 180 body-% pinbars |
+| `pinbar_floor_seed_windows` | 2 | the history fetched before a replay's frame holds ≥ 2 × 90 = 180 body-% pinbars — and has converged (U3b; convergence alone implies 2 windows, so this count binds only if raised) |
 
-## Current logic — the rolling floor, final window (PLAN_U U2 + U3, 2026-10-28)
+## Current logic — the rolling floor, final window (PLAN_U U2 + U3 + U3b, 2026-10-28)
 
 **The floor of candle i** = `numpy.percentile(body_len of the window, 90)` (linear interpolation), the window = the
 90 most recent pinbars STRICTLY before i; no full window → no floor (NaN). **Step 4:** a candle whose body-% type
@@ -47,15 +47,23 @@ same wick rule. **The window = the final pinbars** (U3): computed candle by cand
 demotes enters the next windows. A demoted body is below the floor that demoted it, so each demotion pulls the next
 p90 down — on the reference window the final floors are lower than the natural ones on most candles (H1 536 lower /
 258 higher, mean −0.08 pips; PLAN_U §9 "U3"). So a candle's floor depends on where the history starts until two
-starts converge; the natural window (`"natural"`, U2, kept as a switch) depends only on the candles before it.
+starts converge — the seed guard below fetches history until they have (U3b); the natural window (`"natural"`, U2,
+kept as a switch) depends only on the candles before it.
 
 **The history before the frame — the floor seed** (`run_replay.fetch_floor_seed` / `fetch_floor_seeds`, in
 `main()` right after the H1 fetch; counted in the `data_fetch` timing): step k fetches `[first − k × 400 candles of
-the TF's time, first)` (the whole span per step) until the seed holds ≥ 180 body-% pinbars; the H1 seed always, the
-M15 seed whenever M15 is configured, both before the H1 frame's first candle (the M15 frame starts there). One log
-line each — `[floor_seed] H1: 559 candles 2025-10-14 14:00:00+00:00 -> 2025-11-14 21:00:00+00:00, 2 steps, 232 body-%
-pinbars (need 180)` and `M15: 480 candles …, 2 steps, 189 …` on the reference window — checked by the fetch gate
-(`/compare` skill §2b). A seed that cannot reach 180 raises `[floor_seed] ERROR` (the replay stops). The seed only
+the TF's time, first)` (the whole span per step) until the seed holds ≥ 180 body-% pinbars AND has **converged**
+(PLAN_U §6b, the user's "Guard extends", 2026-10-28 — `pinbar_body_floor.floor_seed_converged`): the floor loop over
+the whole seed and over the seed cut just after its 90th body-% pinbar (its first window dropped) end on the same
+window, the same rows in order. Every later candle's floor depends only on that window and the candle, so a
+converged seed gives the frame the same floors whichever of the two starts it had — checked on the seed alone, before
+the frame is read. Natural mode converges as soon as the cut seed still holds a window (at the 180). The H1 seed
+always, the M15 seed whenever M15 is configured, both before the H1 frame's first candle (the M15 frame starts there).
+One log line each — `[floor_seed] H1: 840 candles 2025-09-28 21:00:00+00:00 -> 2025-11-14 21:00:00+00:00, 3 steps,
+355 body-% pinbars (need 180), the final window converged` and `M15: 816 candles …, 3 steps, 310 …` on the reference
+window (at 2 steps both TFs held 180 but had not converged; their frame floors were already the same —
+`qa_pinbar_floor_inputs/u3b_guard_check.txt`) — checked by the fetch gate (`/compare` skill §2b). A seed that cannot
+reach 180 or has not converged after 8 steps raises `[floor_seed] ERROR` (the replay stops). The seed only
 fills the windows and is dropped: the frame, its candle indices, its prior-maru pool, big flags and volume features
 are the frame's own. A frame without a seed (`floor_seeds=None`: every test, a standalone script) has no floor
 before its 90th pinbar and — in final mode — other floors after it until its windows converge with the seeded run's
@@ -320,7 +328,8 @@ historical data if necessary to fulfill this requirement." 2026-10-28, on the op
 with all your recommendations. The one thing I'd like to try though is both using body-% pinbars only and also the
 ones the floor itself demoted. I'd like to see how much they would differ." Agreed (the canonical build spec:
 `engine_v2/plans/PLAN_U_rolling_pinbar_body_floor.md` — U1 landed 2026-10-28, U2 (the natural window) landed
-2026-10-28, U3 (the final window, "Current logic" above) the same day; U3b, the seed guard's convergence rule, next):
+2026-10-28, U3 (the final window, "Current logic" above) the same day, then U3b, the seed guard's convergence rule
+(PLAN_U §6b)):
 - the floor of a candle = the p90 (numpy linear interpolation) of the bodies of the 90 most recent pinbars strictly
   before it; a body strictly below it makes a pinbar (today's `<` rule; a body equal to the floor keeps its type);
   the window size and the percentile are config settings;

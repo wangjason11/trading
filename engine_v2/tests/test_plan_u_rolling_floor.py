@@ -5,7 +5,9 @@ Pinned here: the floor function (`features/pinbar_body_floor.py` — the window 
 the natural vs final membership, no full window, the seed), its frame wiring (`compute_candle_features`: the seed
 fills only the windows; the one demotion predicate, asserted), the seed guard (`run_replay.fetch_floor_seed` /
 `fetch_floor_seeds` with a stubbed `get_history`) and the pipeline wiring (`run_pipeline(floor_seeds=…)` reaches the H1
-and the M15 classification). Each test names the mutant it kills (`qa_pinbar_floor_inputs/mutants_u2.py`).
+and the M15 classification). Since U3b (PLAN_U §6b): the seed's convergence (`floor_seed_converged`) and the guard
+stepping on until it holds. Each test names the mutant it kills (`qa_pinbar_floor_inputs/mutants_u2.py`,
+`mutants_u3b.py`).
 """
 from __future__ import annotations
 
@@ -241,7 +243,7 @@ def test_the_guard_steps_back_until_the_seed_holds_enough_pinbars(oanda, capsys)
     assert stub.calls == [(FIRST - timedelta(hours=400 * k), FIRST) for k in (1, 2)]
     assert len(seed) == 800 and seed["time"].iloc[-1] < FIRST
     assert "[floor_seed] H1: 800 candles 2025-12-02 16:00:00+00:00 -> 2026-01-04 23:00:00+00:00, 2 steps, " \
-           "400 body-% pinbars (need 300)" in capsys.readouterr().out
+           "400 body-% pinbars (need 300), the final window converged\n" in capsys.readouterr().out
 
 
 def test_the_guard_stops_at_exactly_enough(oanda):
@@ -311,6 +313,159 @@ def test_the_replay_fetches_both_seeds_for_two_windows(oanda, capsys):
     out = capsys.readouterr().out
     assert out.count("(need 180)") == 2
     assert set(fetch_floor_seeds("NZD_USD", "H1", FIRST, ())) == {"H1"}
+
+
+# --- the seed's convergence (PLAN_U U3b, §6b; the user's "Guard extends", 2026-10-28) ------------------------------
+# Window 2 throughout. "P4" = a body-% pinbar of 4 pips, "N1" a normal of 1 pip, "M9" a maru of 9 pips.
+
+_T = {"P": "pinbar", "M": "maru", "N": "normal"}
+
+
+def _seed(specs):
+    """Exact arrays (body in price units, body-% type) — no float noise from c - o."""
+    return [b * PIP for _, b in specs], [_T[k] for k, _ in specs]
+
+
+# Final mode at p0 (the floor = the window's minimum): the whole seed's first window (rows 0, 1) floors row 3 at 4
+# pips, so N1 is demoted and enters the window -> it ends on rows (3, 4). Cut just after the 2nd pinbar (from row 2),
+# row 3 has no floor yet (one pinbar before it) -> not demoted -> it ends on rows (2, 4). A cut AT the 2nd pinbar
+# (from row 1) would still floor row 3 and end on (3, 4).
+_NOT_CONVERGED = [("P", 4), ("P", 4), ("P", 4), ("N", 1), ("P", 4)]
+# The same five rows after P4 P4 M9 M9 M9: both runs floor N1 (now row 8) -> both end on rows (8, 9).
+_CONVERGED = [("P", 4), ("P", 4), ("M", 9), ("M", 9), ("M", 9)] + _NOT_CONVERGED
+
+
+def test_the_seed_converges_when_both_runs_end_on_the_same_window():
+    """Mutants `u3b_always_converged` (the first False) and `u3b_rows_not_shifted` (the True: the cut run's rows
+    compared without adding the cut back)."""
+    from engine_v2.features.pinbar_body_floor import floor_seed_converged
+    p = _p(window=2, pct=0.0, source="final")
+    assert floor_seed_converged(*_seed(_NOT_CONVERGED), p) is False
+    assert floor_seed_converged(*_seed(_CONVERGED), p) is True
+
+
+def test_the_cut_is_just_after_the_window_th_pinbar():
+    """`_NOT_CONVERGED`'s two runs differ only because the cut seed starts AFTER the 2nd pinbar: a cut AT it (from row
+    1) keeps a full window before N1 and would call it converged — mutant `u3b_cut_at_the_pinbar`. The rule is the
+    user's drop-1-window check (PLAN_U §9 "U3")."""
+    from engine_v2.features.pinbar_body_floor import _floor_run, floor_seed_converged
+    p = _p(window=2, pct=0.0, source="final")
+    body, btype = _seed(_NOT_CONVERGED)
+    assert _floor_run(body, btype, p)[2] == (3, 4)
+    assert _floor_run(body[2:], btype[2:], p)[2] == (0, 2)          # rows 2, 4 of the seed
+    assert _floor_run(body[1:], btype[1:], p)[2] == (2, 3)          # a cut AT the 2nd pinbar: rows 3, 4
+    assert floor_seed_converged(body, btype, p) is False
+
+
+def test_natural_mode_converges_once_the_cut_seed_holds_a_window():
+    """Natural windows = the last body-% pinbars: converged at exactly 2 windows (4 pinbars), not at 3 — mutant
+    `u3b_cut_one_late` (the cut after the 3rd pinbar leaves 1). `_NOT_CONVERGED` converges in natural mode."""
+    from engine_v2.features.pinbar_body_floor import floor_seed_converged
+    p = _p(window=2, pct=0.0, source="natural")
+    assert floor_seed_converged(*_seed([("P", 4), ("P", 4), ("M", 9), ("P", 4), ("P", 4)]), p) is True
+    assert floor_seed_converged(*_seed([("P", 4), ("P", 4), ("M", 9), ("P", 4)]), p) is False
+    assert floor_seed_converged(*_seed(_NOT_CONVERGED), p) is True
+    assert floor_seed_converged(*_seed([("P", 4)]), p) is False      # fewer than a window: no cut
+
+
+def test_converged_compares_the_window_not_the_floor():
+    """p100 (the max): both runs end on a 3-pip floor but on different windows — the whole seed [N3 (row 3), P2], the
+    cut seed [P2, N3 (row 5)]; a frame P2 P4 then gets 3 / 2 vs 3 / 3 pips. So equal floors at the seed's end are not
+    convergence — mutant `u3b_compares_floors`."""
+    from engine_v2.features.pinbar_body_floor import _floor_run, floor_seed_converged
+    p = _p(window=2, pct=100.0, source="final")
+    seed = [("P", 4), ("P", 4), ("P", 4), ("N", 3), ("P", 2), ("N", 3)]
+    body, btype = _seed(seed)
+    full, cut = _floor_run(body, btype, p)[2], _floor_run(body[2:], btype[2:], p)[2]
+    assert (full, tuple(r + 2 for r in cut)) == ((3, 4), (4, 5))
+    assert np.percentile(np.asarray(body)[list(full)], 100) == np.percentile(np.asarray(body)[[4, 5]], 100)
+    assert floor_seed_converged(body, btype, p) is False
+    fb, ft = _seed([("P", 2), ("P", 4)])
+    a = rolling_pinbar_body_floor(body + fb, btype + ft, p)[0][6:]
+    b = rolling_pinbar_body_floor(body[2:] + fb, btype[2:] + ft, p)[0][4:]
+    assert list(a) == pytest.approx([3 * PIP, 2 * PIP]) and list(b) == pytest.approx([3 * PIP, 3 * PIP])
+
+
+def test_a_converged_seed_gives_the_cut_seeds_floors_on_any_frame():
+    """The claim behind the seed-only check (PLAN_U §6b): converged -> every frame candle's floor and demotion is the
+    same from the whole seed and from the cut seed. Random seeds + frames, window 3, p90, final."""
+    from engine_v2.features.pinbar_body_floor import floor_seed_converged
+    p = _p(window=3, pct=90.0, source="final")
+    rng = np.random.default_rng(11)
+    n_conv = 0
+    for _ in range(300):
+        body = list(rng.integers(1, 30, size=40) * 0.25 * PIP)
+        btype = list(rng.choice(["pinbar", "maru", "normal"], size=40, p=[0.4, 0.3, 0.3]))
+        if not floor_seed_converged(body[:25], btype[:25], p):
+            continue
+        n_conv += 1
+        cut = int(np.flatnonzero(np.asarray(btype[:25]) == "pinbar")[2]) + 1
+        fa, da = rolling_pinbar_body_floor(body, btype, p)
+        fc, dc = rolling_pinbar_body_floor(body[cut:], btype[cut:], p)
+        assert np.array_equal(fa[25:], fc[25 - cut:]) and np.array_equal(da[25:], dc[25 - cut:])
+    assert n_conv > 200                                              # 279 of 300 (16 not, with >= 2 windows)
+
+
+class _History:
+    """`get_history` over a fixed candle list, oldest first, one per hour, the last at `FIRST` - 1 h: a request gets
+    the listed candles in [start, end) — none before the list's first (OANDA has no older data)."""
+
+    def __init__(self, specs):
+        self.raw = _raw(specs, start=(FIRST - timedelta(hours=len(specs))).tz_localize(None))
+        self.calls = []
+
+    def __call__(self, *, pair, timeframe, start, end):
+        self.calls.append((pd.Timestamp(start), pd.Timestamp(end)))
+        t = self.raw["time"]
+        return self.raw[(t >= pd.Timestamp(start)) & (t < pd.Timestamp(end))].reset_index(drop=True)
+
+
+@pytest.fixture
+def history(monkeypatch):
+    import engine_v2.run_replay as rr
+
+    def make(specs):
+        stub = _History(specs)
+        monkeypatch.setattr(rr, "get_history", stub)
+        return stub
+    return make
+
+
+def test_the_guard_steps_on_until_the_final_window_converges(history, capsys):
+    """5-candle steps, window 2 (need 4 pinbars): step 1 = `_NOT_CONVERGED` holds 4 pinbars but has not converged ->
+    step 2 = `_CONVERGED` (10 candles, 6 pinbars) stops; the line says so — mutants `u3b_guard_ignores_convergence`
+    (a stop at step 1) and `u3b_guard_default_params` (the check at window 90 never converges -> raises)."""
+    from engine_v2.run_replay import fetch_floor_seed
+    stub = history(_CONVERGED)
+    seed = fetch_floor_seed("NZD_USD", "H1", FIRST, min_pinbars=4, params=_p(window=2, pct=0.0, source="final"),
+                            step_candles=5)
+    assert len(stub.calls) == 2 and len(seed) == 10
+    assert capsys.readouterr().out == (
+        "[floor_seed] H1: 10 candles 2026-01-04 14:00:00+00:00 -> 2026-01-04 23:00:00+00:00, 2 steps, "
+        "6 body-% pinbars (need 4), the final window converged\n")
+
+
+def test_the_guard_in_natural_mode_stops_at_the_count(history, capsys):
+    """The same history, natural mode: converged at step 1 (PLAN_U §6b — natural's steps stay §3.2's)."""
+    from engine_v2.run_replay import fetch_floor_seed
+    stub = history(_CONVERGED)
+    seed = fetch_floor_seed("NZD_USD", "H1", FIRST, min_pinbars=4, params=_p(window=2, pct=0.0, source="natural"),
+                            step_candles=5)
+    assert len(stub.calls) == 1 and len(seed) == 5
+    assert "1 steps, 4 body-% pinbars (need 4), the natural window converged\n" in capsys.readouterr().out
+
+
+def test_the_guard_raises_when_the_window_never_converges(history):
+    """Only `_NOT_CONVERGED` exists: every step returns the same 5 candles, never converged -> after `max_steps` a
+    `[floor_seed] ERROR` that says so (the count was met)."""
+    from engine_v2.run_replay import fetch_floor_seed
+    stub = history(_NOT_CONVERGED)
+    with pytest.raises(RuntimeError, match=r"^\[floor_seed\] ERROR: H1 NZD_USD: the final window has not converged in "
+                                           r"5 candles before 2026-01-05 00:00:00\+00:00 \(4 body-% pinbars\) after 3 "
+                                           r"steps of 5 candles"):
+        fetch_floor_seed("NZD_USD", "H1", FIRST, min_pinbars=4, params=_p(window=2, pct=0.0, source="final"),
+                         step_candles=5, max_steps=3)
+    assert len(stub.calls) == 3
 
 
 # --- the pipeline wiring ------------------------------------------------------------------------------------------

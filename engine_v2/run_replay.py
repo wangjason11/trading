@@ -160,26 +160,33 @@ def _get_history_retrying(*, pair: str, timeframe: str, start, end, prefix: str 
     raise AssertionError("unreachable")
 
 
-def fetch_floor_seed(pair: str, timeframe: str, first_time, *, min_pinbars: int, step_candles: int = 400,
-                     max_steps: int = 8):
-    """The history before a frame that fills the first windows of the rolling pinbar body floor (PLAN_U §3.2).
+def fetch_floor_seed(pair: str, timeframe: str, first_time, *, min_pinbars: int, params=None,
+                     step_candles: int = 400, max_steps: int = 8):
+    """The history before a frame that fills the first windows of the rolling pinbar body floor (PLAN_U §3.2, §6b).
 
     Step k fetches `[first_time - k * step_candles candles of the TF's time, first_time)` (the whole span
     re-fetched per step, like the auto-extend) until it holds >= `min_pinbars` body-% pinbars
-    (`pinbar_floor_seed_windows` x `pinbar_floor_window`). Every request retries under the `[floor_seed]`
-    prefix (`_get_history_retrying`). Rows at or after `first_time` are dropped (OANDA's `to` is exclusive —
-    asserted after the filter). One line on success:
-    ``[floor_seed] <TF>: <n> candles <first> -> <last>, <k> steps, <p> body-% pinbars (need <min>)``;
-    after `max_steps` with fewer -> ``RuntimeError: [floor_seed] ERROR: …`` (the replay stops before its
-    timing block, so the fetch gate FAILs). The M15 seed is fetched even when the run has no H1 trigger.
+    (`pinbar_floor_seed_windows` x `pinbar_floor_window`) AND has converged (`floor_seed_converged`: the floor
+    loop ends on the same window with and without the seed's first window of body-% pinbars — so the frame's
+    floors do not depend on where the seed starts; the user's "Guard extends", PLAN_U U3b). `params` = the
+    floor settings (default `CandleParams()`). Every request retries under the `[floor_seed]` prefix
+    (`_get_history_retrying`). Rows at or after `first_time` are dropped (OANDA's `to` is exclusive — asserted
+    after the filter). One line on success:
+    ``[floor_seed] <TF>: <n> candles <first> -> <last>, <k> steps, <p> body-% pinbars (need <min>), the <source>
+    window converged``; after `max_steps` with fewer pinbars or not converged -> ``RuntimeError: [floor_seed]
+    ERROR: …`` (the replay stops before its timing block, so the fetch gate FAILs). The M15 seed is fetched even
+    when the run has no H1 trigger.
     """
     from engine_v2.features.candle_params import CandleParams
     from engine_v2.features.candles_v2 import classify_candles, compute_candle_metrics
+    from engine_v2.features.pinbar_body_floor import floor_seed_converged
 
+    params = CandleParams() if params is None else params
     # one OANDA request per step, the whole span: stay under its 5000-candle limit
     assert step_candles * max_steps <= 5000, f"[floor_seed] {step_candles} x {max_steps} candles > OANDA's 5000"
     first = pd.to_datetime(first_time, utc=True)
     span = _timeframe_to_timedelta(timeframe)
+    source = params.pinbar_floor_window_source
     seed, n_pins = None, 0
     for k in range(1, int(max_steps) + 1):
         start = (first - k * int(step_candles) * span).to_pydatetime()
@@ -190,31 +197,38 @@ def fetch_floor_seed(pair: str, timeframe: str, first_time, *, min_pinbars: int,
         if raw.empty:
             continue
         assert pd.to_datetime(raw["time"].iloc[-1], utc=True) < first
-        typed = classify_candles(compute_candle_metrics(raw), CandleParams())
+        typed = classify_candles(compute_candle_metrics(raw), params)
         seed, n_pins = raw, int((typed["candle_type"] == "pinbar").sum())
-        if n_pins >= int(min_pinbars):
+        if n_pins >= int(min_pinbars) and floor_seed_converged(typed["body_len"], typed["candle_type"], params):
             seed.attrs["pair"] = pair
             print(f"[floor_seed] {timeframe}: {len(seed)} candles {seed['time'].iloc[0]} -> {seed['time'].iloc[-1]}, "
-                  f"{k} steps, {n_pins} body-% pinbars (need {int(min_pinbars)})")
+                  f"{k} steps, {n_pins} body-% pinbars (need {int(min_pinbars)}), the {source} window converged")
             return seed
     got = 0 if seed is None else len(seed)
+    if n_pins < int(min_pinbars):
+        raise RuntimeError(
+            f"[floor_seed] ERROR: {timeframe} {pair}: {n_pins} body-% pinbars in {got} candles before {first} after "
+            f"{max_steps} steps of {step_candles} candles (need {int(min_pinbars)})"
+        )
     raise RuntimeError(
-        f"[floor_seed] ERROR: {timeframe} {pair}: {n_pins} body-% pinbars in {got} candles before {first} after "
-        f"{max_steps} steps of {step_candles} candles (need {int(min_pinbars)})"
+        f"[floor_seed] ERROR: {timeframe} {pair}: the {source} window has not converged in {got} candles before "
+        f"{first} ({n_pins} body-% pinbars) after {max_steps} steps of {step_candles} candles: the seed and the seed "
+        f"without its first {int(params.pinbar_floor_window)} body-% pinbars end on different windows"
     )
 
 
 def fetch_floor_seeds(pair: str, timeframe: str, first_time, lower_timeframes) -> dict:
-    """The replay's floor seeds (PLAN_U §3.2): {timeframe: the parent TF's seed} and, when "M15" is in
+    """The replay's floor seeds (PLAN_U §3.2, §6b): {timeframe: the parent TF's seed} and, when "M15" is in
     `lower_timeframes`, {"M15": the M15 seed} — both before `first_time` (the parent frame's first candle; the M15
-    frame starts there), each holding `pinbar_floor_seed_windows` x `pinbar_floor_window` body-% pinbars."""
+    frame starts there), each holding `pinbar_floor_seed_windows` x `pinbar_floor_window` body-% pinbars and
+    converged (`fetch_floor_seed`)."""
     from engine_v2.features.candle_params import CandleParams
 
     p = CandleParams()
     min_pinbars = int(p.pinbar_floor_seed_windows) * int(p.pinbar_floor_window)
-    seeds = {timeframe: fetch_floor_seed(pair, timeframe, first_time, min_pinbars=min_pinbars)}
+    seeds = {timeframe: fetch_floor_seed(pair, timeframe, first_time, min_pinbars=min_pinbars, params=p)}
     if "M15" in lower_timeframes:
-        seeds["M15"] = fetch_floor_seed(pair, "M15", first_time, min_pinbars=min_pinbars)
+        seeds["M15"] = fetch_floor_seed(pair, "M15", first_time, min_pinbars=min_pinbars, params=p)
     return seeds
 
 

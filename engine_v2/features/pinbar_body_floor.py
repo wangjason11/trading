@@ -5,7 +5,8 @@ pinbars STRICTLY before i, at `params.pinbar_floor_percentile`; no full window -
 the window = `params.pinbar_floor_window_source`:
   - "final" (the default since PLAN_U U3, the user's pick 2026-10-28): the final pinbars (body-% + the ones the floor
     demoted), candle by candle in index order, each demotion entering the next windows — a candle's floor depends on
-    where the history starts until two starts converge (the seed guard, `run_replay.fetch_floor_seed`);
+    where the history starts until two starts converge (`floor_seed_converged`, checked by the seed guard
+    `run_replay.fetch_floor_seed` since PLAN_U U3b);
   - "natural" (U2; kept as a switch): the body-% pinbars (the floor not applied) — a candle's floor depends only on
     the candles before it.
 
@@ -27,9 +28,9 @@ from engine_v2.features.candles_v2 import classify_candles, compute_candle_metri
 WINDOW_SOURCES = ("natural", "final")
 
 
-def rolling_pinbar_body_floor(body_len, body_pct_type, params: CandleParams) -> Tuple[np.ndarray, np.ndarray]:
-    """`(floor, demoted)` over the rows given, in time order: `floor` one float per row (price units, NaN = no full
-    window), `demoted` the rows the floor makes pinbars (`floor_demotes` — the predicate step 4 applies)."""
+def _floor_run(body_len, body_pct_type, params: CandleParams) -> Tuple[np.ndarray, np.ndarray, Tuple[int, ...]]:
+    """The ONE floor loop: `(floor, demoted, window_rows)` — `window_rows` = the rows in the window after the last row
+    (the window of the next candle), oldest first."""
     source = params.pinbar_floor_window_source
     if source not in WINDOW_SOURCES:
         raise ValueError(f"[pinbar_body_floor] pinbar_floor_window_source must be one of {WINDOW_SOURCES}, "
@@ -41,16 +42,43 @@ def rolling_pinbar_body_floor(body_len, body_pct_type, params: CandleParams) -> 
     n = len(body)
     floor = np.full(n, np.nan)
     demoted = np.zeros(n, dtype=bool)
-    window: deque = deque(maxlen=size)   # the window's pinbar bodies, oldest first
+    window: deque = deque(maxlen=size)   # the window's pinbar rows, oldest first
     current = np.nan                     # the floor of the next candle
     for i in range(n):
         floor[i] = current
         demoted[i] = bool(floor_demotes(body[i], btype[i], floor[i]))
         if btype[i] == "pinbar" or (source == "final" and demoted[i]):
-            window.append(body[i])
+            window.append(i)
             if len(window) == size:
-                current = float(np.percentile(np.asarray(window), pct))
+                current = float(np.percentile(body[list(window)], pct))
+    return floor, demoted, tuple(window)
+
+
+def rolling_pinbar_body_floor(body_len, body_pct_type, params: CandleParams) -> Tuple[np.ndarray, np.ndarray]:
+    """`(floor, demoted)` over the rows given, in time order: `floor` one float per row (price units, NaN = no full
+    window), `demoted` the rows the floor makes pinbars (`floor_demotes` — the predicate step 4 applies)."""
+    floor, demoted, _ = _floor_run(body_len, body_pct_type, params)
     return floor, demoted
+
+
+def floor_seed_converged(body_len, body_pct_type, params: CandleParams) -> bool:
+    """Has the history before a frame (the seed, in time order) CONVERGED (PLAN_U §6b; the user's "Guard extends",
+    2026-10-28)? True when the floor loop over the whole seed and over the seed cut just after its
+    `pinbar_floor_window`-th body-% pinbar (its first window dropped) end on the same window — the same rows, in order.
+    Every later candle's floor and demotion depend only on that window and the candle, so a converged seed gives the
+    same floors on ANY frame after it. Fewer than a window of body-% pinbars -> False. Natural mode converges once the
+    cut seed still holds a window; a window fills only with body-% pinbars until it is full, so convergence implies
+    two windows of body-% pinbars in either mode."""
+    body = np.asarray(body_len, dtype=float).reshape(-1)
+    btype = np.asarray(body_pct_type).reshape(-1)
+    size = int(params.pinbar_floor_window)
+    pin_rows = np.flatnonzero(btype == "pinbar")
+    if len(pin_rows) < size:
+        return False
+    cut = int(pin_rows[size - 1]) + 1
+    full = _floor_run(body, btype, params)[2]
+    part = _floor_run(body[cut:], btype[cut:], params)[2]
+    return full == tuple(r + cut for r in part)
 
 
 def _body_pct_types(df: pd.DataFrame, params: CandleParams) -> pd.DataFrame:

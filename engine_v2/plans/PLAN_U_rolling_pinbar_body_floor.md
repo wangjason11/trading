@@ -5,7 +5,10 @@ baseline; §9); the cold review DONE (§8 — no blocker; its U2 amendments carr
 exactly; source `84fbbc6`, save **S_U2** `20261028_113834_84fbbc6`, U3's `/compare` baseline; §9 "U2"); U3 the final
 window LANDED 2026-10-28 (= §6 exactly — the user's pick after seeing both, natural kept as a switch; source
 `32c544d`, save **S_U3** `20261028_123113_32c544d` = the new `LATEST_<branch>`, U3b's `/compare` baseline; §9 "U3"); U3b
-NEXT — the floor seed guard steps back until final mode converges (the user's "Guard extends", §9 "U3").** U1's
+LANDED 2026-10-28 = §6b exactly — the floor seed guard steps back until final mode converges (the user's "Guard
+extends", §9 "U3"; the plan + prediction §6b; the replay = S_U3 byte for byte, only the two `[floor_seed]` lines
+changed; the user's look: "go ahead and commit-save"; §9 "U3b"). PLAN_U COMPLETE — SESSION ORDER item 7 DONE; next
+item 8.** U1's
 baseline **S_controls**
 `artifacts/commits/week9-entries-decisions/20261027_164527_5dfb5b3` (`LATEST_week9-entries-decisions` until S_U1; source
 `5dfb5b3`, HEAD at drafting `4914f31`, code = `5dfb5b3`); suite 2108. Session order item 7 (register
@@ -115,7 +118,8 @@ gate's N/A branches key on. One line per TF on success:
 `[floor_seed] H1: <n> candles <first> -> <last>, <k> steps, <p> body-% pinbars (need 180)`; after `max_steps` with
 fewer → `RuntimeError("[floor_seed] ERROR: …")` (the replay stops before its timing block → the fetch gate FAILs).
 Measured on this window (2026-10-28, the 400-candle steps): **H1 2 steps, 559 candles, 232 body-% pinbars; M15 2
-steps, 480 candles, 189.**
+steps, 480 candles, 189.** Since U3b (§6b) the guard also steps on until the seed has converged (the line ends
+`, the final window converged`): H1 3 steps, 840 candles, 355; M15 3 steps, 816, 310.
 
 Why 2 windows, not 1: the natural window needs exactly 90 (a seed with 93 H1 pinbars already gives the 60-day
 result); the final window depends on where its computation started until that start is far enough back (H1: 4
@@ -253,6 +257,66 @@ save. **Prediction (exact): H1 15 candles change type vs U2 (1 becomes a pinbar,
 (listed in `plan_u_prediction.txt`). The user compares U2 and U3 on the charts and picks one; the unused mode is then
 removed (the setting kept only if the user wants it) — committed with the pick: no behaviour change when natural is
 kept; the flip + its `/compare` when final is picked.
+
+## 6b. U3b — the seed guard steps back until final mode converges (the user's "Guard extends", 2026-10-28)
+
+**The rule.** Origin: §9 "U3" — the per-run check as first worded (§8 "For U3": drop the seed's first window, raise
+if a frame floor differs) was measured to FAIL on the 2-window seed although its floors were already right; of the
+three options the user chose "Guard extends". `run_replay.fetch_floor_seed` keeps its steps (400 candles, max 8;
+`step_candles × max_steps ≤ 5000` stays) and stops at the first step whose seed holds ≥ `pinbar_floor_seed_windows ×
+pinbar_floor_window` (180) body-% pinbars (§3.2, unchanged) **AND has converged**: the floor loop over the whole seed
+and over the seed cut just after its `pinbar_floor_window`-th (90th) body-% pinbar — the seed's first window dropped,
+the check's "drop 1 window" — end on the SAME window (the same rows, in order). Seed-only: the frame is not read, so
+the M15 seed is checked before the M15 frame is fetched; and since every later candle's floor and demotion depend only
+on that window and the candle, a converged window gives the same floors on ANY frame after the seed (the first
+wording compared frame floors, which needs the frame). Not converged after `max_steps` → `RuntimeError("[floor_seed]
+ERROR: …")` (the replay stops; the fetch gate FAILs).
+
+**What follows from it** (stated, pinned by tests): natural mode's windows are the last 90 body-% pinbars, so it
+converges as soon as the cut seed still holds a window — exactly at 180 — and its steps stay §3.2's. A window fills
+only with body-% pinbars until it is full (no floor, no demotion before that), so convergence needs a full window in
+the cut seed: it implies ≥ 2 windows of body-% pinbars in either mode. The 180 count is kept (the agreed minimum, the
+line's "(need 180)"); it binds again only if `pinbar_floor_seed_windows` is raised.
+
+**The code.**
+- `features/pinbar_body_floor.py`: the ONE loop becomes `_floor_run(body_len, body_pct_type, params) -> (floor,
+  demoted, window_rows)` — its window holds row numbers, the floor = `np.percentile(body[rows])` (the same values →
+  the same floors); `rolling_pinbar_body_floor` returns its first two (every caller unchanged). New
+  `floor_seed_converged(body_len, body_pct_type, params) -> bool` = the rule (fewer than a window of body-% pinbars →
+  False). No second loop (§9 "U3b — notes").
+- `run_replay.fetch_floor_seed(…, params=None, …)` (default `CandleParams()`; a test passes a small window;
+  `fetch_floor_seeds` passes its `p`): the body-% types with `params`; the stop = the count AND
+  `floor_seed_converged`. The line gains the convergence:
+  `[floor_seed] H1: <n> candles <first> -> <last>, <k> steps, <p> body-% pinbars (need 180), the final window converged`
+  (`natural` in natural mode). After `max_steps`: the count short → today's message, unchanged; the count met, not
+  converged → `[floor_seed] ERROR: <TF> <pair>: the final window has not converged in <n> candles before <first> (<p>
+  body-% pinbars) after <max_steps> steps of <step_candles> candles: …`.
+- Comments / docstrings: `candle_params.py` (`pinbar_floor_seed_windows`), the module docstring, `fetch_floor_seed`.
+
+**Prediction** (from `u3_convergence.txt`; re-checked on the built guard before the replay): **H1 3 steps, 840
+candles 2025-09-28 21:00 → 2025-11-14 21:00, 355 body-% pinbars; M15 3 steps, 816 candles 2025-11-04 10:00 →
+2025-11-14 21:45, 310** (at 2 steps neither has converged by the seed's end — the two runs' windows agree only from H1
+frame idx 200 / M15 frame idx 15; at 3, inside the seed: H1 row 582 of 840, M15 721 of 816). The frame floors at 3
+windows = the 2-window seed's on every candle (measured) → **all 30 CSVs, the figures and the PNGs byte-equal vs
+S_U3**; only the two `[floor_seed]` lines and the `data_fetch` time change; skip grep 33, the same lines.
+
+**Tests** (`test_plan_u_rolling_floor.py`; small windows, a stubbed `get_history` over a fixed candle list): the
+predicate True / False on hand-built final-mode seeds; natural converges at exactly 2 windows, not at 2 windows − 1;
+the cut just after the window-th pinbar (an example where a cut AT it answers differently); the window compared, not
+the floor (an example where both runs end on the same floor but different windows); a converged seed gives the cut
+seed's floors on a frame after it; the guard steps on when the count is met but not converged, stops at the first
+converged step (the line), and in natural mode stops at the count on the same history; raises after `max_steps` when
+never converged; the existing line test → the new line. **Mutants** (`qa_pinbar_floor_inputs/mutants_u3b.py`, each
+killer sketched first, the full suite, `mutant_runner.py --out` a short `%TEMP%` dir): the predicate always True; the
+cut off by one (both ways); the floors compared instead of the window; the cut rows not shifted back; the guard
+ignoring convergence; the guard's count `>` for `>=`; the guard's check on `CandleParams()` instead of `params`.
+
+**The gate and the docs, in the same commit:** `EXPECTED_SEED_H1` / `_M15` in all three gate copies (`/compare` §2b,
+`/commit-save` Step 4b, WORKFLOWS "Post-replay log grep") + `gate_floor_seed_sim.py`; CANDLE_BODY_FLOOR_NOTES ("The
+history before the frame", the settings, the Direction status), §3.2 here (a pointer), LANDMINES (the fetch fail-loud
+paragraph), the `/compare` skill's U3b entry; then memory and the register (item 7 DONE). The debug tools
+(`zone_proximity_diag.py`, `probe_fc_finalize.py`) call `fetch_floor_seeds` → the new guard, no edit. The
+unseeded-frame difference (GOTCHAS, `u3_frame_only.txt`) is unaffected — a frame without a seed has no guard.
 
 ## 7. Notes and risks
 
@@ -481,6 +545,32 @@ each lands:
   gate copies (`/compare` §2b, `/commit-save` Step 4b, WORKFLOWS "Post-replay log grep") + `gate_floor_seed_sim.py`,
   in the same commit. The unseeded-frame difference (GOTCHAS, `u3_frame_only.txt`) is unaffected — a frame without
   a seed has no guard.
+- **U3b — LANDED 2026-10-28, = §6b exactly** (the plan + prediction written first, §6b; the user's look: "go ahead
+  and commit-save"):
+  - **Code:** `pinbar_body_floor._floor_run` (the one loop, its window now holds row numbers; returns the end window)
+    + `rolling_pinbar_body_floor` over it + `floor_seed_converged`; `run_replay.fetch_floor_seed(…, params=None, …)`
+    stops on the count AND the convergence, the line `…, the final window converged`, a second `[floor_seed] ERROR`
+    for a count met but not converged; `fetch_floor_seeds` passes its `CandleParams()`; the `candle_params.py`
+    comment. No deviation from §6b.
+  - **Prediction re-checked before the replay** (`qa_pinbar_floor_inputs/u3b_guard_check.py` + `.txt`, the built
+    guard against OANDA): H1 3 steps, 840 candles, 355 body-% pinbars; M15 3 steps, 816, 310 — MATCH. Per step: H1
+    255 / 100 (short), 559 / 232 (count met, final NOT converged, natural converged), 840 / 355 (converged), 1119 /
+    478; M15 208 / 82, 480 / 189 (not converged; natural converged), 816 / 310, 1020 / 397. The frame floors +
+    demotions with the new seed = the 2-window seed's on every candle, both TFs, and the H1 ones = S_U3's
+    `*_final.csv` (read with `float_precision="round_trip"`: the default parser was 1 ulp off on some floors and
+    first said False — GOTCHAS "A Frame Classified Without Its Floor Seed …", the rule "a pandas CSV round-trip").
+  - **Tests:** suite 2146 → **2154** (`test_plan_u_rolling_floor.py` +8: the predicate True / False on hand-built
+    window-2 seeds; the cut just after the window-th pinbar; natural at exactly 2 windows; the window compared, not
+    the floor (p100: both runs end on a 3-pip floor, a frame P2 P4 then gets 3 / 2 vs 3 / 3 pips); a converged
+    random seed gives the cut seed's floors on the frame (279 of 300 converged); the guard steps on / stops / raises
+    with a stubbed fixed history; natural stops at the count; the U2 line test → the new line). Each seed was found
+    by a small search, then checked by hand. **Mutants** `mutants_u3b.py` (+ `.txt`): **11 / 11 KILLED**, each by
+    its sketched pin.
+  - **Replay** (run mode): FETCH GATE PASS + the two new lines; skip grep 33, the same families (no RETRY); timing
+    total 80.79 s (`data_fetch` 4.17 s — the 3-step seeds; 2.60 s at U2). `gate_floor_seed_sim.py`: 12 / 12 (+ a seed
+    line without its convergence → FAIL (floor seed); a not-converged crash → FAIL). **= S_U3 byte for byte**
+    (`u3b_compare.txt`): 30 / 30 CSVs md5-equal, the three figures' full JSON equal (79 / 154 / 302 traces, layouts
+    equal), the 3 PNGs byte-equal; chart counts 79 / 232, 154 / 134, 302 / 305.
 - **Variant** (`qa_pinbar_floor_inputs/make_variant_u3.py`: a `git archive` of `e5c3b07` in `%TEMP%\u3v`, the
   `CandleParams.pinbar_floor_window_source` default "natural" -> "final", nothing else — the setting's one read site is
   `rolling_pinbar_body_floor`): FETCH GATE PASS, both `[floor_seed]` lines = S_U2's (the guard counts body-% pinbars);

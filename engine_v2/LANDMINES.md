@@ -663,8 +663,11 @@ audit a swallowed chunk error let a replay exit 0 on 2500 of 4228 M15
 candles; `/compare` skill §2b). Likewise the FLOOR SEED (PLAN_U U2, 2026-10-28 —
 `run_replay.fetch_floor_seed`, the history before the H1 / M15 frame that fills the rolling
 pinbar body floor's first windows): a seed request retries under `[floor_seed]`, and a seed
-that cannot reach its pinbar count raises `[floor_seed] ERROR` — never fall back to frame-only
-floors in a replay (the first ~200 candles of each frame would get other candle types).
+that cannot reach its pinbar count or has not CONVERGED after its 8 steps (PLAN_U U3b: the floor
+loop ends on the same window without the seed's first window — `floor_seed_converged`) raises
+`[floor_seed] ERROR` — never fall back to frame-only floors in a replay, nor to an unconverged
+seed (in final mode the frame's floors would then depend on where the seed starts; frame-only:
+the first ~200 candles of each frame get other candle types, and other floors after them).
 
 ---
 

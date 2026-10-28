@@ -177,8 +177,8 @@ request is retried twice, then the fetch raises `[data_bridge] ERROR …`
 and the replay crashes — it used to print the error and exit 0 on a truncated
 frame; the H1 fetch retries the same way since 2026-09-28, `[auto_extend] …`;
 the floor seeds since PLAN_U U2, 2026-10-28, `[floor_seed] …` — their exact
-lines are checked in every completed branch, `FAIL - do NOT save (floor seed)`
-otherwise); the gate ties the log to the outputs and checks the exact candle
+lines (since U3b ending `, the final window converged`) are checked in every
+completed branch, `FAIL - do NOT save (floor seed)` otherwise); the gate ties the log to the outputs and checks the exact candle
 count. The full rationale, the N/A cases and the canonical expected value are
 in the `/compare` skill §2b "Fetch-completeness gate". **Run the snippet as written — never extract it from
 this file with a `sed` range** (2026-10-28: `sed -n '/^RAW=/,/^fi$/p'` also matched the Step 5 reuse snippet, which
@@ -190,8 +190,8 @@ identical to the one there (only the FAIL messages differ), including the
 ```bash
 RAW=$(ls -t artifacts/debug/*_raw.csv | head -1); \
 EXPECTED_FETCH="[data_bridge] Fetched 4228 M15 candles for NZD_USD in 5 chunks"; \
-EXPECTED_SEED_H1="[floor_seed] H1: 559 candles 2025-10-14 14:00:00+00:00 -> 2025-11-14 21:00:00+00:00, 2 steps, 232 body-% pinbars (need 180)"; \
-EXPECTED_SEED_M15="[floor_seed] M15: 480 candles 2025-11-09 22:00:00+00:00 -> 2025-11-14 21:45:00+00:00, 2 steps, 189 body-% pinbars (need 180)"; \
+EXPECTED_SEED_H1="[floor_seed] H1: 840 candles 2025-09-28 21:00:00+00:00 -> 2025-11-14 21:00:00+00:00, 3 steps, 355 body-% pinbars (need 180), the final window converged"; \
+EXPECTED_SEED_M15="[floor_seed] M15: 816 candles 2025-11-04 10:00:00+00:00 -> 2025-11-14 21:45:00+00:00, 3 steps, 310 body-% pinbars (need 180), the final window converged"; \
 if ! { [ run.log -nt "$RAW" ] && grep -aqF "=== Replay Timing ===" run.log; }; then \
     echo "FETCH GATE: FAIL - do NOT save (stale log or crashed run: not newer than *_raw.csv, or no timing block)"; grep -aF "[data_bridge]" run.log; grep -aF "[floor_seed]" run.log; grep -aE "^([A-Za-z_][A-Za-z0-9_]*\.)*([A-Za-z0-9_]*(Error|Exception|Timeout)|KeyboardInterrupt|SystemExit)(: |[[:space:]]*$)" run.log; tail -n 3 run.log; \
 elif ! grep -aqF "$EXPECTED_SEED_H1" run.log || grep -aqF "[floor_seed] ERROR" run.log; then \

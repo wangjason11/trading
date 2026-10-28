@@ -1,4 +1,5 @@
-"""PLAN_U U2 — the fetch gate's floor-seed branches (PLAN_U §8 B7), simulated on doctored copies of a real run.log.
+"""PLAN_U U2 + U3b — the fetch gate's floor-seed branches (PLAN_U §8 B7; U3b §6b: the lines end ", the final window
+converged"), simulated on doctored copies of a real run.log.
 
     PYTHONIOENCODING=utf-8 python engine_v2/plans/qa_pinbar_floor_inputs/gate_floor_seed_sim.py [RUN_LOG]
 
@@ -24,12 +25,17 @@ def drop(*subs):
     return [l for l in real if not any(s in l for s in subs)]
 
 
-def crash():
+SHORT = (b"RuntimeError: [floor_seed] ERROR: H1 NZD_USD: 120 body-% pinbars in 3200 candles before "
+         b"2025-11-16 22:00:00+00:00 after 8 steps of 400 candles (need 180)")
+NOT_CONVERGED = (b"RuntimeError: [floor_seed] ERROR: H1 NZD_USD: the final window has not converged in 2280 candles "
+                 b"before 2025-11-16 22:00:00+00:00 (950 body-% pinbars) after 8 steps of 400 candles: the seed and the "
+                 b"seed without its first 90 body-% pinbars end on different windows")
+
+
+def crash(err=SHORT):
     keep = [l for l in real if b"=== Replay Timing ===" not in l and b"[floor_seed]" not in l]
     k = next(i for i, l in enumerate(keep) if b"[auto_extend]" in l) + 1
-    return keep[:k] + [b"Traceback (most recent call last):",
-                       b"RuntimeError: [floor_seed] ERROR: H1 NZD_USD: 120 body-% pinbars in 3200 candles before "
-                       b"2025-11-16 22:00:00+00:00 after 8 steps of 400 candles (need 180)"]
+    return keep[:k] + [b"Traceback (most recent call last):", err]
 
 
 def no_lower_tf():
@@ -48,11 +54,14 @@ CASES = [
     ("H1 seed line missing", "FAIL (floor seed)", drop(b"[floor_seed] H1")),
     ("M15 seed line missing", "FAIL (floor seed)", drop(b"[floor_seed] M15")),
     ("H1 seed with another count", "FAIL (floor seed)",
-     [l.replace(b"232 body-%", b"231 body-%") for l in real]),
+     [l.replace(b"355 body-%", b"354 body-%") for l in real]),
+    ("a seed line without its convergence", "FAIL (floor seed)",
+     [l.replace(b", the final window converged", b"") for l in real]),
     ("a seed RETRY line (benign)", "PASS",
      real[:3] + [b"[floor_seed] RETRY 1/2 H1 fetch 2025-10-14 - 2025-11-16 in 5 s: OANDA candles request failed 504"]
      + real[3:]),
     ("crashed on [floor_seed] ERROR", "FAIL (stale log or crashed run", crash()),
+    ("crashed, not converged", "FAIL (stale log or crashed run", crash(NOT_CONVERGED)),
     ("no lower TF, H1 seed present", "N/A (no lower timeframe)", no_lower_tf()),
     ("no lower TF, no H1 seed", "FAIL (floor seed)", [l for l in no_lower_tf() if b"[floor_seed] H1" not in l]),
     ("no H1 trigger, both seeds", "N/A (no H1 triggers", no_triggers()),

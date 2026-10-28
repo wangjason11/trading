@@ -1,0 +1,16 @@
+PLAN_U U3b /compare vs S_U3 (artifacts/commits/week9-entries-decisions/20261028_123113_32c544d), run-mode replay 2026-10-28 (cmp_fig_full.py BASE artifacts/debug artifacts/charts + cmp of the PNGs + the run.log seed lines / chart counts)
+
+CSVs: baseline 30, current 30, common 30, md5-different 0
+FIG NZD_USD_H1_2025-11-15_2026-01-20_sd-1_eps0p0001_rk2-5.html: traces 79/79 differing-traces(all attrs)=0 layout_equal=True
+FIG NZD_USD_H1_2025-11-15_2026-01-20_sd-1_eps0p0001_rk2-5_M15_confluence.html: traces 302/302 differing-traces(all attrs)=0 layout_equal=True
+FIG NZD_USD_H1_2025-11-15_2026-01-20_sd-1_eps0p0001_rk2-5_M15_counter.html: traces 154/154 differing-traces(all attrs)=0 layout_equal=True
+PNG NZD_USD_H1_2025-11-15_2026-01-20_sd-1_eps0p0001_rk2-5.png byte-equal
+PNG NZD_USD_H1_2025-11-15_2026-01-20_sd-1_eps0p0001_rk2-5_M15_counter.png byte-equal
+PNG NZD_USD_H1_2025-11-15_2026-01-20_sd-1_eps0p0001_rk2-5_M15_confluence.png byte-equal
+[floor_seed] H1: 840 candles 2025-09-28 21:00:00+00:00 -> 2025-11-14 21:00:00+00:00, 3 steps, 355 body-% pinbars (need 180), the final window converged
+[floor_seed] M15: 816 candles 2025-11-04 10:00:00+00:00 -> 2025-11-14 21:45:00+00:00, 3 steps, 310 body-% pinbars (need 180), the final window converged
+DEBUG traces: 79
+DEBUG shapes: 232
+[m15_chart] traces: 154, shapes: 134
+[m15_chart] traces: 302, shapes: 305
+skip grep: 33 lines

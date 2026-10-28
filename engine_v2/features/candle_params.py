@@ -25,8 +25,9 @@ class CandleParams:
     # switch) = the body-% pinbars only.
     # `pinbar_floor_seed_windows`: the history fetched before a replay's frame
     # (`run_replay.fetch_floor_seed`) holds at least this many windows of
-    # body-% pinbars. Read by `features/pinbar_body_floor.py` and the seed
-    # guard. Replaced the fixed per-TF pip table (H1 2.2 / M15 1.0 / M5 0.5,
+    # body-% pinbars — and has converged (PLAN_U U3b: the window it ends on is
+    # the same without its first window; that alone implies 2 windows). Read
+    # by `features/pinbar_body_floor.py` and the seed guard. Replaced the fixed per-TF pip table (H1 2.2 / M15 1.0 / M5 0.5,
     # `pinbar_body_pip_floor`, removed at U2).
     pinbar_floor_window: int = 90
     pinbar_floor_percentile: float = 90.0

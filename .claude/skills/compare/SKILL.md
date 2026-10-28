@@ -112,8 +112,8 @@ which also catches a window change or a short response that raised nothing.
 ```bash
 RAW=$(ls -t artifacts/debug/*_raw.csv | head -1); \
 EXPECTED_FETCH="[data_bridge] Fetched 4228 M15 candles for NZD_USD in 5 chunks"; \
-EXPECTED_SEED_H1="[floor_seed] H1: 559 candles 2025-10-14 14:00:00+00:00 -> 2025-11-14 21:00:00+00:00, 2 steps, 232 body-% pinbars (need 180)"; \
-EXPECTED_SEED_M15="[floor_seed] M15: 480 candles 2025-11-09 22:00:00+00:00 -> 2025-11-14 21:45:00+00:00, 2 steps, 189 body-% pinbars (need 180)"; \
+EXPECTED_SEED_H1="[floor_seed] H1: 840 candles 2025-09-28 21:00:00+00:00 -> 2025-11-14 21:00:00+00:00, 3 steps, 355 body-% pinbars (need 180), the final window converged"; \
+EXPECTED_SEED_M15="[floor_seed] M15: 816 candles 2025-11-04 10:00:00+00:00 -> 2025-11-14 21:45:00+00:00, 3 steps, 310 body-% pinbars (need 180), the final window converged"; \
 if ! { [ run.log -nt "$RAW" ] && grep -aqF "=== Replay Timing ===" run.log; }; then \
     echo "FETCH GATE: FAIL (stale log or crashed run: not newer than *_raw.csv, or no timing block)"; grep -aF "[data_bridge]" run.log; grep -aF "[floor_seed]" run.log; grep -aE "^([A-Za-z_][A-Za-z0-9_]*\.)*([A-Za-z0-9_]*(Error|Exception|Timeout)|KeyboardInterrupt|SystemExit)(: |[[:space:]]*$)" run.log; tail -n 3 run.log; \
 elif ! grep -aqF "$EXPECTED_SEED_H1" run.log || grep -aqF "[floor_seed] ERROR" run.log; then \
@@ -158,16 +158,19 @@ fi
   rolling pinbar body floor's first windows (`fetch_floor_seeds`): the H1 seed
   always, the M15 seed whenever M15 is configured — even in a no-trigger run.
   One line each, `[floor_seed] <TF>: <n> candles <first> -> <last>, <k> steps,
-  <p> body-% pinbars (need 180)`; a seed request retries like the H1 fetch
-  (`[floor_seed] RETRY k/2 …`, benign), a seed that still fails or cannot reach
-  its 180 pinbars raises `RuntimeError: [floor_seed] ERROR …` (a crashed run).
+  <p> body-% pinbars (need 180), the final window converged` (since PLAN_U U3b
+  the guard also steps on until the seed has converged — the floor loop ends on
+  the same window without the seed's first 90 body-% pinbars; PLAN_U §6b); a seed
+  request retries like the H1 fetch (`[floor_seed] RETRY k/2 …`, benign), a seed
+  that still fails, cannot reach its 180 pinbars or has not converged after 8
+  steps raises `RuntimeError: [floor_seed] ERROR …` (a crashed run).
   The snippet checks the exact lines in every branch where the run completed:
   `EXPECTED_SEED_H1` before both N/A branches, `EXPECTED_SEED_M15` before the
   no-trigger N/A and the PASS; a missing or different line = `FAIL (floor
   seed)`. Without the seed a frame's first ~200 candles get other candle types
   (GOTCHAS "A Frame Classified Without Its Floor Seed Gets Other Candle Types"),
   exactly like an engine change. The branches are simulated by
-  `engine_v2/plans/qa_pinbar_floor_inputs/gate_floor_seed_sim.py` (10 cases).
+  `engine_v2/plans/qa_pinbar_floor_inputs/gate_floor_seed_sim.py` (12 cases).
 - **On FAIL, STOP.** `FAIL (stale log or crashed run …)` = the same-run check
   failed: either the log belongs to an earlier replay (a later replay run
   without `> run.log 2>&1` wrote newer outputs), or this replay crashed — the
@@ -217,8 +220,10 @@ fi
   three in the same commit. The same holds for `EXPECTED_SEED_H1` / `_M15`:
   both seeds end before the H1 frame's FIRST candle (the auto-extended start,
   2025-11-16 22:00 on the reference window), so a window change moves them —
-  measured on the PLAN_U U2 replay (2026-10-28): H1 559 candles / 232 body-%
-  pinbars, M15 480 / 189, 2 steps each (= `qa_pinbar_floor_inputs/seed_guard_steps.txt`).
+  measured on the PLAN_U U3b replay (2026-10-28): H1 840 candles / 355 body-%
+  pinbars, M15 816 / 310, 3 steps each, converged (=
+  `qa_pinbar_floor_inputs/u3b_guard_check.txt`; U2 / U3's 2-step lines, before the
+  convergence rule: H1 559 / 232, M15 480 / 189).
 
 **Silent-skip grep.** Once the gate passes, grep the same log for
 silently-skipped work BEFORE the CSV comparison. `error` is in the pattern
@@ -882,6 +887,16 @@ figures and PNGs equal. The `[floor_seed]` lines unchanged (the guard counts bod
 lines). Suite 2146. S_U3 `20261028_123113_32c544d` (source `32c544d`, save `704785e`, trunk `839c9f2`; =
 `LATEST_<branch>` from 2026-10-28; run mode, `u3_compare.py` on the save = the compared replay's output). U3b (the
 seed guard extends until final mode converges) is next — it changes the two `[floor_seed]` lines.
+**PLAN_U U3b (2026-10-28, the floor seed guard steps back until final mode converges — the user's "Guard extends";
+`plans/PLAN_U_rolling_pinbar_body_floor.md` §6b) — the LOG only, every output byte-equal:** the guard also stops only
+when the floor loop ends on the same window with and without the seed's first 90 body-% pinbars
+(`pinbar_body_floor.floor_seed_converged`). = the prediction: the two `[floor_seed]` lines H1 559 / 232, 2 steps → 840
+candles / 355 body-% pinbars, 3 steps; M15 480 / 189 → 816 / 310, 3 steps; each ending `, the final window converged`
+(the gate's `EXPECTED_SEED_H1` / `_M15`, all three copies); vs S_U3 30 / 30 CSVs md5-equal, the three figures' full
+JSON equal (`cmp_fig_full.py`), the PNGs byte-equal, chart counts unchanged (79 / 232, 154 / 134, 302 / 305;
+`qa_pinbar_floor_inputs/u3b_compare.txt`); `data_fetch` 2.6 → 4.2 s. Skip grep 33 (the same lines). Not a
+save-format boundary. Suite 2154; mutants 11 / 11. A `[floor_seed] ERROR: … the final window has not converged …`
+= a crashed run (§2b).
 
 **M15.counter** and **M15.confluence** (9 files each — 7 per-lens debug CSVs
 with the same filename suffixes prefixed `*_M15_counter_` /

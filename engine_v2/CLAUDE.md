@@ -52,12 +52,12 @@ the sub its cycle-0 first_confluence creates — subs 4, 7, 8 confirm cycle 0 by
 DONE 2026-10-27 — the chart control bar (a Parent (1H) button on the M15 charts, time-only − / + and the wheel, Box
 zoom | Pan, an idx box; CHARTING_SPEC §14) — item 5 COMPLETE); updated by the user 2026-10-27: zone size
 adjustments MOVED to Parts 2 / 3 (applied to the entry price and stop loss, the zones unchanged — SYLLABUS Week 9
-"Zone size at entry and stop-loss") and the entry confirmation candle patterns to Part 2 (register §D.3); NOW the
-pinbar body-pip floor calibration (the last major Part 1 item; IN PROGRESS since 2026-10-28 — PLAN_U, a rolling floor:
-U1 the per-candle plumbing + columns + hover landed, U2 the rolling floor (natural window) landed 2026-10-28, U3 the
-final window — the user's pick after seeing both, natural kept as a switch — landed the same day; U3b next: the floor
-seed guard steps back until final mode converges), then the remaining minor
-pre-Part-2 items, which complete Part 1),
+"Zone size at entry and stop-loss") and the entry confirmation candle patterns to Part 2 (register §D.3); the
+pinbar body-pip floor calibration (the last major Part 1 item) DONE 2026-10-28 — PLAN_U, a rolling floor: U1 the
+per-candle plumbing + columns + hover, U2 the rolling floor (natural window), U3 the final window — the user's pick
+after seeing both, natural kept as a switch — and U3b, the floor seed guard steps back until final mode converges,
+all landed 2026-10-28; NOW the remaining minor
+pre-Part-2 items (register §D SESSION ORDER item 8; the user names which), which complete Part 1),
 Part 2 entry decisions, Part 3 other decisions.
 
 **Pre-Week 8 fix:** Exception 2 probe relaxed from CTS_CONFIRMED to CTS_ESTABLISHED (`bbb6d32`).

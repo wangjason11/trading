@@ -255,14 +255,14 @@ SYLLABUS Week 9 Part 2 "Zone size at entry and stop-loss".
 6. ~~**Zone size adjustments**~~ — **MOVED 2026-10-27 to Parts 2 / 3** (the user, after item 5: "We will incorporate
    this directly into entry & decisions (Part 2 & 3) rather than as a separate item that adjusts existing zones") —
    D.3 below; the zones keep their base form. Was D.1 item 3.
-7. **Pinbar body-pip floor calibration** — **IN PROGRESS: PLAN_U** (the user 2026-10-27: "the last major item I want
+7. **Pinbar body-pip floor calibration** — **DONE 2026-10-28: PLAN_U** (the user 2026-10-27: "the last major item I want
    to tackle in the next session"; 2026-10-28 the approach chosen — a rolling floor, the p90 of the 90 most recent
    pinbars; U1 the per-candle plumbing + columns + hover LANDED 2026-10-28, format only; U2 the rolling floor, natural
    window, LANDED 2026-10-28 = its prediction (S_U2 `20261028_113834_84fbbc6`); U3 the final window — the user's pick
    after seeing both ("Final + convergence check"; natural kept as a switch) — LANDED 2026-10-28 = its prediction
-   (S_U3 `20261028_123113_32c544d`);
-   NEXT U3b, the floor seed guard steps back until final mode converges — the user: "Guard extends") — D.1 item 4
-   below.
+   (S_U3 `20261028_123113_32c544d`); U3b, the floor seed guard steps back until final mode converges — the user:
+   "Guard extends" — LANDED 2026-10-28 = its prediction (only the two `[floor_seed]` lines change, every output
+   byte-equal; PLAN_U §6b / §9 "U3b")) — D.1 item 4 below. NEXT: item 8.
 8. **The remaining minor items before Part 2** — after item 7, in the next session(s) (the user 2026-10-27: "any
    remaining minor tasks & items in the next session(s) that we previously documented as pre-reqs to starting part 2
    of week 9"). Candidates on file: D.2 below (the backlog "decided after D.1 is complete", the user 2026-10-01) and
@@ -408,11 +408,11 @@ SYLLABUS Week 9 Part 2 "Zone size at entry and stop-loss".
    "Cross-Cycle Mode".
 3. ~~**Zone size adjustments**~~ — **MOVED 2026-10-27 to D.3** (Parts 2 / 3: the adjustment goes into the entry price
    and stop loss, not into the zones — the user, after item 5).
-4. **Pinbar body-pip floor calibration** — **NEXT (SESSION ORDER item 7, the user 2026-10-27: "the last major item I
+4. **Pinbar body-pip floor calibration** — **DONE 2026-10-28 (SESSION ORDER item 7, the user 2026-10-27: "the last major item I
    want to tackle in the next session")**. Scheduled here by the user 2026-10-01 (was TRIGGER: strategy optimization):
    the provisional values (H1 2.2 / M15 1.0 / M5 0.5 pips, NZD_USD only) and the reclassify-to-pinbar approach itself.
    Iterative: parameter flips + chart review; a candle-type change cascades (patterns → structure → zones), so every
-   flip gets a full `/compare`. **2026-10-28 — IN PROGRESS, PLAN_U** (`engine_v2/plans/PLAN_U_rolling_pinbar_body_floor.md`,
+   flip gets a full `/compare`. **2026-10-28 — DONE, PLAN_U** (`engine_v2/plans/PLAN_U_rolling_pinbar_body_floor.md`,
    the canonical build spec): the user chose a ROLLING floor (the p90 of the bodies of the 90 most recent pinbars
    strictly before the candle, the history fetched before the frame; both windows tried — body-% pinbars only vs + the
    floor-demoted ones; the fixed per-TF table removed). Three landings: U1 the per-candle floor plumbing + the three
@@ -421,8 +421,11 @@ SYLLABUS Week 9 Part 2 "Zone size at entry and stop-loss".
    sub, trigger or POI pick moves — PLAN_U §9 "U2"); U3 the final window (the floor-demoted pinbars fill the window
    too) — the user's pick after seeing both, natural kept as a switch — LANDED 2026-10-28 (= the prediction: vs U2 H1
    15 / M15 64 candles change type, four downstream records, no sub / trigger / POI / IC pick — PLAN_U §9 "U3"); U3b
-   NEXT: the seed guard steps back until the full and the drop-one-window final runs agree by the seed's end (the
-   check as first worded fails on the 2-window seed — measured). The decisions verbatim:
+   the seed guard steps back until the full and the drop-one-window final runs end on the same window (the check as
+   first worded fails on the 2-window seed — measured; the user: "Guard extends") — LANDED 2026-10-28 (= the
+   prediction: H1 3 steps / 840 candles / 355 body-% pinbars, M15 3 / 816 / 310; every output byte-equal to S_U3 —
+   PLAN_U §6b / §9 "U3b"). Still provisional: the window / percentile (90 / p90) — CANDLE_BODY_FLOOR_NOTES
+   "Open / may-revisit". The decisions verbatim:
    `engine_v2/features/CANDLE_BODY_FLOOR_NOTES.md` "Direction — the rolling floor". Detail: memory
    `project_pinbar_body_pip_floor.md`.
 

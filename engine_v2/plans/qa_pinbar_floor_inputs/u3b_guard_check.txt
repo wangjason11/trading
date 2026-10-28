@@ -1,0 +1,24 @@
+window 90, p90, source final, seed windows 2; frame first candle 2025-11-16 22:00:00+00:00
+
+## The guard's lines (fetch_floor_seeds, the built guard)
+   [floor_seed] H1: 840 candles 2025-09-28 21:00:00+00:00 -> 2025-11-14 21:00:00+00:00, 3 steps, 355 body-% pinbars (need 180), the final window converged
+   [floor_seed] M15: 816 candles 2025-11-04 10:00:00+00:00 -> 2025-11-14 21:45:00+00:00, 3 steps, 310 body-% pinbars (need 180), the final window converged
+
+## H1: each step's span (400 candles of TF time per step)
+   step 1: 255 candles from 2025-10-31 06:00, 100 body-% pinbars (>= 180: False); converged final: False, natural: False
+   step 2: 559 candles from 2025-10-14 14:00, 232 body-% pinbars (>= 180: True); converged final: False, natural: True
+   step 3: 840 candles from 2025-09-28 21:00, 355 body-% pinbars (>= 180: True); converged final: True, natural: True
+   step 4: 1119 candles from 2025-09-11 06:00, 478 body-% pinbars (>= 180: True); converged final: True, natural: True
+   the guard: 3 steps, 840 candles 2025-09-28 21:00 -> 2025-11-14 21:00, 355 body-% pinbars; predicted (3, 840, 355) -> MATCH
+   frame (1058 candles): floors + demotions with the new seed == the 2-window seed's (S_U3): True
+   H1 frame floors + is_floor_pinbar == S_U3's NZD_USD_H1_2025-11-15_2026-01-20_final.csv: True
+
+## M15: each step's span (400 candles of TF time per step)
+   step 1: 208 candles from 2025-11-12 18:00, 82 body-% pinbars (>= 180: False); converged final: False, natural: False
+   step 2: 480 candles from 2025-11-09 22:00, 189 body-% pinbars (>= 180: True); converged final: False, natural: True
+   step 3: 816 candles from 2025-11-04 10:00, 310 body-% pinbars (>= 180: True); converged final: True, natural: True
+   step 4: 1020 candles from 2025-10-31 06:00, 397 body-% pinbars (>= 180: True); converged final: True, natural: True
+   the guard: 3 steps, 816 candles 2025-11-04 10:00 -> 2025-11-14 21:45, 310 body-% pinbars; predicted (3, 816, 310) -> MATCH
+   frame (4228 candles): floors + demotions with the new seed == the 2-window seed's (S_U3): True
+
+ALL AS PREDICTED: True
