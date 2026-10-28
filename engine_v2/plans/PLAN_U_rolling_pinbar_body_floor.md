@@ -1,8 +1,9 @@
 # PLAN_U — the rolling pinbar body floor: p90 of the 90 most recent pinbars, the history fetched before the frame (the user's floor calibration, 2026-10-27 / 28)
 
-**Status: U1 LANDED 2026-10-28 (= §4.2; the user's hover look: "looks good"; commit + save in §9); the cold review
-DONE (§8 — no blocker; its U2 amendments listed there); U2 NEXT (a fresh session), then U3.** Baseline **S_controls**
-`artifacts/commits/week9-entries-decisions/20261027_164527_5dfb5b3` (= `LATEST_week9-entries-decisions`; source
+**Status: U1 LANDED 2026-10-28 (= §4.2; source `b64b10a`, save **S_U1** `20261028_090632_b64b10a` = the new
+`LATEST_<branch>`, U2's `/compare` baseline; §9); the cold review DONE (§8 — no blocker; its U2 amendments listed
+there); U2 NEXT (a fresh session), then U3.** U1's baseline **S_controls**
+`artifacts/commits/week9-entries-decisions/20261027_164527_5dfb5b3` (`LATEST_week9-entries-decisions` until S_U1; source
 `5dfb5b3`, HEAD at drafting `4914f31`, code = `5dfb5b3`); suite 2108. Session order item 7 (register
 `IDEA_PARKING_LOT.md` §D "SESSION ORDER" = §D.1 item 4). THREE landings, one cause per `/compare`, each with its own
 prediction, `/compare` and chart look: §4 U1 the per-candle floor plumbing + its CSV columns + the candle hover, on
@@ -304,7 +305,7 @@ each lands:
     pinbar with a big-maru ratio keeps weight 1.0, one with only a big-normal ratio drops 1.0 → 0.7);
     `wave_candles._is_compound_first_wave` (:103-105) never takes a pdir-0 pinbar.
   - The H1 CSV's direct checks: `is_floor_pinbar` U1 40 (7 / 33), **U2 114 (22 / 92), U3 101 (17 / 84)**; M15 on the
-    chart hovers: U1 142, U2 436, U3 410 (A4).
+    chart hovers: U1 142, U2 436, U3 410 (A4; count them with `qa_pinbar_floor_inputs/m15_hover_floor_count.py`).
   - §7: the frame-only floors leave H1 idx 0–211 / M15 0–220 without a floor (measured; A8).
   - The hover's 6 decimals are exact at (90, p90): the virtual index 89 × 0.9 = 80.1 puts every floor on a 0.01-pip
     grid (1e-6); another window / percentile can need more (B13).
@@ -331,3 +332,7 @@ each lands:
   `is_floor_pinbar` 40 (7 marus + 33 normals). M15 (both lens charts' hovers): 4228 candles at 0.000100, 142 floor
   pinbars (34 / 108). `fig_named_diff.py`: on all three charts only the `OHLC` + `imbalance:bearish` / `:bullish`
   candle traces differ, in `customdata` + `hovertemplate`; traces / shapes / layout equal; the 3 PNGs byte-equal.
+- **Landed:** source `b64b10a`, save `60b2d7e`, trunk `53090ea` = **S_U1** `20261028_090632_b64b10a` (run mode on
+  the final code: FETCH GATE PASS, skip grep 33, timing total 120.17 s; `u1_landing_check.py` ALL AS PREDICTED vs
+  S_controls; the PNGs byte-equal). Suite 2121. S_U1 is U2's `/compare` baseline; its `*_final.csv` has the 3 columns,
+  so U2's diff of that file is positional-safe (same columns).

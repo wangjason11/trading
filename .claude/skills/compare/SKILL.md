@@ -804,8 +804,19 @@ prototype's classifier, the script + its table: H1 1058 candles, M15 4228 with i
 shapes — expected; `traces_xy_equal=True`, 0 real cells), measured on the save replay vs S_T2. The browser
 behaviour: `proto_headless_check.py CHART_HTML SHOTS STEPS` (choreographer; kaleido's Chrome). Skip grep 33 (the same
 families). Suite 2108; mutants 33 / 33. S_controls `20261027_164527_5dfb5b3` (source `5dfb5b3`, save `32cde54`, trunk
-`6ab4b62`; = `LATEST_<branch>` from 2026-10-27; the save replay = `controls_landing_check.py` ALL OK vs S_T2 again).
+`6ab4b62`; = `LATEST_<branch>` until S_U1, below; the save replay = `controls_landing_check.py` ALL OK vs S_T2 again).
 SESSION ORDER item 5 is complete.
+**PLAN_U U1 (2026-10-28, the pinbar body floor as a per-candle input + 3 columns + the candle hover, on the fixed
+floor) — FORMAT-ONLY:** = the prediction (`plans/PLAN_U_rolling_pinbar_body_floor.md` §4.2). Vs S_controls: 29 / 30
+CSVs byte-equal; the H1 `*_final.csv` field-equal once the 3 new columns are removed (1058 rows; `pinbar_body_floor`
+0.00022 on every row, written `0.00022000000000000003`; `is_floor_pinbar` 40 = 7 marus + 33 normals) — a save-format
+boundary (the file table above): `cmp_save` positional flags every row across it, so compare by name with
+`plans/qa_pinbar_floor_inputs/u1_landing_check.py SAVE`. Charts (`fig_named_diff.py`): on all three only the `OHLC` +
+`imbalance:bearish` / `:bullish` candle traces differ, in `customdata` + `hovertemplate` (the floor line: H1 slot 12,
+M15 slot 14; M15 4228 candles at 0.000100, 142 floor pinbars = 34 / 108 on both lenses); shapes + layouts equal; the
+PNGs byte-equal. Skip grep 33. Suite 2121; mutants 17 / 17. S_U1 `20261028_090632_b64b10a` (source `b64b10a`, save
+`60b2d7e`, trunk `53090ea`; = `LATEST_<branch>` from 2026-10-28; run mode, the save replay = `u1_landing_check.py` ALL
+AS PREDICTED vs S_controls, the PNGs byte-equal). U2 (the rolling floor) is the behaviour change.
 
 **M15.counter** and **M15.confluence** (9 files each — 7 per-lens debug CSVs
 with the same filename suffixes prefixed `*_M15_counter_` /
