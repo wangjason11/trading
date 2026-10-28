@@ -152,6 +152,9 @@ three-co-starter test also carries an opposite-direction pair frozen at the same
 `ended_by` = the replacer's pool — kills "any candle"). Same-candle co-starters are ordered by
 `trigger_event_idx` (`_resolver_by_event_idx`): a sibling trigger type cannot lag its finalize.
 Suite 2166 (8a's 2164 + 8b's two new tests); mutants 4 / 4 KILLED (`plan_v_inputs/mutants_8b.py` / `.txt`).
+The earlier landings' mutant anchors in every file 8a / 8b touched (`export_m15_chart.py`, `export_plotly.py`,
+`style_registry.py`, `run_replay.py`, `lifecycle_sweep.py`): 0 stale of the 147 that matched once at `409c8ac`
+(`plan_v_inputs/anchor_scan.py 409c8ac` → `anchor_scan.txt`).
 
 ---
 

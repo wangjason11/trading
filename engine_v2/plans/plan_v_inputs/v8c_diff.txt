@@ -1,0 +1,22 @@
+== the volume-only dojis (direction 0, vol_dir +-1) on the window's frames ==
+h1_dojis: 13 dojis, 8 volume-only (+1: 5, -1: 3)
+m15_dojis: 100 dojis, 59 volume-only (+1: 25, -1: 34)
+
+== wave candles that differ (key: owner, structure_id, cycle_id, source_kind; [last, first]) ==
+0 of 53 wave results differ
+
+== WVMI records that differ (key: owner, bos_structure_id, bos_cycle_id) ==
+('sub3', 0, 1):
+    lp_rows: 14 -> 16
+      ~ LP row 2906: lp_status_idx 2908 -> 2907
+      + NEW LP row 2907: temporary as_of 2907, replaced by a further close at 2908, pullback_momentum 0.2720
+          M15 2907 2025-12-30 04:45 o=0.58132 h=0.58140 l=0.58118 c=0.58132 vol=260 dir=+0 vol_dir=+1 pinbar VOLUME-ONLY DOJI
+      ~ LP row 2912: lp_status_idx 2914 -> 2913
+      + NEW LP row 2913: temporary as_of 2913, replaced by a further close at 2914, pullback_momentum 0.4247
+          M15 2913 2025-12-30 06:15 o=0.58170 h=0.58182 l=0.58160 c=0.58170 vol=406 dir=+0 vol_dir=+1 pinbar VOLUME-ONLY DOJI
+('sub3', 0, 2):
+    lp_rows: 27 -> 28
+      ~ LP row 3251: lp_status_idx 3253 -> 3252
+      + NEW LP row 3252: temporary as_of 3252, replaced by a further close at 3253, pullback_momentum 0.0544
+          M15 3252 2026-01-05 19:00 o=0.57886 h=0.57899 l=0.57879 c=0.57886 vol=168 dir=+0 vol_dir=+1 pinbar VOLUME-ONLY DOJI
+2 of 24 WVMI records differ

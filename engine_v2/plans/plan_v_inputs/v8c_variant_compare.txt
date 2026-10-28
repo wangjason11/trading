@@ -1,0 +1,12 @@
+     A      B      d  element / (parent_sid,parent_cycle,sub_id)
+CSVs: baseline 30, current 30, common 30, md5-different 2
+  DIFF NZD_USD_H1_2025-11-15_2026-01-20_sd-1_eps0p0001_rk2-5_M15_confluence_wvmi_lps.csv
+  DIFF NZD_USD_H1_2025-11-15_2026-01-20_sd-1_eps0p0001_rk2-5_M15_counter_wvmi_lps.csv
+FIG NZD_USD_H1_2025-11-15_2026-01-20_sd-1_eps0p0001_rk2-5.html: traces 79/79 differing-traces(all attrs)=0 layout_equal=True
+FIG NZD_USD_H1_2025-11-15_2026-01-20_sd-1_eps0p0001_rk2-5_M15_confluence.html: traces 302/302 differing-traces(all attrs)=1 layout_equal=True
+   trace 298 name='M15 WVMI LP sell': attrs differ ['customdata', 'x', 'y']
+FIG NZD_USD_H1_2025-11-15_2026-01-20_sd-1_eps0p0001_rk2-5_M15_counter.html: traces 154/154 differing-traces(all attrs)=1 layout_equal=True
+   trace 150 name='M15 WVMI LP sell': attrs differ ['customdata', 'x', 'y']
+     A      B      d  element / (parent_sid,parent_cycle,sub_id)
+[8c variant] confluence chart 'M15 WVMI LP sell' dots 112 -> 115 new x: ['2025-12-30T04:45:00+00:00', '2025-12-30T06:15:00+00:00', '2026-01-05T19:00:00+00:00']
+[8c variant] counter chart 'M15 WVMI LP sell' dots 47 -> 50 new x: ['2025-12-30T04:45:00+00:00', '2025-12-30T06:15:00+00:00', '2026-01-05T19:00:00+00:00']

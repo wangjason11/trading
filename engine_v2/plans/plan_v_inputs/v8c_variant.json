@@ -1,0 +1,4994 @@
+{
+ "h1_dojis": [
+  {
+   "idx": 24,
+   "time": "2025-11-17 22:00:00+00:00",
+   "o": 0.56596,
+   "h": 0.566,
+   "l": 0.56574,
+   "c": 0.56596,
+   "vol_dir": 1,
+   "volume": 947.0,
+   "candle_type": "pinbar"
+  },
+  {
+   "idx": 86,
+   "time": "2025-11-20 12:00:00+00:00",
+   "o": 0.56126,
+   "h": 0.56139,
+   "l": 0.56092,
+   "c": 0.56126,
+   "vol_dir": 0,
+   "volume": 1978.0,
+   "candle_type": "pinbar"
+  },
+  {
+   "idx": 118,
+   "time": "2025-11-21 20:00:00+00:00",
+   "o": 0.56126,
+   "h": 0.56139,
+   "l": 0.56092,
+   "c": 0.56126,
+   "vol_dir": 1,
+   "volume": 1609.0,
+   "candle_type": "pinbar"
+  },
+  {
+   "idx": 227,
+   "time": "2025-11-28 09:00:00+00:00",
+   "o": 0.57092,
+   "h": 0.57128,
+   "l": 0.57071,
+   "c": 0.57092,
+   "vol_dir": 1,
+   "volume": 22717.0,
+   "candle_type": "pinbar"
+  },
+  {
+   "idx": 311,
+   "time": "2025-12-03 21:00:00+00:00",
+   "o": 0.57742,
+   "h": 0.57774,
+   "l": 0.5774,
+   "c": 0.57742,
+   "vol_dir": 0,
+   "volume": 666.0,
+   "candle_type": "pinbar"
+  },
+  {
+   "idx": 322,
+   "time": "2025-12-04 08:00:00+00:00",
+   "o": 0.57732,
+   "h": 0.57788,
+   "l": 0.57727,
+   "c": 0.57732,
+   "vol_dir": -1,
+   "volume": 3162.0,
+   "candle_type": "pinbar"
+  },
+  {
+   "idx": 431,
+   "time": "2025-12-10 21:00:00+00:00",
+   "o": 0.58162,
+   "h": 0.58183,
+   "l": 0.58134,
+   "c": 0.58162,
+   "vol_dir": 0,
+   "volume": 1489.0,
+   "candle_type": "pinbar"
+  },
+  {
+   "idx": 516,
+   "time": "2025-12-16 10:00:00+00:00",
+   "o": 0.57832,
+   "h": 0.57863,
+   "l": 0.57816,
+   "c": 0.57832,
+   "vol_dir": -1,
+   "volume": 2450.0,
+   "candle_type": "pinbar"
+  },
+  {
+   "idx": 659,
+   "time": "2025-12-24 09:00:00+00:00",
+   "o": 0.58465,
+   "h": 0.58478,
+   "l": 0.58423,
+   "c": 0.58465,
+   "vol_dir": 1,
+   "volume": 2563.0,
+   "candle_type": "pinbar"
+  },
+  {
+   "idx": 663,
+   "time": "2025-12-24 13:00:00+00:00",
+   "o": 0.58368,
+   "h": 0.5839,
+   "l": 0.58337,
+   "c": 0.58368,
+   "vol_dir": 0,
+   "volume": 3475.0,
+   "candle_type": "pinbar"
+  },
+  {
+   "idx": 807,
+   "time": "2026-01-05 13:00:00+00:00",
+   "o": 0.57566,
+   "h": 0.57568,
+   "l": 0.57418,
+   "c": 0.57566,
+   "vol_dir": 1,
+   "volume": 5130.0,
+   "candle_type": "pinbar"
+  },
+  {
+   "idx": 934,
+   "time": "2026-01-12 20:00:00+00:00",
+   "o": 0.57664,
+   "h": 0.57685,
+   "l": 0.57656,
+   "c": 0.57664,
+   "vol_dir": -1,
+   "volume": 772.0,
+   "candle_type": "pinbar"
+  },
+  {
+   "idx": 939,
+   "time": "2026-01-13 01:00:00+00:00",
+   "o": 0.57756,
+   "h": 0.57794,
+   "l": 0.57729,
+   "c": 0.57756,
+   "vol_dir": 0,
+   "volume": 3125.0,
+   "candle_type": "pinbar"
+  }
+ ],
+ "m15_dojis": [
+  {
+   "idx": 210,
+   "time": "2025-11-19 02:30:00+00:00",
+   "o": 0.56388,
+   "h": 0.56398,
+   "l": 0.56374,
+   "c": 0.56388,
+   "vol_dir": 0,
+   "volume": 533.0,
+   "candle_type": "pinbar"
+  },
+  {
+   "idx": 251,
+   "time": "2025-11-19 12:45:00+00:00",
+   "o": 0.56284,
+   "h": 0.56303,
+   "l": 0.5628,
+   "c": 0.56284,
+   "vol_dir": -1,
+   "volume": 319.0,
+   "candle_type": "pinbar"
+  },
+  {
+   "idx": 346,
+   "time": "2025-11-20 12:30:00+00:00",
+   "o": 0.5612,
+   "h": 0.56128,
+   "l": 0.5611,
+   "c": 0.5612,
+   "vol_dir": -1,
+   "volume": 446.0,
+   "candle_type": "pinbar"
+  },
+  {
+   "idx": 407,
+   "time": "2025-11-21 03:45:00+00:00",
+   "o": 0.55934,
+   "h": 0.55955,
+   "l": 0.5593,
+   "c": 0.55934,
+   "vol_dir": 1,
+   "volume": 340.0,
+   "candle_type": "pinbar"
+  },
+  {
+   "idx": 429,
+   "time": "2025-11-21 09:15:00+00:00",
+   "o": 0.56018,
+   "h": 0.56026,
+   "l": 0.55998,
+   "c": 0.56018,
+   "vol_dir": 0,
+   "volume": 863.0,
+   "candle_type": "pinbar"
+  },
+  {
+   "idx": 446,
+   "time": "2025-11-21 13:30:00+00:00",
+   "o": 0.5602,
+   "h": 0.56055,
+   "l": 0.5602,
+   "c": 0.5602,
+   "vol_dir": 0,
+   "volume": 689.0,
+   "candle_type": "pinbar"
+  },
+  {
+   "idx": 471,
+   "time": "2025-11-21 19:45:00+00:00",
+   "o": 0.56124,
+   "h": 0.56149,
+   "l": 0.56114,
+   "c": 0.56124,
+   "vol_dir": -1,
+   "volume": 449.0,
+   "candle_type": "pinbar"
+  },
+  {
+   "idx": 501,
+   "time": "2025-11-24 03:15:00+00:00",
+   "o": 0.56079,
+   "h": 0.56082,
+   "l": 0.56059,
+   "c": 0.56079,
+   "vol_dir": 0,
+   "volume": 271.0,
+   "candle_type": "pinbar"
+  },
+  {
+   "idx": 527,
+   "time": "2025-11-24 09:45:00+00:00",
+   "o": 0.55994,
+   "h": 0.56006,
+   "l": 0.55984,
+   "c": 0.55994,
+   "vol_dir": -1,
+   "volume": 700.0,
+   "candle_type": "pinbar"
+  },
+  {
+   "idx": 624,
+   "time": "2025-11-25 10:00:00+00:00",
+   "o": 0.56072,
+   "h": 0.56082,
+   "l": 0.56035,
+   "c": 0.56072,
+   "vol_dir": -1,
+   "volume": 718.0,
+   "candle_type": "pinbar"
+  },
+  {
+   "idx": 632,
+   "time": "2025-11-25 12:00:00+00:00",
+   "o": 0.55946,
+   "h": 0.55976,
+   "l": 0.55939,
+   "c": 0.55946,
+   "vol_dir": -1,
+   "volume": 490.0,
+   "candle_type": "pinbar"
+  },
+  {
+   "idx": 660,
+   "time": "2025-11-25 19:00:00+00:00",
+   "o": 0.56226,
+   "h": 0.56234,
+   "l": 0.56206,
+   "c": 0.56226,
+   "vol_dir": 0,
+   "volume": 597.0,
+   "candle_type": "pinbar"
+  },
+  {
+   "idx": 757,
+   "time": "2025-11-26 19:15:00+00:00",
+   "o": 0.5695,
+   "h": 0.56954,
+   "l": 0.5694,
+   "c": 0.5695,
+   "vol_dir": -1,
+   "volume": 311.0,
+   "candle_type": "pinbar"
+  },
+  {
+   "idx": 762,
+   "time": "2025-11-26 20:30:00+00:00",
+   "o": 0.56954,
+   "h": 0.56964,
+   "l": 0.56948,
+   "c": 0.56954,
+   "vol_dir": 0,
+   "volume": 345.0,
+   "candle_type": "pinbar"
+  },
+  {
+   "idx": 772,
+   "time": "2025-11-26 23:00:00+00:00",
+   "o": 0.5699,
+   "h": 0.57008,
+   "l": 0.56987,
+   "c": 0.5699,
+   "vol_dir": 1,
+   "volume": 306.0,
+   "candle_type": "pinbar"
+  },
+  {
+   "idx": 786,
+   "time": "2025-11-27 02:30:00+00:00",
+   "o": 0.5728,
+   "h": 0.57302,
+   "l": 0.57257,
+   "c": 0.5728,
+   "vol_dir": -1,
+   "volume": 679.0,
+   "candle_type": "pinbar"
+  },
+  {
+   "idx": 840,
+   "time": "2025-11-27 16:00:00+00:00",
+   "o": 0.57268,
+   "h": 0.57282,
+   "l": 0.5724,
+   "c": 0.57268,
+   "vol_dir": 0,
+   "volume": 809.0,
+   "candle_type": "pinbar"
+  },
+  {
+   "idx": 851,
+   "time": "2025-11-27 18:45:00+00:00",
+   "o": 0.5722,
+   "h": 0.57235,
+   "l": 0.5722,
+   "c": 0.5722,
+   "vol_dir": -1,
+   "volume": 72.0,
+   "candle_type": "pinbar"
+  },
+  {
+   "idx": 869,
+   "time": "2025-11-27 23:15:00+00:00",
+   "o": 0.5726,
+   "h": 0.57268,
+   "l": 0.57256,
+   "c": 0.5726,
+   "vol_dir": 0,
+   "volume": 131.0,
+   "candle_type": "pinbar"
+  },
+  {
+   "idx": 909,
+   "time": "2025-11-28 09:15:00+00:00",
+   "o": 0.57094,
+   "h": 0.57126,
+   "l": 0.57084,
+   "c": 0.57094,
+   "vol_dir": 0,
+   "volume": 5206.0,
+   "candle_type": "pinbar"
+  },
+  {
+   "idx": 1014,
+   "time": "2025-12-01 11:30:00+00:00",
+   "o": 0.57364,
+   "h": 0.57381,
+   "l": 0.57354,
+   "c": 0.57364,
+   "vol_dir": 1,
+   "volume": 592.0,
+   "candle_type": "pinbar"
+  },
+  {
+   "idx": 1040,
+   "time": "2025-12-01 18:00:00+00:00",
+   "o": 0.5737,
+   "h": 0.5738,
+   "l": 0.5736,
+   "c": 0.5737,
+   "vol_dir": 0,
+   "volume": 143.0,
+   "candle_type": "pinbar"
+  },
+  {
+   "idx": 1052,
+   "time": "2025-12-01 21:00:00+00:00",
+   "o": 0.57275,
+   "h": 0.57286,
+   "l": 0.5727,
+   "c": 0.57275,
+   "vol_dir": -1,
+   "volume": 205.0,
+   "candle_type": "pinbar"
+  },
+  {
+   "idx": 1196,
+   "time": "2025-12-03 09:00:00+00:00",
+   "o": 0.5744,
+   "h": 0.57458,
+   "l": 0.57428,
+   "c": 0.5744,
+   "vol_dir": 1,
+   "volume": 755.0,
+   "candle_type": "pinbar"
+  },
+  {
+   "idx": 1206,
+   "time": "2025-12-03 11:30:00+00:00",
+   "o": 0.57496,
+   "h": 0.57519,
+   "l": 0.57494,
+   "c": 0.57496,
+   "vol_dir": 0,
+   "volume": 618.0,
+   "candle_type": "pinbar"
+  },
+  {
+   "idx": 1208,
+   "time": "2025-12-03 12:00:00+00:00",
+   "o": 0.57504,
+   "h": 0.57517,
+   "l": 0.57496,
+   "c": 0.57504,
+   "vol_dir": -1,
+   "volume": 436.0,
+   "candle_type": "pinbar"
+  },
+  {
+   "idx": 1421,
+   "time": "2025-12-05 17:15:00+00:00",
+   "o": 0.5772,
+   "h": 0.5774,
+   "l": 0.57711,
+   "c": 0.5772,
+   "vol_dir": 1,
+   "volume": 799.0,
+   "candle_type": "pinbar"
+  },
+  {
+   "idx": 1491,
+   "time": "2025-12-08 10:45:00+00:00",
+   "o": 0.5783,
+   "h": 0.57847,
+   "l": 0.57826,
+   "c": 0.5783,
+   "vol_dir": 0,
+   "volume": 520.0,
+   "candle_type": "pinbar"
+  },
+  {
+   "idx": 1505,
+   "time": "2025-12-08 14:15:00+00:00",
+   "o": 0.57868,
+   "h": 0.57884,
+   "l": 0.57841,
+   "c": 0.57868,
+   "vol_dir": -1,
+   "volume": 680.0,
+   "candle_type": "pinbar"
+  },
+  {
+   "idx": 1528,
+   "time": "2025-12-08 20:00:00+00:00",
+   "o": 0.57744,
+   "h": 0.5776,
+   "l": 0.57738,
+   "c": 0.57744,
+   "vol_dir": 0,
+   "volume": 303.0,
+   "candle_type": "pinbar"
+  },
+  {
+   "idx": 1537,
+   "time": "2025-12-08 22:15:00+00:00",
+   "o": 0.5774,
+   "h": 0.57747,
+   "l": 0.57733,
+   "c": 0.5774,
+   "vol_dir": 1,
+   "volume": 85.0,
+   "candle_type": "pinbar"
+  },
+  {
+   "idx": 1571,
+   "time": "2025-12-09 06:45:00+00:00",
+   "o": 0.5783,
+   "h": 0.57836,
+   "l": 0.57799,
+   "c": 0.5783,
+   "vol_dir": -1,
+   "volume": 692.0,
+   "candle_type": "pinbar"
+  },
+  {
+   "idx": 1577,
+   "time": "2025-12-09 08:15:00+00:00",
+   "o": 0.57824,
+   "h": 0.57836,
+   "l": 0.57802,
+   "c": 0.57824,
+   "vol_dir": 0,
+   "volume": 825.0,
+   "candle_type": "pinbar"
+  },
+  {
+   "idx": 1590,
+   "time": "2025-12-09 11:30:00+00:00",
+   "o": 0.57886,
+   "h": 0.57901,
+   "l": 0.57879,
+   "c": 0.57886,
+   "vol_dir": 0,
+   "volume": 536.0,
+   "candle_type": "pinbar"
+  },
+  {
+   "idx": 1625,
+   "time": "2025-12-09 20:15:00+00:00",
+   "o": 0.57806,
+   "h": 0.57809,
+   "l": 0.57796,
+   "c": 0.57806,
+   "vol_dir": 1,
+   "volume": 213.0,
+   "candle_type": "pinbar"
+  },
+  {
+   "idx": 1635,
+   "time": "2025-12-09 22:45:00+00:00",
+   "o": 0.57789,
+   "h": 0.578,
+   "l": 0.57781,
+   "c": 0.57789,
+   "vol_dir": 1,
+   "volume": 955.0,
+   "candle_type": "pinbar"
+  },
+  {
+   "idx": 1731,
+   "time": "2025-12-10 22:45:00+00:00",
+   "o": 0.58128,
+   "h": 0.58132,
+   "l": 0.58122,
+   "c": 0.58128,
+   "vol_dir": 0,
+   "volume": 432.0,
+   "candle_type": "pinbar"
+  },
+  {
+   "idx": 1738,
+   "time": "2025-12-11 00:30:00+00:00",
+   "o": 0.58146,
+   "h": 0.58172,
+   "l": 0.5811,
+   "c": 0.58146,
+   "vol_dir": 0,
+   "volume": 1455.0,
+   "candle_type": "pinbar"
+  },
+  {
+   "idx": 1829,
+   "time": "2025-12-11 23:15:00+00:00",
+   "o": 0.58082,
+   "h": 0.5809,
+   "l": 0.58074,
+   "c": 0.58082,
+   "vol_dir": 0,
+   "volume": 194.0,
+   "candle_type": "pinbar"
+  },
+  {
+   "idx": 1836,
+   "time": "2025-12-12 01:00:00+00:00",
+   "o": 0.58152,
+   "h": 0.58164,
+   "l": 0.58124,
+   "c": 0.58152,
+   "vol_dir": 0,
+   "volume": 850.0,
+   "candle_type": "pinbar"
+  },
+  {
+   "idx": 1863,
+   "time": "2025-12-12 07:45:00+00:00",
+   "o": 0.58132,
+   "h": 0.58158,
+   "l": 0.5812,
+   "c": 0.58132,
+   "vol_dir": -1,
+   "volume": 816.0,
+   "candle_type": "pinbar"
+  },
+  {
+   "idx": 1941,
+   "time": "2025-12-15 03:15:00+00:00",
+   "o": 0.57752,
+   "h": 0.57782,
+   "l": 0.57737,
+   "c": 0.57752,
+   "vol_dir": 0,
+   "volume": 861.0,
+   "candle_type": "pinbar"
+  },
+  {
+   "idx": 1949,
+   "time": "2025-12-15 05:15:00+00:00",
+   "o": 0.57774,
+   "h": 0.57792,
+   "l": 0.57769,
+   "c": 0.57774,
+   "vol_dir": 0,
+   "volume": 499.0,
+   "candle_type": "pinbar"
+  },
+  {
+   "idx": 1975,
+   "time": "2025-12-15 11:45:00+00:00",
+   "o": 0.57932,
+   "h": 0.57955,
+   "l": 0.57916,
+   "c": 0.57932,
+   "vol_dir": 0,
+   "volume": 493.0,
+   "candle_type": "pinbar"
+  },
+  {
+   "idx": 1982,
+   "time": "2025-12-15 13:30:00+00:00",
+   "o": 0.57956,
+   "h": 0.57978,
+   "l": 0.5794,
+   "c": 0.57956,
+   "vol_dir": -1,
+   "volume": 642.0,
+   "candle_type": "pinbar"
+  },
+  {
+   "idx": 1988,
+   "time": "2025-12-15 15:00:00+00:00",
+   "o": 0.5797,
+   "h": 0.58023,
+   "l": 0.57959,
+   "c": 0.5797,
+   "vol_dir": -1,
+   "volume": 1440.0,
+   "candle_type": "pinbar"
+  },
+  {
+   "idx": 2023,
+   "time": "2025-12-15 23:45:00+00:00",
+   "o": 0.57856,
+   "h": 0.57876,
+   "l": 0.57852,
+   "c": 0.57856,
+   "vol_dir": -1,
+   "volume": 229.0,
+   "candle_type": "pinbar"
+  },
+  {
+   "idx": 2052,
+   "time": "2025-12-16 07:00:00+00:00",
+   "o": 0.57844,
+   "h": 0.5787,
+   "l": 0.57823,
+   "c": 0.57844,
+   "vol_dir": 0,
+   "volume": 464.0,
+   "candle_type": "pinbar"
+  },
+  {
+   "idx": 2204,
+   "time": "2025-12-17 21:00:00+00:00",
+   "o": 0.5776,
+   "h": 0.5777,
+   "l": 0.57752,
+   "c": 0.5776,
+   "vol_dir": 0,
+   "volume": 306.0,
+   "candle_type": "pinbar"
+  },
+  {
+   "idx": 2255,
+   "time": "2025-12-18 09:45:00+00:00",
+   "o": 0.57635,
+   "h": 0.57648,
+   "l": 0.57628,
+   "c": 0.57635,
+   "vol_dir": -1,
+   "volume": 682.0,
+   "candle_type": "pinbar"
+  },
+  {
+   "idx": 2316,
+   "time": "2025-12-19 01:00:00+00:00",
+   "o": 0.57809,
+   "h": 0.57816,
+   "l": 0.5778,
+   "c": 0.57809,
+   "vol_dir": 1,
+   "volume": 713.0,
+   "candle_type": "pinbar"
+  },
+  {
+   "idx": 2362,
+   "time": "2025-12-19 12:30:00+00:00",
+   "o": 0.57446,
+   "h": 0.57462,
+   "l": 0.57442,
+   "c": 0.57446,
+   "vol_dir": 1,
+   "volume": 515.0,
+   "candle_type": "pinbar"
+  },
+  {
+   "idx": 2366,
+   "time": "2025-12-19 13:30:00+00:00",
+   "o": 0.57412,
+   "h": 0.57447,
+   "l": 0.57407,
+   "c": 0.57412,
+   "vol_dir": 0,
+   "volume": 714.0,
+   "candle_type": "pinbar"
+  },
+  {
+   "idx": 2372,
+   "time": "2025-12-19 15:00:00+00:00",
+   "o": 0.57564,
+   "h": 0.57601,
+   "l": 0.5755,
+   "c": 0.57564,
+   "vol_dir": -1,
+   "volume": 1156.0,
+   "candle_type": "pinbar"
+  },
+  {
+   "idx": 2390,
+   "time": "2025-12-19 19:30:00+00:00",
+   "o": 0.5762,
+   "h": 0.57626,
+   "l": 0.5761,
+   "c": 0.5762,
+   "vol_dir": -1,
+   "volume": 223.0,
+   "candle_type": "pinbar"
+  },
+  {
+   "idx": 2435,
+   "time": "2025-12-22 06:45:00+00:00",
+   "o": 0.57692,
+   "h": 0.57694,
+   "l": 0.57682,
+   "c": 0.57692,
+   "vol_dir": 1,
+   "volume": 367.0,
+   "candle_type": "pinbar"
+  },
+  {
+   "idx": 2565,
+   "time": "2025-12-23 15:15:00+00:00",
+   "o": 0.58286,
+   "h": 0.58302,
+   "l": 0.5827,
+   "c": 0.58286,
+   "vol_dir": -1,
+   "volume": 1382.0,
+   "candle_type": "pinbar"
+  },
+  {
+   "idx": 2610,
+   "time": "2025-12-24 02:30:00+00:00",
+   "o": 0.58506,
+   "h": 0.58518,
+   "l": 0.58488,
+   "c": 0.58506,
+   "vol_dir": -1,
+   "volume": 237.0,
+   "candle_type": "pinbar"
+  },
+  {
+   "idx": 2657,
+   "time": "2025-12-24 14:15:00+00:00",
+   "o": 0.5838,
+   "h": 0.5839,
+   "l": 0.58368,
+   "c": 0.5838,
+   "vol_dir": 1,
+   "volume": 507.0,
+   "candle_type": "pinbar"
+  },
+  {
+   "idx": 2666,
+   "time": "2025-12-24 16:30:00+00:00",
+   "o": 0.5835,
+   "h": 0.58382,
+   "l": 0.58344,
+   "c": 0.5835,
+   "vol_dir": 1,
+   "volume": 704.0,
+   "candle_type": "pinbar"
+  },
+  {
+   "idx": 2674,
+   "time": "2025-12-24 18:30:00+00:00",
+   "o": 0.58338,
+   "h": 0.58343,
+   "l": 0.58322,
+   "c": 0.58338,
+   "vol_dir": 0,
+   "volume": 2084.0,
+   "candle_type": "pinbar"
+  },
+  {
+   "idx": 2737,
+   "time": "2025-12-26 10:15:00+00:00",
+   "o": 0.58215,
+   "h": 0.58231,
+   "l": 0.58206,
+   "c": 0.58215,
+   "vol_dir": 1,
+   "volume": 772.0,
+   "candle_type": "pinbar"
+  },
+  {
+   "idx": 2751,
+   "time": "2025-12-26 13:45:00+00:00",
+   "o": 0.5832,
+   "h": 0.58336,
+   "l": 0.5831,
+   "c": 0.5832,
+   "vol_dir": 0,
+   "volume": 814.0,
+   "candle_type": "pinbar"
+  },
+  {
+   "idx": 2753,
+   "time": "2025-12-26 14:15:00+00:00",
+   "o": 0.58348,
+   "h": 0.58366,
+   "l": 0.58346,
+   "c": 0.58348,
+   "vol_dir": 0,
+   "volume": 831.0,
+   "candle_type": "pinbar"
+  },
+  {
+   "idx": 2874,
+   "time": "2025-12-29 20:30:00+00:00",
+   "o": 0.58044,
+   "h": 0.58054,
+   "l": 0.5804,
+   "c": 0.58044,
+   "vol_dir": -1,
+   "volume": 362.0,
+   "candle_type": "pinbar"
+  },
+  {
+   "idx": 2907,
+   "time": "2025-12-30 04:45:00+00:00",
+   "o": 0.58132,
+   "h": 0.5814,
+   "l": 0.58118,
+   "c": 0.58132,
+   "vol_dir": 1,
+   "volume": 260.0,
+   "candle_type": "pinbar"
+  },
+  {
+   "idx": 2913,
+   "time": "2025-12-30 06:15:00+00:00",
+   "o": 0.5817,
+   "h": 0.58182,
+   "l": 0.5816,
+   "c": 0.5817,
+   "vol_dir": 1,
+   "volume": 406.0,
+   "candle_type": "pinbar"
+  },
+  {
+   "idx": 2936,
+   "time": "2025-12-30 12:00:00+00:00",
+   "o": 0.58004,
+   "h": 0.58007,
+   "l": 0.57968,
+   "c": 0.58004,
+   "vol_dir": 0,
+   "volume": 558.0,
+   "candle_type": "pinbar"
+  },
+  {
+   "idx": 2983,
+   "time": "2025-12-30 23:45:00+00:00",
+   "o": 0.57904,
+   "h": 0.57911,
+   "l": 0.57892,
+   "c": 0.57904,
+   "vol_dir": -1,
+   "volume": 102.0,
+   "candle_type": "pinbar"
+  },
+  {
+   "idx": 2998,
+   "time": "2025-12-31 03:30:00+00:00",
+   "o": 0.57815,
+   "h": 0.57834,
+   "l": 0.57813,
+   "c": 0.57815,
+   "vol_dir": -1,
+   "volume": 240.0,
+   "candle_type": "pinbar"
+  },
+  {
+   "idx": 3053,
+   "time": "2025-12-31 17:15:00+00:00",
+   "o": 0.57534,
+   "h": 0.57555,
+   "l": 0.57526,
+   "c": 0.57534,
+   "vol_dir": -1,
+   "volume": 889.0,
+   "candle_type": "pinbar"
+  },
+  {
+   "idx": 3075,
+   "time": "2026-01-01 22:45:00+00:00",
+   "o": 0.57586,
+   "h": 0.57618,
+   "l": 0.57581,
+   "c": 0.57586,
+   "vol_dir": 1,
+   "volume": 389.0,
+   "candle_type": "pinbar"
+  },
+  {
+   "idx": 3120,
+   "time": "2026-01-02 10:00:00+00:00",
+   "o": 0.57696,
+   "h": 0.57726,
+   "l": 0.57692,
+   "c": 0.57696,
+   "vol_dir": 0,
+   "volume": 440.0,
+   "candle_type": "pinbar"
+  },
+  {
+   "idx": 3185,
+   "time": "2026-01-05 02:15:00+00:00",
+   "o": 0.57566,
+   "h": 0.57569,
+   "l": 0.57536,
+   "c": 0.57566,
+   "vol_dir": 1,
+   "volume": 909.0,
+   "candle_type": "pinbar"
+  },
+  {
+   "idx": 3235,
+   "time": "2026-01-05 14:45:00+00:00",
+   "o": 0.57644,
+   "h": 0.57658,
+   "l": 0.57628,
+   "c": 0.57644,
+   "vol_dir": -1,
+   "volume": 1960.0,
+   "candle_type": "pinbar"
+  },
+  {
+   "idx": 3252,
+   "time": "2026-01-05 19:00:00+00:00",
+   "o": 0.57886,
+   "h": 0.57899,
+   "l": 0.57879,
+   "c": 0.57886,
+   "vol_dir": 1,
+   "volume": 168.0,
+   "candle_type": "pinbar"
+  },
+  {
+   "idx": 3402,
+   "time": "2026-01-07 08:30:00+00:00",
+   "o": 0.57837,
+   "h": 0.57858,
+   "l": 0.57827,
+   "c": 0.57837,
+   "vol_dir": 1,
+   "volume": 670.0,
+   "candle_type": "pinbar"
+  },
+  {
+   "idx": 3411,
+   "time": "2026-01-07 10:45:00+00:00",
+   "o": 0.5789,
+   "h": 0.57905,
+   "l": 0.57878,
+   "c": 0.5789,
+   "vol_dir": 0,
+   "volume": 445.0,
+   "candle_type": "pinbar"
+  },
+  {
+   "idx": 3455,
+   "time": "2026-01-07 21:45:00+00:00",
+   "o": 0.57728,
+   "h": 0.57736,
+   "l": 0.57725,
+   "c": 0.57728,
+   "vol_dir": 1,
+   "volume": 106.0,
+   "candle_type": "pinbar"
+  },
+  {
+   "idx": 3461,
+   "time": "2026-01-07 23:15:00+00:00",
+   "o": 0.57736,
+   "h": 0.5774,
+   "l": 0.57735,
+   "c": 0.57736,
+   "vol_dir": 1,
+   "volume": 147.0,
+   "candle_type": "pinbar"
+  },
+  {
+   "idx": 3466,
+   "time": "2026-01-08 00:30:00+00:00",
+   "o": 0.57686,
+   "h": 0.57712,
+   "l": 0.57684,
+   "c": 0.57686,
+   "vol_dir": 0,
+   "volume": 544.0,
+   "candle_type": "pinbar"
+  },
+  {
+   "idx": 3538,
+   "time": "2026-01-08 18:30:00+00:00",
+   "o": 0.57474,
+   "h": 0.57474,
+   "l": 0.5746,
+   "c": 0.57474,
+   "vol_dir": 0,
+   "volume": 196.0,
+   "candle_type": "pinbar"
+  },
+  {
+   "idx": 3733,
+   "time": "2026-01-12 19:15:00+00:00",
+   "o": 0.57674,
+   "h": 0.57686,
+   "l": 0.57668,
+   "c": 0.57674,
+   "vol_dir": 0,
+   "volume": 291.0,
+   "candle_type": "pinbar"
+  },
+  {
+   "idx": 3739,
+   "time": "2026-01-12 20:45:00+00:00",
+   "o": 0.57664,
+   "h": 0.57668,
+   "l": 0.57656,
+   "c": 0.57664,
+   "vol_dir": 0,
+   "volume": 394.0,
+   "candle_type": "pinbar"
+  },
+  {
+   "idx": 3754,
+   "time": "2026-01-13 00:30:00+00:00",
+   "o": 0.57726,
+   "h": 0.57746,
+   "l": 0.5772,
+   "c": 0.57726,
+   "vol_dir": 0,
+   "volume": 305.0,
+   "candle_type": "pinbar"
+  },
+  {
+   "idx": 3844,
+   "time": "2026-01-13 23:00:00+00:00",
+   "o": 0.57418,
+   "h": 0.57422,
+   "l": 0.57397,
+   "c": 0.57418,
+   "vol_dir": 1,
+   "volume": 368.0,
+   "candle_type": "pinbar"
+  },
+  {
+   "idx": 3855,
+   "time": "2026-01-14 01:45:00+00:00",
+   "o": 0.57342,
+   "h": 0.57364,
+   "l": 0.57333,
+   "c": 0.57342,
+   "vol_dir": 0,
+   "volume": 647.0,
+   "candle_type": "pinbar"
+  },
+  {
+   "idx": 3869,
+   "time": "2026-01-14 05:15:00+00:00",
+   "o": 0.57444,
+   "h": 0.57446,
+   "l": 0.5743,
+   "c": 0.57444,
+   "vol_dir": -1,
+   "volume": 448.0,
+   "candle_type": "pinbar"
+  },
+  {
+   "idx": 3871,
+   "time": "2026-01-14 05:45:00+00:00",
+   "o": 0.57426,
+   "h": 0.57452,
+   "l": 0.57423,
+   "c": 0.57426,
+   "vol_dir": 1,
+   "volume": 504.0,
+   "candle_type": "pinbar"
+  },
+  {
+   "idx": 3926,
+   "time": "2026-01-14 19:30:00+00:00",
+   "o": 0.57442,
+   "h": 0.57453,
+   "l": 0.57429,
+   "c": 0.57442,
+   "vol_dir": 0,
+   "volume": 361.0,
+   "candle_type": "pinbar"
+  },
+  {
+   "idx": 3927,
+   "time": "2026-01-14 19:45:00+00:00",
+   "o": 0.57442,
+   "h": 0.57454,
+   "l": 0.57434,
+   "c": 0.57442,
+   "vol_dir": 0,
+   "volume": 453.0,
+   "candle_type": "pinbar"
+  },
+  {
+   "idx": 3975,
+   "time": "2026-01-15 07:45:00+00:00",
+   "o": 0.574,
+   "h": 0.57408,
+   "l": 0.57385,
+   "c": 0.574,
+   "vol_dir": 0,
+   "volume": 643.0,
+   "candle_type": "pinbar"
+  },
+  {
+   "idx": 3997,
+   "time": "2026-01-15 13:15:00+00:00",
+   "o": 0.57404,
+   "h": 0.57408,
+   "l": 0.5738,
+   "c": 0.57404,
+   "vol_dir": -1,
+   "volume": 863.0,
+   "candle_type": "pinbar"
+  },
+  {
+   "idx": 4010,
+   "time": "2026-01-15 16:30:00+00:00",
+   "o": 0.57444,
+   "h": 0.57454,
+   "l": 0.57418,
+   "c": 0.57444,
+   "vol_dir": -1,
+   "volume": 965.0,
+   "candle_type": "pinbar"
+  },
+  {
+   "idx": 4017,
+   "time": "2026-01-15 18:15:00+00:00",
+   "o": 0.57459,
+   "h": 0.5746,
+   "l": 0.57438,
+   "c": 0.57459,
+   "vol_dir": 1,
+   "volume": 511.0,
+   "candle_type": "pinbar"
+  },
+  {
+   "idx": 4037,
+   "time": "2026-01-15 23:15:00+00:00",
+   "o": 0.57423,
+   "h": 0.57427,
+   "l": 0.5741,
+   "c": 0.57423,
+   "vol_dir": 0,
+   "volume": 231.0,
+   "candle_type": "pinbar"
+  },
+  {
+   "idx": 4058,
+   "time": "2026-01-16 04:30:00+00:00",
+   "o": 0.57574,
+   "h": 0.57585,
+   "l": 0.57572,
+   "c": 0.57574,
+   "vol_dir": -1,
+   "volume": 163.0,
+   "candle_type": "pinbar"
+  },
+  {
+   "idx": 4111,
+   "time": "2026-01-16 17:45:00+00:00",
+   "o": 0.57499,
+   "h": 0.57506,
+   "l": 0.5748,
+   "c": 0.57499,
+   "vol_dir": -1,
+   "volume": 334.0,
+   "candle_type": "pinbar"
+  },
+  {
+   "idx": 4181,
+   "time": "2026-01-19 11:15:00+00:00",
+   "o": 0.57817,
+   "h": 0.57832,
+   "l": 0.57804,
+   "c": 0.57817,
+   "vol_dir": -1,
+   "volume": 586.0,
+   "candle_type": "pinbar"
+  },
+  {
+   "idx": 4212,
+   "time": "2026-01-19 19:00:00+00:00",
+   "o": 0.57939,
+   "h": 0.57956,
+   "l": 0.57938,
+   "c": 0.57939,
+   "vol_dir": -1,
+   "volume": 141.0,
+   "candle_type": "pinbar"
+  }
+ ],
+ "waves": [
+  {
+   "owner": "H1",
+   "structure_id": 0,
+   "cycle_id": 0,
+   "source_kind": "BOS",
+   "zone_side": "buy",
+   "last": 109,
+   "first": 110
+  },
+  {
+   "owner": "H1",
+   "structure_id": 0,
+   "cycle_id": 0,
+   "source_kind": "CTS",
+   "zone_side": "sell",
+   "last": 447,
+   "first": 468
+  },
+  {
+   "owner": "H1",
+   "structure_id": 0,
+   "cycle_id": 1,
+   "source_kind": "BOS",
+   "zone_side": "buy",
+   "last": 590,
+   "first": 591
+  },
+  {
+   "owner": "H1",
+   "structure_id": 0,
+   "cycle_id": 1,
+   "source_kind": "CTS",
+   "zone_side": "sell",
+   "last": 651,
+   "first": 653
+  },
+  {
+   "owner": "H1",
+   "structure_id": 1,
+   "cycle_id": 0,
+   "source_kind": "BOS",
+   "zone_side": "sell",
+   "last": 689,
+   "first": 690
+  },
+  {
+   "owner": "H1",
+   "structure_id": 1,
+   "cycle_id": 0,
+   "source_kind": "CTS",
+   "zone_side": "buy",
+   "last": 709,
+   "first": 712
+  },
+  {
+   "owner": "H1",
+   "structure_id": 1,
+   "cycle_id": 1,
+   "source_kind": "BOS",
+   "zone_side": "sell",
+   "last": 728,
+   "first": 729
+  },
+  {
+   "owner": "H1",
+   "structure_id": 1,
+   "cycle_id": 1,
+   "source_kind": "CTS",
+   "zone_side": "buy",
+   "last": 761,
+   "first": 762
+  },
+  {
+   "owner": "H1",
+   "structure_id": 1,
+   "cycle_id": 2,
+   "source_kind": "BOS",
+   "zone_side": "sell",
+   "last": 824,
+   "first": 826
+  },
+  {
+   "owner": "H1",
+   "structure_id": 1,
+   "cycle_id": 2,
+   "source_kind": "CTS",
+   "zone_side": "buy",
+   "last": 900,
+   "first": 905
+  },
+  {
+   "owner": "sub0",
+   "structure_id": 0,
+   "cycle_id": 0,
+   "source_kind": "BOS",
+   "zone_side": "buy",
+   "last": 454,
+   "first": 457
+  },
+  {
+   "owner": "sub0",
+   "structure_id": 0,
+   "cycle_id": 0,
+   "source_kind": "CTS",
+   "zone_side": "sell",
+   "last": 784,
+   "first": 787
+  },
+  {
+   "owner": "sub0",
+   "structure_id": 0,
+   "cycle_id": 1,
+   "source_kind": "BOS",
+   "zone_side": "buy",
+   "last": 917,
+   "first": 920
+  },
+  {
+   "owner": "sub0",
+   "structure_id": 0,
+   "cycle_id": 1,
+   "source_kind": "CTS",
+   "zone_side": "sell",
+   "last": 1019,
+   "first": 1021
+  },
+  {
+   "owner": "sub0",
+   "structure_id": 0,
+   "cycle_id": 2,
+   "source_kind": "BOS",
+   "zone_side": "buy",
+   "last": 1107,
+   "first": 1108
+  },
+  {
+   "owner": "sub0",
+   "structure_id": 0,
+   "cycle_id": 2,
+   "source_kind": "CTS",
+   "zone_side": "sell",
+   "last": null,
+   "first": null
+  },
+  {
+   "owner": "sub0",
+   "structure_id": 0,
+   "cycle_id": 3,
+   "source_kind": "BOS",
+   "zone_side": "buy",
+   "last": 1351,
+   "first": 1352
+  },
+  {
+   "owner": "sub0",
+   "structure_id": 0,
+   "cycle_id": 3,
+   "source_kind": "CTS",
+   "zone_side": "sell",
+   "last": 1720,
+   "first": 1748
+  },
+  {
+   "owner": "sub0",
+   "structure_id": 0,
+   "cycle_id": 4,
+   "source_kind": "BOS",
+   "zone_side": "buy",
+   "last": 1761,
+   "first": 1762
+  },
+  {
+   "owner": "sub0",
+   "structure_id": 0,
+   "cycle_id": 4,
+   "source_kind": "CTS",
+   "zone_side": "sell",
+   "last": 1792,
+   "first": 1794
+  },
+  {
+   "owner": "sub1",
+   "structure_id": 0,
+   "cycle_id": 0,
+   "source_kind": "BOS",
+   "zone_side": "sell",
+   "last": 1798,
+   "first": 1801
+  },
+  {
+   "owner": "sub1",
+   "structure_id": 0,
+   "cycle_id": 0,
+   "source_kind": "CTS",
+   "zone_side": "buy",
+   "last": 1815,
+   "first": 1828
+  },
+  {
+   "owner": "sub1",
+   "structure_id": 0,
+   "cycle_id": 1,
+   "source_kind": "BOS",
+   "zone_side": "sell",
+   "last": 1837,
+   "first": 1838
+  },
+  {
+   "owner": "sub1",
+   "structure_id": 0,
+   "cycle_id": 1,
+   "source_kind": "CTS",
+   "zone_side": "buy",
+   "last": 1896,
+   "first": 1900
+  },
+  {
+   "owner": "sub1",
+   "structure_id": 0,
+   "cycle_id": 2,
+   "source_kind": "BOS",
+   "zone_side": "sell",
+   "last": 1935,
+   "first": 1936
+  },
+  {
+   "owner": "sub1",
+   "structure_id": 0,
+   "cycle_id": 2,
+   "source_kind": "CTS",
+   "zone_side": "buy",
+   "last": 1943,
+   "first": null
+  },
+  {
+   "owner": "sub1",
+   "structure_id": 0,
+   "cycle_id": 3,
+   "source_kind": "BOS",
+   "zone_side": "sell",
+   "last": 2083,
+   "first": 2084
+  },
+  {
+   "owner": "sub1",
+   "structure_id": 0,
+   "cycle_id": 3,
+   "source_kind": "CTS",
+   "zone_side": "buy",
+   "last": 2230,
+   "first": 2232
+  },
+  {
+   "owner": "sub1",
+   "structure_id": 0,
+   "cycle_id": 4,
+   "source_kind": "BOS",
+   "zone_side": "sell",
+   "last": 2272,
+   "first": 2273
+  },
+  {
+   "owner": "sub1",
+   "structure_id": 0,
+   "cycle_id": 4,
+   "source_kind": "CTS",
+   "zone_side": "buy",
+   "last": 2363,
+   "first": 2365
+  },
+  {
+   "owner": "sub2",
+   "structure_id": 0,
+   "cycle_id": 0,
+   "source_kind": "BOS",
+   "zone_side": "buy",
+   "last": 2364,
+   "first": 2365
+  },
+  {
+   "owner": "sub2",
+   "structure_id": 0,
+   "cycle_id": 0,
+   "source_kind": "CTS",
+   "zone_side": "sell",
+   "last": 2552,
+   "first": 2559
+  },
+  {
+   "owner": "sub2",
+   "structure_id": 0,
+   "cycle_id": 1,
+   "source_kind": "BOS",
+   "zone_side": "buy",
+   "last": 2563,
+   "first": 2564
+  },
+  {
+   "owner": "sub2",
+   "structure_id": 0,
+   "cycle_id": 1,
+   "source_kind": "CTS",
+   "zone_side": "sell",
+   "last": 2607,
+   "first": 2611
+  },
+  {
+   "owner": "sub3",
+   "structure_id": 0,
+   "cycle_id": 0,
+   "source_kind": "BOS",
+   "zone_side": "sell",
+   "last": 2630,
+   "first": 2631
+  },
+  {
+   "owner": "sub3",
+   "structure_id": 0,
+   "cycle_id": 0,
+   "source_kind": "CTS",
+   "zone_side": "buy",
+   "last": 2734,
+   "first": 2736
+  },
+  {
+   "owner": "sub3",
+   "structure_id": 0,
+   "cycle_id": 1,
+   "source_kind": "BOS",
+   "zone_side": "sell",
+   "last": 2757,
+   "first": 2758
+  },
+  {
+   "owner": "sub3",
+   "structure_id": 0,
+   "cycle_id": 1,
+   "source_kind": "CTS",
+   "zone_side": "buy",
+   "last": 2841,
+   "first": 2843
+  },
+  {
+   "owner": "sub3",
+   "structure_id": 0,
+   "cycle_id": 2,
+   "source_kind": "BOS",
+   "zone_side": "sell",
+   "last": 2914,
+   "first": 2917
+  },
+  {
+   "owner": "sub3",
+   "structure_id": 0,
+   "cycle_id": 2,
+   "source_kind": "CTS",
+   "zone_side": "buy",
+   "last": 3045,
+   "first": 3048
+  },
+  {
+   "owner": "sub4",
+   "structure_id": 0,
+   "cycle_id": 0,
+   "source_kind": "BOS",
+   "zone_side": "buy",
+   "last": 3230,
+   "first": 3231
+  },
+  {
+   "owner": "sub4",
+   "structure_id": 0,
+   "cycle_id": 0,
+   "source_kind": "CTS",
+   "zone_side": "sell",
+   "last": 3299,
+   "first": 3300
+  },
+  {
+   "owner": "sub5",
+   "structure_id": 0,
+   "cycle_id": 0,
+   "source_kind": "BOS",
+   "zone_side": "sell",
+   "last": 3299,
+   "first": 3300
+  },
+  {
+   "owner": "sub5",
+   "structure_id": 0,
+   "cycle_id": 0,
+   "source_kind": "CTS",
+   "zone_side": "buy",
+   "last": 3617,
+   "first": 3647
+  },
+  {
+   "owner": "sub7",
+   "structure_id": 0,
+   "cycle_id": 0,
+   "source_kind": "BOS",
+   "zone_side": "sell",
+   "last": 3773,
+   "first": 3774
+  },
+  {
+   "owner": "sub7",
+   "structure_id": 0,
+   "cycle_id": 0,
+   "source_kind": "CTS",
+   "zone_side": "buy",
+   "last": 3998,
+   "first": 4000
+  },
+  {
+   "owner": "sub8",
+   "structure_id": 0,
+   "cycle_id": 0,
+   "source_kind": "BOS",
+   "zone_side": "buy",
+   "last": 4027,
+   "first": 4030
+  },
+  {
+   "owner": "sub8",
+   "structure_id": 0,
+   "cycle_id": 0,
+   "source_kind": "CTS",
+   "zone_side": "sell",
+   "last": 4082,
+   "first": 4083
+  },
+  {
+   "owner": "sub8",
+   "structure_id": 0,
+   "cycle_id": 1,
+   "source_kind": "BOS",
+   "zone_side": "buy",
+   "last": 4129,
+   "first": 4130
+  },
+  {
+   "owner": "sub8",
+   "structure_id": 0,
+   "cycle_id": 1,
+   "source_kind": "CTS",
+   "zone_side": "sell",
+   "last": 4156,
+   "first": 4158
+  },
+  {
+   "owner": "sub8",
+   "structure_id": 0,
+   "cycle_id": 2,
+   "source_kind": "BOS",
+   "zone_side": "buy",
+   "last": 4167,
+   "first": 4169
+  },
+  {
+   "owner": "sub6",
+   "structure_id": 0,
+   "cycle_id": 0,
+   "source_kind": "BOS",
+   "zone_side": "buy",
+   "last": 3620,
+   "first": 3647
+  },
+  {
+   "owner": "sub6",
+   "structure_id": 0,
+   "cycle_id": 0,
+   "source_kind": "CTS",
+   "zone_side": "sell",
+   "last": 3756,
+   "first": 3761
+  }
+ ],
+ "wvmi": [
+  {
+   "bos_structure_id": 0,
+   "bos_cycle_id": 0,
+   "zone_side": "buy",
+   "structure_path_id": "H1.main",
+   "fb_idx": 110,
+   "lb_idx": 447,
+   "fp_idx": 468,
+   "lp_idx": 590,
+   "fb_volume": 7103.0,
+   "lb_volume": 3644.0,
+   "fp_volume": 2131.0,
+   "lp_volume": 1965.0,
+   "lb_weight": 1.0,
+   "lp_weight": 0.7,
+   "breakout_momentum": 0.5130226664789526,
+   "pullback_momentum": 0.6454716095729705,
+   "buy_momentum": 0.51,
+   "sell_momentum": 0.65,
+   "status": "locked",
+   "lp_locked": true,
+   "locked_by_cycle_id": 1,
+   "cycle_collapsed": false,
+   "lp_rows": [
+    {
+     "lp_idx": 485,
+     "as_of_idx": 485,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 507,
+     "pullback_momentum": 1.653214453308306
+    },
+    {
+     "lp_idx": 507,
+     "as_of_idx": 507,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 555,
+     "pullback_momentum": 2.003284842796809
+    },
+    {
+     "lp_idx": 555,
+     "as_of_idx": 555,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 557,
+     "pullback_momentum": 1.4941342092914125
+    },
+    {
+     "lp_idx": 557,
+     "as_of_idx": 557,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 585,
+     "pullback_momentum": 0.9399343031440638
+    },
+    {
+     "lp_idx": 585,
+     "as_of_idx": 585,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 589,
+     "pullback_momentum": 1.619896762083529
+    },
+    {
+     "lp_idx": 589,
+     "as_of_idx": 589,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 590,
+     "pullback_momentum": 0.6494134209291412
+    },
+    {
+     "lp_idx": 590,
+     "as_of_idx": 590,
+     "lp_status": "locked",
+     "lp_status_reason": "cycle 1's BOS confirmed",
+     "lp_status_idx": 652,
+     "pullback_momentum": 0.6454716095729705
+    }
+   ],
+   "owner": "H1"
+  },
+  {
+   "bos_structure_id": 0,
+   "bos_cycle_id": 1,
+   "zone_side": "buy",
+   "structure_path_id": "H1.main",
+   "fb_idx": 591,
+   "lb_idx": 651,
+   "fp_idx": 653,
+   "lp_idx": 901,
+   "fb_volume": 2751.0,
+   "lb_volume": 3032.0,
+   "fp_volume": 2209.0,
+   "lp_volume": 1508.0,
+   "lb_weight": 1.0,
+   "lp_weight": 0.7,
+   "breakout_momentum": 1.1021446746637587,
+   "pullback_momentum": 0.4778632865550022,
+   "buy_momentum": 1.1,
+   "sell_momentum": 0.48,
+   "status": "created",
+   "lp_locked": false,
+   "locked_by_cycle_id": null,
+   "cycle_collapsed": false,
+   "lp_rows": [
+    {
+     "lp_idx": 683,
+     "as_of_idx": 683,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 705,
+     "pullback_momentum": 0.8564961521050249
+    },
+    {
+     "lp_idx": 705,
+     "as_of_idx": 705,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 706,
+     "pullback_momentum": 1.1838841104572204
+    },
+    {
+     "lp_idx": 706,
+     "as_of_idx": 706,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 707,
+     "pullback_momentum": 1.5608872793119057
+    },
+    {
+     "lp_idx": 707,
+     "as_of_idx": 707,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 708,
+     "pullback_momentum": 1.5527387958352195
+    },
+    {
+     "lp_idx": 708,
+     "as_of_idx": 708,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 709,
+     "pullback_momentum": 1.1765504753282028
+    },
+    {
+     "lp_idx": 709,
+     "as_of_idx": 709,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 710,
+     "pullback_momentum": 0.9954730647351743
+    },
+    {
+     "lp_idx": 710,
+     "as_of_idx": 710,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 741,
+     "pullback_momentum": 1.1240380262562246
+    },
+    {
+     "lp_idx": 741,
+     "as_of_idx": 741,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 742,
+     "pullback_momentum": 0.5400633770937076
+    },
+    {
+     "lp_idx": 742,
+     "as_of_idx": 742,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 746,
+     "pullback_momentum": 0.5391579900407424
+    },
+    {
+     "lp_idx": 746,
+     "as_of_idx": 746,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 747,
+     "pullback_momentum": 0.5817111815301041
+    },
+    {
+     "lp_idx": 747,
+     "as_of_idx": 747,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 749,
+     "pullback_momentum": 1.1765504753282028
+    },
+    {
+     "lp_idx": 749,
+     "as_of_idx": 749,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 750,
+     "pullback_momentum": 0.47532820280669985
+    },
+    {
+     "lp_idx": 750,
+     "as_of_idx": 750,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 751,
+     "pullback_momentum": 0.3339972838388411
+    },
+    {
+     "lp_idx": 751,
+     "as_of_idx": 751,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 752,
+     "pullback_momentum": 0.8198279764599367
+    },
+    {
+     "lp_idx": 752,
+     "as_of_idx": 752,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 754,
+     "pullback_momentum": 0.4315980081484835
+    },
+    {
+     "lp_idx": 754,
+     "as_of_idx": 754,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 756,
+     "pullback_momentum": 1.3847894975101855
+    },
+    {
+     "lp_idx": 756,
+     "as_of_idx": 756,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 760,
+     "pullback_momentum": 1.0543232231779085
+    },
+    {
+     "lp_idx": 760,
+     "as_of_idx": 760,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 761,
+     "pullback_momentum": 2.2928927116342237
+    },
+    {
+     "lp_idx": 761,
+     "as_of_idx": 761,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 801,
+     "pullback_momentum": 2.3490267089180623
+    },
+    {
+     "lp_idx": 801,
+     "as_of_idx": 801,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 874,
+     "pullback_momentum": 1.5382526029877772
+    },
+    {
+     "lp_idx": 874,
+     "as_of_idx": 874,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 875,
+     "pullback_momentum": 1.5631507469443187
+    },
+    {
+     "lp_idx": 875,
+     "as_of_idx": 875,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 884,
+     "pullback_momentum": 1.3105477591670438
+    },
+    {
+     "lp_idx": 884,
+     "as_of_idx": 884,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 891,
+     "pullback_momentum": 0.35554549569941146
+    },
+    {
+     "lp_idx": 891,
+     "as_of_idx": 891,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 893,
+     "pullback_momentum": 1.3766410140334993
+    },
+    {
+     "lp_idx": 893,
+     "as_of_idx": 893,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 895,
+     "pullback_momentum": 0.6217292892711633
+    },
+    {
+     "lp_idx": 895,
+     "as_of_idx": 895,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 896,
+     "pullback_momentum": 1.0090538705296515
+    },
+    {
+     "lp_idx": 896,
+     "as_of_idx": 896,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 897,
+     "pullback_momentum": 0.7592575826165685
+    },
+    {
+     "lp_idx": 897,
+     "as_of_idx": 897,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 898,
+     "pullback_momentum": 1.3386147578089633
+    },
+    {
+     "lp_idx": 898,
+     "as_of_idx": 898,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 899,
+     "pullback_momentum": 0.8964689904934359
+    },
+    {
+     "lp_idx": 899,
+     "as_of_idx": 899,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 900,
+     "pullback_momentum": 0.7311000452693527
+    },
+    {
+     "lp_idx": 900,
+     "as_of_idx": 900,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 901,
+     "pullback_momentum": 0.3736985061113626
+    },
+    {
+     "lp_idx": 901,
+     "as_of_idx": 901,
+     "lp_status": "unlocked",
+     "lp_status_reason": "cycle ended by a reversal",
+     "lp_status_idx": 902,
+     "pullback_momentum": 0.4778632865550022
+    }
+   ],
+   "owner": "H1"
+  },
+  {
+   "bos_structure_id": 1,
+   "bos_cycle_id": 0,
+   "zone_side": "sell",
+   "structure_path_id": "H1.main",
+   "fb_idx": 690,
+   "lb_idx": 709,
+   "fp_idx": 712,
+   "lp_idx": 728,
+   "fb_volume": 5644.0,
+   "lb_volume": 2199.0,
+   "fp_volume": 4400.0,
+   "lp_volume": 1571.0,
+   "lb_weight": 1.0,
+   "lp_weight": 0.7,
+   "breakout_momentum": 0.3896172927002126,
+   "pullback_momentum": 0.24993181818181814,
+   "buy_momentum": 0.25,
+   "sell_momentum": 0.39,
+   "status": "locked",
+   "lp_locked": true,
+   "locked_by_cycle_id": 1,
+   "cycle_collapsed": true,
+   "lp_rows": [
+    {
+     "lp_idx": 727,
+     "as_of_idx": 727,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 728,
+     "pullback_momentum": 0.27340909090909093
+    },
+    {
+     "lp_idx": 728,
+     "as_of_idx": 728,
+     "lp_status": "locked",
+     "lp_status_reason": "cycle 1's BOS confirmed",
+     "lp_status_idx": 748,
+     "pullback_momentum": 0.24993181818181814
+    }
+   ],
+   "owner": "H1"
+  },
+  {
+   "bos_structure_id": 1,
+   "bos_cycle_id": 1,
+   "zone_side": "sell",
+   "structure_path_id": "H1.main",
+   "fb_idx": 729,
+   "lb_idx": 761,
+   "fp_idx": 762,
+   "lp_idx": 824,
+   "fb_volume": 2099.0,
+   "lb_volume": 5189.0,
+   "fp_volume": 3813.0,
+   "lp_volume": 2345.0,
+   "lb_weight": 1.0,
+   "lp_weight": 0.7,
+   "breakout_momentum": 2.472129585516913,
+   "pullback_momentum": 0.4305009179124049,
+   "buy_momentum": 0.43,
+   "sell_momentum": 2.47,
+   "status": "locked",
+   "lp_locked": true,
+   "locked_by_cycle_id": 2,
+   "cycle_collapsed": true,
+   "lp_rows": [
+    {
+     "lp_idx": 810,
+     "as_of_idx": 810,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 812,
+     "pullback_momentum": 0.8174927878311041
+    },
+    {
+     "lp_idx": 812,
+     "as_of_idx": 812,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 813,
+     "pullback_momentum": 0.2386572252819302
+    },
+    {
+     "lp_idx": 813,
+     "as_of_idx": 813,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 819,
+     "pullback_momentum": 0.17899291896144767
+    },
+    {
+     "lp_idx": 819,
+     "as_of_idx": 819,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 820,
+     "pullback_momentum": 1.001835824809861
+    },
+    {
+     "lp_idx": 820,
+     "as_of_idx": 820,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 824,
+     "pullback_momentum": 0.7322318384474167
+    },
+    {
+     "lp_idx": 824,
+     "as_of_idx": 824,
+     "lp_status": "locked",
+     "lp_status_reason": "cycle 2's BOS confirmed",
+     "lp_status_idx": 902,
+     "pullback_momentum": 0.4305009179124049
+    }
+   ],
+   "owner": "H1"
+  },
+  {
+   "bos_structure_id": 1,
+   "bos_cycle_id": 2,
+   "zone_side": "sell",
+   "structure_path_id": "H1.main",
+   "fb_idx": 826,
+   "lb_idx": 900,
+   "fp_idx": 905,
+   "lp_idx": 1055,
+   "fb_volume": 3860.0,
+   "lb_volume": 1651.0,
+   "fp_volume": 8503.0,
+   "lp_volume": 995.0,
+   "lb_weight": 0.5,
+   "lp_weight": 0.7,
+   "breakout_momentum": 0.213860103626943,
+   "pullback_momentum": 0.08191226625896743,
+   "buy_momentum": 0.08,
+   "sell_momentum": 0.21,
+   "status": "created",
+   "lp_locked": false,
+   "locked_by_cycle_id": null,
+   "cycle_collapsed": false,
+   "lp_rows": [
+    {
+     "lp_idx": 935,
+     "as_of_idx": 935,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 937,
+     "pullback_momentum": 0.08833352934258495
+    },
+    {
+     "lp_idx": 937,
+     "as_of_idx": 937,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 938,
+     "pullback_momentum": 0.052334470186992825
+    },
+    {
+     "lp_idx": 938,
+     "as_of_idx": 938,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 940,
+     "pullback_momentum": 0.12488533458779252
+    },
+    {
+     "lp_idx": 940,
+     "as_of_idx": 940,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 941,
+     "pullback_momentum": 0.17117487945431023
+    },
+    {
+     "lp_idx": 941,
+     "as_of_idx": 941,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 942,
+     "pullback_momentum": 0.16258967423262377
+    },
+    {
+     "lp_idx": 942,
+     "as_of_idx": 942,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 1044,
+     "pullback_momentum": 0.12365047630248147
+    },
+    {
+     "lp_idx": 1044,
+     "as_of_idx": 1044,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 1045,
+     "pullback_momentum": 0.16102552040456308
+    },
+    {
+     "lp_idx": 1045,
+     "as_of_idx": 1045,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 1046,
+     "pullback_momentum": 0.1485122897800776
+    },
+    {
+     "lp_idx": 1046,
+     "as_of_idx": 1046,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 1047,
+     "pullback_momentum": 0.1575679172056921
+    },
+    {
+     "lp_idx": 1047,
+     "as_of_idx": 1047,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 1048,
+     "pullback_momentum": 0.14126778783958602
+    },
+    {
+     "lp_idx": 1048,
+     "as_of_idx": 1048,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 1049,
+     "pullback_momentum": 0.16827002234505467
+    },
+    {
+     "lp_idx": 1049,
+     "as_of_idx": 1049,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 1050,
+     "pullback_momentum": 0.21914618369987063
+    },
+    {
+     "lp_idx": 1050,
+     "as_of_idx": 1050,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 1051,
+     "pullback_momentum": 0.14958250029401385
+    },
+    {
+     "lp_idx": 1051,
+     "as_of_idx": 1051,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 1055,
+     "pullback_momentum": 0.07392684934728919
+    },
+    {
+     "lp_idx": 1055,
+     "as_of_idx": 1055,
+     "lp_status": "open",
+     "lp_status_reason": "still moving at the data end",
+     "lp_status_idx": null,
+     "pullback_momentum": 0.08191226625896743
+    }
+   ],
+   "owner": "H1"
+  },
+  {
+   "bos_structure_id": 0,
+   "bos_cycle_id": 0,
+   "zone_side": "buy",
+   "structure_path_id": "H1.main >> M15.confluence",
+   "fb_idx": 457,
+   "lb_idx": 784,
+   "fp_idx": 787,
+   "lp_idx": 917,
+   "fb_volume": 1310.0,
+   "lb_volume": 786.0,
+   "fp_volume": 828.0,
+   "lp_volume": 5239.0,
+   "lb_weight": 1.0,
+   "lp_weight": 0.7,
+   "breakout_momentum": 0.6,
+   "pullback_momentum": 4.429106280193237,
+   "buy_momentum": 0.6,
+   "sell_momentum": 4.43,
+   "status": "locked",
+   "lp_locked": true,
+   "locked_by_cycle_id": 1,
+   "cycle_collapsed": true,
+   "lp_rows": [
+    {
+     "lp_idx": 801,
+     "as_of_idx": 802,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 810,
+     "pullback_momentum": 0.7041062801932367
+    },
+    {
+     "lp_idx": 810,
+     "as_of_idx": 810,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 812,
+     "pullback_momentum": 0.7946859903381642
+    },
+    {
+     "lp_idx": 812,
+     "as_of_idx": 812,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 818,
+     "pullback_momentum": 0.7963768115942028
+    },
+    {
+     "lp_idx": 818,
+     "as_of_idx": 818,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 819,
+     "pullback_momentum": 0.32971014492753625
+    },
+    {
+     "lp_idx": 819,
+     "as_of_idx": 819,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 904,
+     "pullback_momentum": 0.289975845410628
+    },
+    {
+     "lp_idx": 904,
+     "as_of_idx": 904,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 907,
+     "pullback_momentum": 4.1780193236714975
+    },
+    {
+     "lp_idx": 907,
+     "as_of_idx": 907,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 913,
+     "pullback_momentum": 5.382850241545894
+    },
+    {
+     "lp_idx": 913,
+     "as_of_idx": 913,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 914,
+     "pullback_momentum": 4.7898550724637685
+    },
+    {
+     "lp_idx": 914,
+     "as_of_idx": 914,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 916,
+     "pullback_momentum": 6.184782608695652
+    },
+    {
+     "lp_idx": 916,
+     "as_of_idx": 916,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 917,
+     "pullback_momentum": 3.6547101449275363
+    },
+    {
+     "lp_idx": 917,
+     "as_of_idx": 917,
+     "lp_status": "locked",
+     "lp_status_reason": "cycle 1's BOS confirmed",
+     "lp_status_idx": 1020,
+     "pullback_momentum": 4.429106280193237
+    }
+   ],
+   "owner": "sub0"
+  },
+  {
+   "bos_structure_id": 0,
+   "bos_cycle_id": 1,
+   "zone_side": "buy",
+   "structure_path_id": "H1.main >> M15.confluence",
+   "fb_idx": 920,
+   "lb_idx": 1019,
+   "fp_idx": 1021,
+   "lp_idx": 1107,
+   "fb_volume": 4319.0,
+   "lb_volume": 955.0,
+   "fp_volume": 841.0,
+   "lp_volume": 403.0,
+   "lb_weight": 1.0,
+   "lp_weight": 0.7,
+   "breakout_momentum": 0.22111599907385968,
+   "pullback_momentum": 0.33543400713436383,
+   "buy_momentum": 0.22,
+   "sell_momentum": 0.34,
+   "status": "locked",
+   "lp_locked": true,
+   "locked_by_cycle_id": 2,
+   "cycle_collapsed": false,
+   "lp_rows": [
+    {
+     "lp_idx": 1025,
+     "as_of_idx": 1025,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 1026,
+     "pullback_momentum": 0.4619500594530321
+    },
+    {
+     "lp_idx": 1026,
+     "as_of_idx": 1026,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 1030,
+     "pullback_momentum": 1.141141498216409
+    },
+    {
+     "lp_idx": 1030,
+     "as_of_idx": 1030,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 1032,
+     "pullback_momentum": 1.3995243757431628
+    },
+    {
+     "lp_idx": 1032,
+     "as_of_idx": 1032,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 1035,
+     "pullback_momentum": 1.1664684898929845
+    },
+    {
+     "lp_idx": 1035,
+     "as_of_idx": 1035,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 1036,
+     "pullback_momentum": 0.9230677764565992
+    },
+    {
+     "lp_idx": 1036,
+     "as_of_idx": 1036,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 1041,
+     "pullback_momentum": 0.6600475624256836
+    },
+    {
+     "lp_idx": 1041,
+     "as_of_idx": 1041,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 1043,
+     "pullback_momentum": 0.4875148632580262
+    },
+    {
+     "lp_idx": 1043,
+     "as_of_idx": 1043,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 1044,
+     "pullback_momentum": 0.24304399524375742
+    },
+    {
+     "lp_idx": 1044,
+     "as_of_idx": 1044,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 1045,
+     "pullback_momentum": 0.48513674197384066
+    },
+    {
+     "lp_idx": 1045,
+     "as_of_idx": 1045,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 1046,
+     "pullback_momentum": 0.4625445897740785
+    },
+    {
+     "lp_idx": 1046,
+     "as_of_idx": 1046,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 1049,
+     "pullback_momentum": 0.44351961950059454
+    },
+    {
+     "lp_idx": 1049,
+     "as_of_idx": 1049,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 1065,
+     "pullback_momentum": 0.3412604042806183
+    },
+    {
+     "lp_idx": 1065,
+     "as_of_idx": 1065,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 1067,
+     "pullback_momentum": 0.49108204518430437
+    },
+    {
+     "lp_idx": 1067,
+     "as_of_idx": 1067,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 1068,
+     "pullback_momentum": 0.4934601664684899
+    },
+    {
+     "lp_idx": 1068,
+     "as_of_idx": 1068,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 1101,
+     "pullback_momentum": 0.5969084423305588
+    },
+    {
+     "lp_idx": 1101,
+     "as_of_idx": 1101,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 1102,
+     "pullback_momentum": 0.6183115338882283
+    },
+    {
+     "lp_idx": 1102,
+     "as_of_idx": 1102,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 1104,
+     "pullback_momentum": 0.365398335315101
+    },
+    {
+     "lp_idx": 1104,
+     "as_of_idx": 1104,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 1105,
+     "pullback_momentum": 0.3970273483947681
+    },
+    {
+     "lp_idx": 1105,
+     "as_of_idx": 1105,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 1107,
+     "pullback_momentum": 0.8133174791914387
+    },
+    {
+     "lp_idx": 1107,
+     "as_of_idx": 1107,
+     "lp_status": "locked",
+     "lp_status_reason": "cycle 2's BOS confirmed",
+     "lp_status_idx": 1224,
+     "pullback_momentum": 0.33543400713436383
+    }
+   ],
+   "owner": "sub0"
+  },
+  {
+   "bos_structure_id": 0,
+   "bos_cycle_id": 3,
+   "zone_side": "buy",
+   "structure_path_id": "H1.main >> M15.confluence",
+   "fb_idx": 1352,
+   "lb_idx": 1720,
+   "fp_idx": 1748,
+   "lp_idx": 1761,
+   "fb_volume": 464.0,
+   "lb_volume": 1933.0,
+   "fp_volume": 940.0,
+   "lp_volume": 678.0,
+   "lb_weight": 1.0,
+   "lp_weight": 1.0,
+   "breakout_momentum": 4.165948275862069,
+   "pullback_momentum": 0.7212765957446808,
+   "buy_momentum": 4.17,
+   "sell_momentum": 0.72,
+   "status": "locked",
+   "lp_locked": true,
+   "locked_by_cycle_id": 4,
+   "cycle_collapsed": false,
+   "lp_rows": [
+    {
+     "lp_idx": 1751,
+     "as_of_idx": 1751,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 1752,
+     "pullback_momentum": 0.776595744680851
+    },
+    {
+     "lp_idx": 1752,
+     "as_of_idx": 1752,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 1753,
+     "pullback_momentum": 0.7180851063829787
+    },
+    {
+     "lp_idx": 1753,
+     "as_of_idx": 1753,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 1760,
+     "pullback_momentum": 0.597872340425532
+    },
+    {
+     "lp_idx": 1760,
+     "as_of_idx": 1760,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 1761,
+     "pullback_momentum": 0.8180851063829787
+    },
+    {
+     "lp_idx": 1761,
+     "as_of_idx": 1761,
+     "lp_status": "locked",
+     "lp_status_reason": "cycle 4's BOS confirmed",
+     "lp_status_idx": 1793,
+     "pullback_momentum": 0.7212765957446808
+    }
+   ],
+   "owner": "sub0"
+  },
+  {
+   "bos_structure_id": 0,
+   "bos_cycle_id": 4,
+   "zone_side": "buy",
+   "structure_path_id": "H1.main >> M15.confluence",
+   "fb_idx": 1762,
+   "lb_idx": 1792,
+   "fp_idx": 1794,
+   "lp_idx": 1938,
+   "fb_volume": 675.0,
+   "lb_volume": 1167.0,
+   "fp_volume": 1473.0,
+   "lp_volume": 1232.0,
+   "lb_weight": 1.0,
+   "lp_weight": 0.7,
+   "breakout_momentum": 1.728888888888889,
+   "pullback_momentum": 0.5854718262050237,
+   "buy_momentum": 1.73,
+   "sell_momentum": 0.59,
+   "status": "created",
+   "lp_locked": false,
+   "locked_by_cycle_id": null,
+   "cycle_collapsed": false,
+   "lp_rows": [
+    {
+     "lp_idx": 1795,
+     "as_of_idx": 1795,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 1801,
+     "pullback_momentum": 1.0692464358452138
+    },
+    {
+     "lp_idx": 1801,
+     "as_of_idx": 1801,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 1815,
+     "pullback_momentum": 0.551255940257977
+    },
+    {
+     "lp_idx": 1815,
+     "as_of_idx": 1815,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 1816,
+     "pullback_momentum": 0.23998642226748132
+    },
+    {
+     "lp_idx": 1816,
+     "as_of_idx": 1816,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 1827,
+     "pullback_momentum": 0.21907671418873048
+    },
+    {
+     "lp_idx": 1827,
+     "as_of_idx": 1827,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 1892,
+     "pullback_momentum": 0.20244399185336048
+    },
+    {
+     "lp_idx": 1892,
+     "as_of_idx": 1892,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 1893,
+     "pullback_momentum": 0.7807196198234895
+    },
+    {
+     "lp_idx": 1893,
+     "as_of_idx": 1893,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 1894,
+     "pullback_momentum": 1.1391717583163612
+    },
+    {
+     "lp_idx": 1894,
+     "as_of_idx": 1894,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 1896,
+     "pullback_momentum": 1.1038696537678208
+    },
+    {
+     "lp_idx": 1896,
+     "as_of_idx": 1896,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 1898,
+     "pullback_momentum": 1.167684996605567
+    },
+    {
+     "lp_idx": 1898,
+     "as_of_idx": 1898,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 1936,
+     "pullback_momentum": 0.8805159538357095
+    },
+    {
+     "lp_idx": 1936,
+     "as_of_idx": 1936,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 1937,
+     "pullback_momentum": 1.4935505770536321
+    },
+    {
+     "lp_idx": 1937,
+     "as_of_idx": 1937,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 1938,
+     "pullback_momentum": 0.6947725729803123
+    },
+    {
+     "lp_idx": 1938,
+     "as_of_idx": 1938,
+     "lp_status": "unlocked",
+     "lp_status_reason": "cycle ended by a reversal",
+     "lp_status_idx": 1940,
+     "pullback_momentum": 0.5854718262050237
+    }
+   ],
+   "owner": "sub0"
+  },
+  {
+   "bos_structure_id": 0,
+   "bos_cycle_id": 0,
+   "zone_side": "sell",
+   "structure_path_id": "H1.main >> M15.confluence",
+   "fb_idx": 1801,
+   "lb_idx": 1815,
+   "fp_idx": 1828,
+   "lp_idx": 1837,
+   "fb_volume": 812.0,
+   "lb_volume": 505.0,
+   "fp_volume": 313.0,
+   "lp_volume": 656.0,
+   "lb_weight": 0.7,
+   "lp_weight": 1.0,
+   "breakout_momentum": 0.4353448275862069,
+   "pullback_momentum": 2.0958466453674123,
+   "buy_momentum": 2.1,
+   "sell_momentum": 0.44,
+   "status": "locked",
+   "lp_locked": true,
+   "locked_by_cycle_id": 1,
+   "cycle_collapsed": true,
+   "lp_rows": [
+    {
+     "lp_idx": 1833,
+     "as_of_idx": 1833,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 1834,
+     "pullback_momentum": 0.9571884984025558
+    },
+    {
+     "lp_idx": 1834,
+     "as_of_idx": 1834,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 1835,
+     "pullback_momentum": 1.9968051118210863
+    },
+    {
+     "lp_idx": 1835,
+     "as_of_idx": 1835,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 1837,
+     "pullback_momentum": 2.428115015974441
+    },
+    {
+     "lp_idx": 1837,
+     "as_of_idx": 1837,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 1865,
+     "pullback_momentum": 2.0958466453674123
+    },
+    {
+     "lp_idx": 1865,
+     "as_of_idx": 1865,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 1866,
+     "pullback_momentum": 2.584664536741214
+    },
+    {
+     "lp_idx": 1866,
+     "as_of_idx": 1866,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by the locked LP",
+     "lp_status_idx": 1894,
+     "pullback_momentum": 1.858466453674121
+    },
+    {
+     "lp_idx": 1837,
+     "as_of_idx": 1894,
+     "lp_status": "locked",
+     "lp_status_reason": "cycle 1's BOS confirmed",
+     "lp_status_idx": 1894,
+     "pullback_momentum": 2.0958466453674123
+    }
+   ],
+   "owner": "sub1"
+  },
+  {
+   "bos_structure_id": 0,
+   "bos_cycle_id": 1,
+   "zone_side": "sell",
+   "structure_path_id": "H1.main >> M15.confluence",
+   "fb_idx": 1838,
+   "lb_idx": 1896,
+   "fp_idx": 1900,
+   "lp_idx": 1935,
+   "fb_volume": 799.0,
+   "lb_volume": 1720.0,
+   "fp_volume": 1064.0,
+   "lp_volume": 713.0,
+   "lb_weight": 1.0,
+   "lp_weight": 0.7,
+   "breakout_momentum": 2.1526908635794744,
+   "pullback_momentum": 0.46907894736842104,
+   "buy_momentum": 0.47,
+   "sell_momentum": 2.15,
+   "status": "locked",
+   "lp_locked": true,
+   "locked_by_cycle_id": 2,
+   "cycle_collapsed": true,
+   "lp_rows": [
+    {
+     "lp_idx": 1902,
+     "as_of_idx": 1902,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 1904,
+     "pullback_momentum": 0.8703007518796992
+    },
+    {
+     "lp_idx": 1904,
+     "as_of_idx": 1904,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 1905,
+     "pullback_momentum": 0.32960526315789473
+    },
+    {
+     "lp_idx": 1905,
+     "as_of_idx": 1905,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 1934,
+     "pullback_momentum": 0.38289473684210523
+    },
+    {
+     "lp_idx": 1934,
+     "as_of_idx": 1934,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 1935,
+     "pullback_momentum": 0.4855263157894737
+    },
+    {
+     "lp_idx": 1935,
+     "as_of_idx": 1935,
+     "lp_status": "locked",
+     "lp_status_reason": "cycle 2's BOS confirmed",
+     "lp_status_idx": 1940,
+     "pullback_momentum": 0.46907894736842104
+    }
+   ],
+   "owner": "sub1"
+  },
+  {
+   "bos_structure_id": 0,
+   "bos_cycle_id": 3,
+   "zone_side": "sell",
+   "structure_path_id": "H1.main >> M15.confluence",
+   "fb_idx": 2084,
+   "lb_idx": 2230,
+   "fp_idx": 2232,
+   "lp_idx": 2272,
+   "fb_volume": 1888.0,
+   "lb_volume": 441.0,
+   "fp_volume": 320.0,
+   "lp_volume": 2282.0,
+   "lb_weight": 1.0,
+   "lp_weight": 1.0,
+   "breakout_momentum": 0.23358050847457626,
+   "pullback_momentum": 7.13125,
+   "buy_momentum": 7.13,
+   "sell_momentum": 0.23,
+   "status": "locked",
+   "lp_locked": true,
+   "locked_by_cycle_id": 4,
+   "cycle_collapsed": false,
+   "lp_rows": [
+    {
+     "lp_idx": 2236,
+     "as_of_idx": 2236,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 2246,
+     "pullback_momentum": 1.4125
+    },
+    {
+     "lp_idx": 2246,
+     "as_of_idx": 2246,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 2256,
+     "pullback_momentum": 1.736875
+    },
+    {
+     "lp_idx": 2256,
+     "as_of_idx": 2256,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 2258,
+     "pullback_momentum": 1.334375
+    },
+    {
+     "lp_idx": 2258,
+     "as_of_idx": 2258,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 2259,
+     "pullback_momentum": 1.459375
+    },
+    {
+     "lp_idx": 2259,
+     "as_of_idx": 2259,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 2269,
+     "pullback_momentum": 1.046875
+    },
+    {
+     "lp_idx": 2269,
+     "as_of_idx": 2269,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 2270,
+     "pullback_momentum": 2.515625
+    },
+    {
+     "lp_idx": 2270,
+     "as_of_idx": 2270,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 2271,
+     "pullback_momentum": 10.85625
+    },
+    {
+     "lp_idx": 2271,
+     "as_of_idx": 2271,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 2272,
+     "pullback_momentum": 7.103125
+    },
+    {
+     "lp_idx": 2272,
+     "as_of_idx": 2272,
+     "lp_status": "locked",
+     "lp_status_reason": "cycle 4's BOS confirmed",
+     "lp_status_idx": 2343,
+     "pullback_momentum": 7.13125
+    }
+   ],
+   "owner": "sub1"
+  },
+  {
+   "bos_structure_id": 0,
+   "bos_cycle_id": 4,
+   "zone_side": "sell",
+   "structure_path_id": "H1.main >> M15.confluence",
+   "fb_idx": 2273,
+   "lb_idx": 2363,
+   "fp_idx": 2365,
+   "lp_idx": 2469,
+   "fb_volume": 1646.0,
+   "lb_volume": 498.0,
+   "fp_volume": 800.0,
+   "lp_volume": 815.0,
+   "lb_weight": 1.0,
+   "lp_weight": 1.0,
+   "breakout_momentum": 0.3025516403402187,
+   "pullback_momentum": 1.01875,
+   "buy_momentum": 1.02,
+   "sell_momentum": 0.3,
+   "status": "created",
+   "lp_locked": false,
+   "locked_by_cycle_id": null,
+   "cycle_collapsed": false,
+   "lp_rows": [
+    {
+     "lp_idx": 2367,
+     "as_of_idx": 2367,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 2368,
+     "pullback_momentum": 0.80625
+    },
+    {
+     "lp_idx": 2368,
+     "as_of_idx": 2368,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 2370,
+     "pullback_momentum": 1.46375
+    },
+    {
+     "lp_idx": 2370,
+     "as_of_idx": 2370,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 2377,
+     "pullback_momentum": 2.00375
+    },
+    {
+     "lp_idx": 2377,
+     "as_of_idx": 2377,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 2378,
+     "pullback_momentum": 0.769125
+    },
+    {
+     "lp_idx": 2378,
+     "as_of_idx": 2378,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 2379,
+     "pullback_momentum": 0.40125
+    },
+    {
+     "lp_idx": 2379,
+     "as_of_idx": 2379,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 2382,
+     "pullback_momentum": 0.604625
+    },
+    {
+     "lp_idx": 2382,
+     "as_of_idx": 2382,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 2384,
+     "pullback_momentum": 0.5433749999999999
+    },
+    {
+     "lp_idx": 2384,
+     "as_of_idx": 2384,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 2385,
+     "pullback_momentum": 0.4075
+    },
+    {
+     "lp_idx": 2385,
+     "as_of_idx": 2385,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 2412,
+     "pullback_momentum": 0.32199999999999995
+    },
+    {
+     "lp_idx": 2412,
+     "as_of_idx": 2412,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 2417,
+     "pullback_momentum": 2.795
+    },
+    {
+     "lp_idx": 2417,
+     "as_of_idx": 2417,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 2418,
+     "pullback_momentum": 0.28612499999999996
+    },
+    {
+     "lp_idx": 2418,
+     "as_of_idx": 2418,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 2419,
+     "pullback_momentum": 0.1505
+    },
+    {
+     "lp_idx": 2419,
+     "as_of_idx": 2419,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 2424,
+     "pullback_momentum": 0.258125
+    },
+    {
+     "lp_idx": 2424,
+     "as_of_idx": 2424,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 2436,
+     "pullback_momentum": 0.48375
+    },
+    {
+     "lp_idx": 2436,
+     "as_of_idx": 2436,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 2437,
+     "pullback_momentum": 0.915
+    },
+    {
+     "lp_idx": 2437,
+     "as_of_idx": 2437,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 2438,
+     "pullback_momentum": 0.6975
+    },
+    {
+     "lp_idx": 2438,
+     "as_of_idx": 2438,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 2441,
+     "pullback_momentum": 0.6875
+    },
+    {
+     "lp_idx": 2441,
+     "as_of_idx": 2441,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 2443,
+     "pullback_momentum": 0.585
+    },
+    {
+     "lp_idx": 2443,
+     "as_of_idx": 2443,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 2448,
+     "pullback_momentum": 0.7275
+    },
+    {
+     "lp_idx": 2448,
+     "as_of_idx": 2448,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 2453,
+     "pullback_momentum": 0.70375
+    },
+    {
+     "lp_idx": 2453,
+     "as_of_idx": 2453,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 2454,
+     "pullback_momentum": 0.546875
+    },
+    {
+     "lp_idx": 2454,
+     "as_of_idx": 2454,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 2455,
+     "pullback_momentum": 0.715
+    },
+    {
+     "lp_idx": 2455,
+     "as_of_idx": 2455,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 2459,
+     "pullback_momentum": 0.35612499999999997
+    },
+    {
+     "lp_idx": 2459,
+     "as_of_idx": 2459,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 2460,
+     "pullback_momentum": 0.645
+    },
+    {
+     "lp_idx": 2460,
+     "as_of_idx": 2460,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 2465,
+     "pullback_momentum": 1.08875
+    },
+    {
+     "lp_idx": 2465,
+     "as_of_idx": 2465,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 2466,
+     "pullback_momentum": 0.89375
+    },
+    {
+     "lp_idx": 2466,
+     "as_of_idx": 2466,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 2467,
+     "pullback_momentum": 1.45875
+    },
+    {
+     "lp_idx": 2467,
+     "as_of_idx": 2467,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 2468,
+     "pullback_momentum": 1.34625
+    },
+    {
+     "lp_idx": 2468,
+     "as_of_idx": 2468,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 2469,
+     "pullback_momentum": 1.275
+    },
+    {
+     "lp_idx": 2469,
+     "as_of_idx": 2469,
+     "lp_status": "unlocked",
+     "lp_status_reason": "cycle ended by a reversal",
+     "lp_status_idx": 2470,
+     "pullback_momentum": 1.01875
+    }
+   ],
+   "owner": "sub1"
+  },
+  {
+   "bos_structure_id": 0,
+   "bos_cycle_id": 0,
+   "zone_side": "buy",
+   "structure_path_id": "H1.main >> M15.confluence",
+   "fb_idx": 2365,
+   "lb_idx": 2552,
+   "fp_idx": 2559,
+   "lp_idx": 2563,
+   "fb_volume": 800.0,
+   "lb_volume": 682.0,
+   "fp_volume": 1544.0,
+   "lp_volume": 1415.0,
+   "lb_weight": 0.7,
+   "lp_weight": 0.7,
+   "breakout_momentum": 0.59675,
+   "pullback_momentum": 0.6415155440414507,
+   "buy_momentum": 0.6,
+   "sell_momentum": 0.64,
+   "status": "locked",
+   "lp_locked": true,
+   "locked_by_cycle_id": 1,
+   "cycle_collapsed": false,
+   "lp_rows": [
+    {
+     "lp_idx": 2560,
+     "as_of_idx": 2560,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 2561,
+     "pullback_momentum": 1.038860103626943
+    },
+    {
+     "lp_idx": 2561,
+     "as_of_idx": 2561,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 2563,
+     "pullback_momentum": 0.5993523316062176
+    },
+    {
+     "lp_idx": 2563,
+     "as_of_idx": 2563,
+     "lp_status": "locked",
+     "lp_status_reason": "cycle 1's BOS confirmed",
+     "lp_status_idx": 2608,
+     "pullback_momentum": 0.6415155440414507
+    }
+   ],
+   "owner": "sub2"
+  },
+  {
+   "bos_structure_id": 0,
+   "bos_cycle_id": 1,
+   "zone_side": "buy",
+   "structure_path_id": "H1.main >> M15.confluence",
+   "fb_idx": 2564,
+   "lb_idx": 2607,
+   "fp_idx": 2611,
+   "lp_idx": 2828,
+   "fb_volume": 1986.0,
+   "lb_volume": 740.0,
+   "fp_volume": 442.0,
+   "lp_volume": 1072.0,
+   "lb_weight": 1.0,
+   "lp_weight": 1.0,
+   "breakout_momentum": 0.3726082578046324,
+   "pullback_momentum": 2.425339366515837,
+   "buy_momentum": 0.37,
+   "sell_momentum": 2.43,
+   "status": "created",
+   "lp_locked": false,
+   "locked_by_cycle_id": null,
+   "cycle_collapsed": false,
+   "lp_rows": [
+    {
+     "lp_idx": 2612,
+     "as_of_idx": 2612,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 2613,
+     "pullback_momentum": 2.255656108597285
+    },
+    {
+     "lp_idx": 2613,
+     "as_of_idx": 2613,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 2614,
+     "pullback_momentum": 0.8504524886877828
+    },
+    {
+     "lp_idx": 2614,
+     "as_of_idx": 2614,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 2615,
+     "pullback_momentum": 0.6350678733031674
+    },
+    {
+     "lp_idx": 2615,
+     "as_of_idx": 2615,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 2616,
+     "pullback_momentum": 0.43393665158371036
+    },
+    {
+     "lp_idx": 2616,
+     "as_of_idx": 2616,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 2651,
+     "pullback_momentum": 0.39751131221719455
+    },
+    {
+     "lp_idx": 2651,
+     "as_of_idx": 2651,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 2653,
+     "pullback_momentum": 1.339366515837104
+    },
+    {
+     "lp_idx": 2653,
+     "as_of_idx": 2653,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 2665,
+     "pullback_momentum": 1.579185520361991
+    },
+    {
+     "lp_idx": 2665,
+     "as_of_idx": 2665,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 2668,
+     "pullback_momentum": 1.9434389140271493
+    },
+    {
+     "lp_idx": 2668,
+     "as_of_idx": 2668,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 2671,
+     "pullback_momentum": 1.084841628959276
+    },
+    {
+     "lp_idx": 2671,
+     "as_of_idx": 2671,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 2711,
+     "pullback_momentum": 0.7828054298642534
+    },
+    {
+     "lp_idx": 2711,
+     "as_of_idx": 2711,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 2714,
+     "pullback_momentum": 0.9296380090497737
+    },
+    {
+     "lp_idx": 2714,
+     "as_of_idx": 2714,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 2716,
+     "pullback_momentum": 0.8773755656108596
+    },
+    {
+     "lp_idx": 2716,
+     "as_of_idx": 2716,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 2722,
+     "pullback_momentum": 0.8031674208144797
+    },
+    {
+     "lp_idx": 2722,
+     "as_of_idx": 2722,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 2723,
+     "pullback_momentum": 1.3054298642533937
+    },
+    {
+     "lp_idx": 2723,
+     "as_of_idx": 2723,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 2724,
+     "pullback_momentum": 0.734841628959276
+    },
+    {
+     "lp_idx": 2724,
+     "as_of_idx": 2724,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 2725,
+     "pullback_momentum": 1.5294117647058822
+    },
+    {
+     "lp_idx": 2725,
+     "as_of_idx": 2725,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 2726,
+     "pullback_momentum": 0.5531674208144797
+    },
+    {
+     "lp_idx": 2726,
+     "as_of_idx": 2726,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 2730,
+     "pullback_momentum": 1.5203619909502262
+    },
+    {
+     "lp_idx": 2730,
+     "as_of_idx": 2730,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 2732,
+     "pullback_momentum": 0.8821266968325792
+    },
+    {
+     "lp_idx": 2732,
+     "as_of_idx": 2732,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 2733,
+     "pullback_momentum": 1.4728506787330318
+    },
+    {
+     "lp_idx": 2733,
+     "as_of_idx": 2733,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 2734,
+     "pullback_momentum": 0.4925339366515837
+    },
+    {
+     "lp_idx": 2734,
+     "as_of_idx": 2734,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 2735,
+     "pullback_momentum": 0.6572398190045249
+    },
+    {
+     "lp_idx": 2735,
+     "as_of_idx": 2735,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 2745,
+     "pullback_momentum": 0.8156108597285068
+    },
+    {
+     "lp_idx": 2745,
+     "as_of_idx": 2745,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 2816,
+     "pullback_momentum": 0.46153846153846156
+    },
+    {
+     "lp_idx": 2816,
+     "as_of_idx": 2816,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 2818,
+     "pullback_momentum": 1.3665158371040724
+    },
+    {
+     "lp_idx": 2818,
+     "as_of_idx": 2818,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 2824,
+     "pullback_momentum": 1.5135746606334841
+    },
+    {
+     "lp_idx": 2824,
+     "as_of_idx": 2824,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 2828,
+     "pullback_momentum": 2.32579185520362
+    },
+    {
+     "lp_idx": 2828,
+     "as_of_idx": 2828,
+     "lp_status": "unlocked",
+     "lp_status_reason": "cycle ended by a reversal",
+     "lp_status_idx": 2829,
+     "pullback_momentum": 2.425339366515837
+    }
+   ],
+   "owner": "sub2"
+  },
+  {
+   "bos_structure_id": 0,
+   "bos_cycle_id": 0,
+   "zone_side": "sell",
+   "structure_path_id": "H1.main >> M15.confluence",
+   "fb_idx": 2631,
+   "lb_idx": 2734,
+   "fp_idx": 2736,
+   "lp_idx": 2757,
+   "fb_volume": 785.0,
+   "lb_volume": 415.0,
+   "fp_volume": 396.0,
+   "lp_volume": 1323.0,
+   "lb_weight": 0.7,
+   "lp_weight": 1.0,
+   "breakout_momentum": 0.3700636942675159,
+   "pullback_momentum": 3.340909090909091,
+   "buy_momentum": 3.34,
+   "sell_momentum": 0.37,
+   "status": "locked",
+   "lp_locked": true,
+   "locked_by_cycle_id": 1,
+   "cycle_collapsed": true,
+   "lp_rows": [
+    {
+     "lp_idx": 2752,
+     "as_of_idx": 2752,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 2754,
+     "pullback_momentum": 2.5505050505050506
+    },
+    {
+     "lp_idx": 2754,
+     "as_of_idx": 2754,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 2756,
+     "pullback_momentum": 3.275252525252525
+    },
+    {
+     "lp_idx": 2756,
+     "as_of_idx": 2756,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 2757,
+     "pullback_momentum": 3.7525252525252526
+    },
+    {
+     "lp_idx": 2757,
+     "as_of_idx": 2757,
+     "lp_status": "locked",
+     "lp_status_reason": "cycle 1's BOS confirmed",
+     "lp_status_idx": 2829,
+     "pullback_momentum": 3.340909090909091
+    }
+   ],
+   "owner": "sub3"
+  },
+  {
+   "bos_structure_id": 0,
+   "bos_cycle_id": 1,
+   "zone_side": "sell",
+   "structure_path_id": "H1.main >> M15.confluence",
+   "fb_idx": 2758,
+   "lb_idx": 2841,
+   "fp_idx": 2843,
+   "lp_idx": 2914,
+   "fb_volume": 963.0,
+   "lb_volume": 758.0,
+   "fp_volume": 478.0,
+   "lp_volume": 436.0,
+   "lb_weight": 1.0,
+   "lp_weight": 0.7,
+   "breakout_momentum": 0.7871235721703012,
+   "pullback_momentum": 0.6384937238493723,
+   "buy_momentum": 0.64,
+   "sell_momentum": 0.79,
+   "status": "locked",
+   "lp_locked": true,
+   "locked_by_cycle_id": 2,
+   "cycle_collapsed": false,
+   "lp_rows": [
+    {
+     "lp_idx": 2844,
+     "as_of_idx": 2844,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 2847,
+     "pullback_momentum": 1.45418410041841
+    },
+    {
+     "lp_idx": 2847,
+     "as_of_idx": 2847,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 2848,
+     "pullback_momentum": 1.9832635983263598
+    },
+    {
+     "lp_idx": 2848,
+     "as_of_idx": 2848,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 2849,
+     "pullback_momentum": 1.37510460251046
+    },
+    {
+     "lp_idx": 2849,
+     "as_of_idx": 2849,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 2850,
+     "pullback_momentum": 1.709205020920502
+    },
+    {
+     "lp_idx": 2850,
+     "as_of_idx": 2850,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 2855,
+     "pullback_momentum": 2.506276150627615
+    },
+    {
+     "lp_idx": 2855,
+     "as_of_idx": 2855,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 2901,
+     "pullback_momentum": 4.376569037656904
+    },
+    {
+     "lp_idx": 2901,
+     "as_of_idx": 2901,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 2904,
+     "pullback_momentum": 1.1736401673640167
+    },
+    {
+     "lp_idx": 2904,
+     "as_of_idx": 2904,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 2905,
+     "pullback_momentum": 0.5732217573221757
+    },
+    {
+     "lp_idx": 2905,
+     "as_of_idx": 2905,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 2906,
+     "pullback_momentum": 0.23870292887029287
+    },
+    {
+     "lp_idx": 2906,
+     "as_of_idx": 2906,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 2907,
+     "pullback_momentum": 0.2679916317991632
+    },
+    {
+     "lp_idx": 2907,
+     "as_of_idx": 2907,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 2908,
+     "pullback_momentum": 0.2719665271966527
+    },
+    {
+     "lp_idx": 2908,
+     "as_of_idx": 2908,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 2909,
+     "pullback_momentum": 0.5167364016736402
+    },
+    {
+     "lp_idx": 2909,
+     "as_of_idx": 2909,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 2912,
+     "pullback_momentum": 0.4790794979079498
+    },
+    {
+     "lp_idx": 2912,
+     "as_of_idx": 2912,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 2913,
+     "pullback_momentum": 0.4372384937238494
+    },
+    {
+     "lp_idx": 2913,
+     "as_of_idx": 2913,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 2914,
+     "pullback_momentum": 0.4246861924686193
+    },
+    {
+     "lp_idx": 2914,
+     "as_of_idx": 2914,
+     "lp_status": "locked",
+     "lp_status_reason": "cycle 2's BOS confirmed",
+     "lp_status_idx": 2992,
+     "pullback_momentum": 0.6384937238493723
+    }
+   ],
+   "owner": "sub3"
+  },
+  {
+   "bos_structure_id": 0,
+   "bos_cycle_id": 2,
+   "zone_side": "sell",
+   "structure_path_id": "H1.main >> M15.confluence",
+   "fb_idx": 2917,
+   "lb_idx": 3045,
+   "fp_idx": 3048,
+   "lp_idx": 3299,
+   "fb_volume": 644.0,
+   "lb_volume": 1009.0,
+   "fp_volume": 1544.0,
+   "lp_volume": 584.0,
+   "lb_weight": 0.7,
+   "lp_weight": 0.7,
+   "breakout_momentum": 1.0967391304347824,
+   "pullback_momentum": 0.2647668393782383,
+   "buy_momentum": 0.26,
+   "sell_momentum": 1.1,
+   "status": "created",
+   "lp_locked": false,
+   "locked_by_cycle_id": null,
+   "cycle_collapsed": false,
+   "lp_rows": [
+    {
+     "lp_idx": 3086,
+     "as_of_idx": 3086,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 3112,
+     "pullback_momentum": 0.2817357512953368
+    },
+    {
+     "lp_idx": 3112,
+     "as_of_idx": 3112,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 3118,
+     "pullback_momentum": 0.6580310880829016
+    },
+    {
+     "lp_idx": 3118,
+     "as_of_idx": 3118,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 3123,
+     "pullback_momentum": 0.30148963730569944
+    },
+    {
+     "lp_idx": 3123,
+     "as_of_idx": 3123,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 3139,
+     "pullback_momentum": 0.22804404145077717
+    },
+    {
+     "lp_idx": 3139,
+     "as_of_idx": 3139,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 3140,
+     "pullback_momentum": 0.46049222797927464
+    },
+    {
+     "lp_idx": 3140,
+     "as_of_idx": 3140,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 3236,
+     "pullback_momentum": 0.7351036269430051
+    },
+    {
+     "lp_idx": 3236,
+     "as_of_idx": 3236,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 3237,
+     "pullback_momentum": 1.1949481865284974
+    },
+    {
+     "lp_idx": 3237,
+     "as_of_idx": 3237,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 3238,
+     "pullback_momentum": 1.2629533678756477
+    },
+    {
+     "lp_idx": 3238,
+     "as_of_idx": 3238,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 3240,
+     "pullback_momentum": 0.5830310880829015
+    },
+    {
+     "lp_idx": 3240,
+     "as_of_idx": 3240,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 3241,
+     "pullback_momentum": 0.6079663212435232
+    },
+    {
+     "lp_idx": 3241,
+     "as_of_idx": 3241,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 3242,
+     "pullback_momentum": 0.5512953367875647
+    },
+    {
+     "lp_idx": 3242,
+     "as_of_idx": 3242,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 3243,
+     "pullback_momentum": 0.32674870466321243
+    },
+    {
+     "lp_idx": 3243,
+     "as_of_idx": 3243,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 3251,
+     "pullback_momentum": 0.40213730569948186
+    },
+    {
+     "lp_idx": 3251,
+     "as_of_idx": 3251,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 3252,
+     "pullback_momentum": 0.16457253886010362
+    },
+    {
+     "lp_idx": 3252,
+     "as_of_idx": 3252,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 3253,
+     "pullback_momentum": 0.054404145077720206
+    },
+    {
+     "lp_idx": 3253,
+     "as_of_idx": 3253,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 3254,
+     "pullback_momentum": 0.08795336787564766
+    },
+    {
+     "lp_idx": 3254,
+     "as_of_idx": 3254,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 3255,
+     "pullback_momentum": 0.08523316062176166
+    },
+    {
+     "lp_idx": 3255,
+     "as_of_idx": 3255,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 3256,
+     "pullback_momentum": 0.19268134715025906
+    },
+    {
+     "lp_idx": 3256,
+     "as_of_idx": 3256,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 3279,
+     "pullback_momentum": 0.07752590673575128
+    },
+    {
+     "lp_idx": 3279,
+     "as_of_idx": 3279,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 3280,
+     "pullback_momentum": 0.6502590673575129
+    },
+    {
+     "lp_idx": 3280,
+     "as_of_idx": 3280,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 3281,
+     "pullback_momentum": 0.5505181347150259
+    },
+    {
+     "lp_idx": 3281,
+     "as_of_idx": 3281,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 3282,
+     "pullback_momentum": 0.24572538860103627
+    },
+    {
+     "lp_idx": 3282,
+     "as_of_idx": 3282,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 3283,
+     "pullback_momentum": 0.2992227979274611
+    },
+    {
+     "lp_idx": 3283,
+     "as_of_idx": 3283,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 3293,
+     "pullback_momentum": 0.4792746113989637
+    },
+    {
+     "lp_idx": 3293,
+     "as_of_idx": 3293,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 3297,
+     "pullback_momentum": 0.21308290155440415
+    },
+    {
+     "lp_idx": 3297,
+     "as_of_idx": 3297,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 3298,
+     "pullback_momentum": 0.18769430051813468
+    },
+    {
+     "lp_idx": 3298,
+     "as_of_idx": 3298,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 3299,
+     "pullback_momentum": 0.33730569948186523
+    },
+    {
+     "lp_idx": 3299,
+     "as_of_idx": 3299,
+     "lp_status": "unlocked",
+     "lp_status_reason": "sub replaced",
+     "lp_status_idx": 3491,
+     "pullback_momentum": 0.2647668393782383
+    }
+   ],
+   "owner": "sub3"
+  },
+  {
+   "bos_structure_id": 0,
+   "bos_cycle_id": 0,
+   "zone_side": "buy",
+   "structure_path_id": "H1.main >> M15.confluence",
+   "fb_idx": 3231,
+   "lb_idx": 3299,
+   "fp_idx": 3300,
+   "lp_idx": 3588,
+   "fb_volume": 1205.0,
+   "lb_volume": 584.0,
+   "fp_volume": 585.0,
+   "lp_volume": 760.0,
+   "lb_weight": 0.7,
+   "lp_weight": 1.0,
+   "breakout_momentum": 0.33925311203319497,
+   "pullback_momentum": 1.2991452991452992,
+   "buy_momentum": 0.34,
+   "sell_momentum": 1.3,
+   "status": "created",
+   "lp_locked": false,
+   "locked_by_cycle_id": null,
+   "cycle_collapsed": false,
+   "lp_rows": [
+    {
+     "lp_idx": 3336,
+     "as_of_idx": 3336,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 3451,
+     "pullback_momentum": 2.2786324786324785
+    },
+    {
+     "lp_idx": 3451,
+     "as_of_idx": 3451,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 3452,
+     "pullback_momentum": 0.5528205128205128
+    },
+    {
+     "lp_idx": 3452,
+     "as_of_idx": 3452,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 3453,
+     "pullback_momentum": 0.24649572649572649
+    },
+    {
+     "lp_idx": 3453,
+     "as_of_idx": 3453,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 3465,
+     "pullback_momentum": 0.30085470085470084
+    },
+    {
+     "lp_idx": 3465,
+     "as_of_idx": 3465,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 3467,
+     "pullback_momentum": 0.4188034188034188
+    },
+    {
+     "lp_idx": 3467,
+     "as_of_idx": 3467,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 3470,
+     "pullback_momentum": 0.5899145299145299
+    },
+    {
+     "lp_idx": 3470,
+     "as_of_idx": 3470,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 3472,
+     "pullback_momentum": 1.27008547008547
+    },
+    {
+     "lp_idx": 3472,
+     "as_of_idx": 3472,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 3473,
+     "pullback_momentum": 1.6051282051282052
+    },
+    {
+     "lp_idx": 3473,
+     "as_of_idx": 3473,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 3475,
+     "pullback_momentum": 1.288888888888889
+    },
+    {
+     "lp_idx": 3475,
+     "as_of_idx": 3475,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 3483,
+     "pullback_momentum": 0.9213675213675213
+    },
+    {
+     "lp_idx": 3483,
+     "as_of_idx": 3483,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 3484,
+     "pullback_momentum": 0.5145299145299145
+    },
+    {
+     "lp_idx": 3484,
+     "as_of_idx": 3484,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 3486,
+     "pullback_momentum": 1.165811965811966
+    },
+    {
+     "lp_idx": 3486,
+     "as_of_idx": 3486,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 3488,
+     "pullback_momentum": 0.8316239316239316
+    },
+    {
+     "lp_idx": 3488,
+     "as_of_idx": 3488,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 3489,
+     "pullback_momentum": 1.1794871794871795
+    },
+    {
+     "lp_idx": 3489,
+     "as_of_idx": 3489,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 3498,
+     "pullback_momentum": 1.5982905982905984
+    },
+    {
+     "lp_idx": 3498,
+     "as_of_idx": 3498,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 3499,
+     "pullback_momentum": 1.6136752136752137
+    },
+    {
+     "lp_idx": 3499,
+     "as_of_idx": 3499,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 3500,
+     "pullback_momentum": 1.5777777777777777
+    },
+    {
+     "lp_idx": 3500,
+     "as_of_idx": 3500,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 3501,
+     "pullback_momentum": 1.096068376068376
+    },
+    {
+     "lp_idx": 3501,
+     "as_of_idx": 3501,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 3502,
+     "pullback_momentum": 0.7945299145299145
+    },
+    {
+     "lp_idx": 3502,
+     "as_of_idx": 3502,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 3521,
+     "pullback_momentum": 1.4136752136752138
+    },
+    {
+     "lp_idx": 3521,
+     "as_of_idx": 3521,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 3566,
+     "pullback_momentum": 1.8136752136752137
+    },
+    {
+     "lp_idx": 3566,
+     "as_of_idx": 3566,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 3584,
+     "pullback_momentum": 1.6102564102564103
+    },
+    {
+     "lp_idx": 3584,
+     "as_of_idx": 3584,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 3587,
+     "pullback_momentum": 1.0974358974358975
+    },
+    {
+     "lp_idx": 3587,
+     "as_of_idx": 3587,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 3588,
+     "pullback_momentum": 0.8632478632478633
+    },
+    {
+     "lp_idx": 3588,
+     "as_of_idx": 3588,
+     "lp_status": "unlocked",
+     "lp_status_reason": "cycle ended by a reversal",
+     "lp_status_idx": 3589,
+     "pullback_momentum": 1.2991452991452992
+    }
+   ],
+   "owner": "sub4"
+  },
+  {
+   "bos_structure_id": 0,
+   "bos_cycle_id": 0,
+   "zone_side": "sell",
+   "structure_path_id": "H1.main >> M15.confluence",
+   "fb_idx": 3300,
+   "lb_idx": 3617,
+   "fp_idx": 3647,
+   "lp_idx": 3773,
+   "fb_volume": 585.0,
+   "lb_volume": 2027.0,
+   "fp_volume": 362.0,
+   "lp_volume": 434.0,
+   "lb_weight": 0.7,
+   "lp_weight": 1.0,
+   "breakout_momentum": 2.425470085470085,
+   "pullback_momentum": 1.1988950276243093,
+   "buy_momentum": 1.2,
+   "sell_momentum": 2.43,
+   "status": "created",
+   "lp_locked": false,
+   "locked_by_cycle_id": null,
+   "cycle_collapsed": false,
+   "lp_rows": [
+    {
+     "lp_idx": 3741,
+     "as_of_idx": 3741,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 3742,
+     "pullback_momentum": 0.48066298342541436
+    },
+    {
+     "lp_idx": 3742,
+     "as_of_idx": 3742,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 3755,
+     "pullback_momentum": 0.1781767955801105
+    },
+    {
+     "lp_idx": 3755,
+     "as_of_idx": 3755,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 3756,
+     "pullback_momentum": 1.5331491712707181
+    },
+    {
+     "lp_idx": 3756,
+     "as_of_idx": 3756,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 3760,
+     "pullback_momentum": 1.5740331491712707
+    },
+    {
+     "lp_idx": 3760,
+     "as_of_idx": 3760,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 3773,
+     "pullback_momentum": 1.9143646408839778
+    },
+    {
+     "lp_idx": 3773,
+     "as_of_idx": 3773,
+     "lp_status": "unlocked",
+     "lp_status_reason": "sub replaced",
+     "lp_status_idx": 3819,
+     "pullback_momentum": 1.1988950276243093
+    }
+   ],
+   "owner": "sub5"
+  },
+  {
+   "bos_structure_id": 0,
+   "bos_cycle_id": 0,
+   "zone_side": "sell",
+   "structure_path_id": "H1.main >> M15.confluence",
+   "fb_idx": 3774,
+   "lb_idx": 3998,
+   "fp_idx": 4000,
+   "lp_idx": 4196,
+   "fb_volume": 456.0,
+   "lb_volume": 1152.0,
+   "fp_volume": 1121.0,
+   "lp_volume": 621.0,
+   "lb_weight": 1.0,
+   "lp_weight": 1.0,
+   "breakout_momentum": 2.526315789473684,
+   "pullback_momentum": 0.5539696699375558,
+   "buy_momentum": 0.55,
+   "sell_momentum": 2.53,
+   "status": "created",
+   "lp_locked": false,
+   "locked_by_cycle_id": null,
+   "cycle_collapsed": false,
+   "lp_rows": [
+    {
+     "lp_idx": 4070,
+     "as_of_idx": 4071,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 4073,
+     "pullback_momentum": 0.34255129348795715
+    },
+    {
+     "lp_idx": 4073,
+     "as_of_idx": 4073,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 4074,
+     "pullback_momentum": 0.3818019625334523
+    },
+    {
+     "lp_idx": 4074,
+     "as_of_idx": 4074,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 4076,
+     "pullback_momentum": 0.2429081177520071
+    },
+    {
+     "lp_idx": 4076,
+     "as_of_idx": 4076,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 4082,
+     "pullback_momentum": 0.3327386262265834
+    },
+    {
+     "lp_idx": 4082,
+     "as_of_idx": 4082,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 4084,
+     "pullback_momentum": 0.2631578947368421
+    },
+    {
+     "lp_idx": 4084,
+     "as_of_idx": 4084,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 4085,
+     "pullback_momentum": 0.2872435325602141
+    },
+    {
+     "lp_idx": 4085,
+     "as_of_idx": 4085,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 4140,
+     "pullback_momentum": 0.23853702051739517
+    },
+    {
+     "lp_idx": 4140,
+     "as_of_idx": 4140,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 4142,
+     "pullback_momentum": 1.1845673505798393
+    },
+    {
+     "lp_idx": 4142,
+     "as_of_idx": 4142,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 4151,
+     "pullback_momentum": 0.6506690454950936
+    },
+    {
+     "lp_idx": 4151,
+     "as_of_idx": 4151,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 4152,
+     "pullback_momentum": 0.5045495093666369
+    },
+    {
+     "lp_idx": 4152,
+     "as_of_idx": 4152,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 4153,
+     "pullback_momentum": 0.44897413024085636
+    },
+    {
+     "lp_idx": 4153,
+     "as_of_idx": 4153,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 4154,
+     "pullback_momentum": 0.776092774308653
+    },
+    {
+     "lp_idx": 4154,
+     "as_of_idx": 4154,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 4155,
+     "pullback_momentum": 0.6066012488849242
+    },
+    {
+     "lp_idx": 4155,
+     "as_of_idx": 4155,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 4156,
+     "pullback_momentum": 0.4889384478144513
+    },
+    {
+     "lp_idx": 4156,
+     "as_of_idx": 4156,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 4157,
+     "pullback_momentum": 0.1935771632471008
+    },
+    {
+     "lp_idx": 4157,
+     "as_of_idx": 4157,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 4176,
+     "pullback_momentum": 0.6940231935771632
+    },
+    {
+     "lp_idx": 4176,
+     "as_of_idx": 4176,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 4177,
+     "pullback_momentum": 0.2535236396074933
+    },
+    {
+     "lp_idx": 4177,
+     "as_of_idx": 4177,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 4178,
+     "pullback_momentum": 0.2785013380909902
+    },
+    {
+     "lp_idx": 4178,
+     "as_of_idx": 4178,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 4179,
+     "pullback_momentum": 0.39161462979482603
+    },
+    {
+     "lp_idx": 4179,
+     "as_of_idx": 4179,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 4183,
+     "pullback_momentum": 0.5932203389830508
+    },
+    {
+     "lp_idx": 4183,
+     "as_of_idx": 4183,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 4184,
+     "pullback_momentum": 0.19000892060660124
+    },
+    {
+     "lp_idx": 4184,
+     "as_of_idx": 4184,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 4185,
+     "pullback_momentum": 0.4103479036574487
+    },
+    {
+     "lp_idx": 4185,
+     "as_of_idx": 4185,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 4186,
+     "pullback_momentum": 0.2878679750223015
+    },
+    {
+     "lp_idx": 4186,
+     "as_of_idx": 4186,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 4195,
+     "pullback_momentum": 0.284121320249777
+    },
+    {
+     "lp_idx": 4195,
+     "as_of_idx": 4195,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 4196,
+     "pullback_momentum": 0.47814451382694023
+    },
+    {
+     "lp_idx": 4196,
+     "as_of_idx": 4196,
+     "lp_status": "unlocked",
+     "lp_status_reason": "cycle ended by a reversal",
+     "lp_status_idx": 4200,
+     "pullback_momentum": 0.5539696699375558
+    }
+   ],
+   "owner": "sub7"
+  },
+  {
+   "bos_structure_id": 0,
+   "bos_cycle_id": 0,
+   "zone_side": "buy",
+   "structure_path_id": "H1.main >> M15.confluence",
+   "fb_idx": 4030,
+   "lb_idx": 4082,
+   "fp_idx": 4083,
+   "lp_idx": 4129,
+   "fb_volume": 229.0,
+   "lb_volume": 295.0,
+   "fp_volume": 316.0,
+   "lp_volume": 148.0,
+   "lb_weight": 1.0,
+   "lp_weight": 1.0,
+   "breakout_momentum": 1.2882096069868996,
+   "pullback_momentum": 0.46835443037974683,
+   "buy_momentum": 1.29,
+   "sell_momentum": 0.47,
+   "status": "locked",
+   "lp_locked": true,
+   "locked_by_cycle_id": 1,
+   "cycle_collapsed": false,
+   "lp_rows": [
+    {
+     "lp_idx": 4098,
+     "as_of_idx": 4098,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 4101,
+     "pullback_momentum": 2.8797468354430378
+    },
+    {
+     "lp_idx": 4101,
+     "as_of_idx": 4101,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 4102,
+     "pullback_momentum": 7.132911392405063
+    },
+    {
+     "lp_idx": 4102,
+     "as_of_idx": 4102,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 4129,
+     "pullback_momentum": 5.050632911392405
+    },
+    {
+     "lp_idx": 4129,
+     "as_of_idx": 4129,
+     "lp_status": "locked",
+     "lp_status_reason": "cycle 1's BOS confirmed",
+     "lp_status_idx": 4157,
+     "pullback_momentum": 0.46835443037974683
+    }
+   ],
+   "owner": "sub8"
+  },
+  {
+   "bos_structure_id": 0,
+   "bos_cycle_id": 1,
+   "zone_side": "buy",
+   "structure_path_id": "H1.main >> M15.confluence",
+   "fb_idx": 4130,
+   "lb_idx": 4156,
+   "fp_idx": 4158,
+   "lp_idx": 4167,
+   "fb_volume": 364.0,
+   "lb_volume": 434.0,
+   "fp_volume": 586.0,
+   "lp_volume": 616.0,
+   "lb_weight": 0.5,
+   "lp_weight": 0.7,
+   "breakout_momentum": 0.5961538461538461,
+   "pullback_momentum": 0.7358361774744027,
+   "buy_momentum": 0.6,
+   "sell_momentum": 0.74,
+   "status": "locked",
+   "lp_locked": true,
+   "locked_by_cycle_id": 2,
+   "cycle_collapsed": false,
+   "lp_rows": [
+    {
+     "lp_idx": 4159,
+     "as_of_idx": 4159,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 4162,
+     "pullback_momentum": 0.9030716723549487
+    },
+    {
+     "lp_idx": 4162,
+     "as_of_idx": 4162,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 4166,
+     "pullback_momentum": 1.0341296928327646
+    },
+    {
+     "lp_idx": 4166,
+     "as_of_idx": 4166,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 4167,
+     "pullback_momentum": 1.372013651877133
+    },
+    {
+     "lp_idx": 4167,
+     "as_of_idx": 4167,
+     "lp_status": "locked",
+     "lp_status_reason": "cycle 2's BOS confirmed",
+     "lp_status_idx": 4179,
+     "pullback_momentum": 0.7358361774744027
+    }
+   ],
+   "owner": "sub8"
+  },
+  {
+   "bos_structure_id": 0,
+   "bos_cycle_id": 0,
+   "zone_side": "buy",
+   "structure_path_id": "H1.main >> M15.counter",
+   "fb_idx": 3647,
+   "lb_idx": 3756,
+   "fp_idx": 3761,
+   "lp_idx": 4002,
+   "fb_volume": 362.0,
+   "lb_volume": 814.0,
+   "fp_volume": 610.0,
+   "lp_volume": 1473.0,
+   "lb_weight": 0.7,
+   "lp_weight": 1.0,
+   "breakout_momentum": 1.5740331491712707,
+   "pullback_momentum": 2.414754098360656,
+   "buy_momentum": 1.57,
+   "sell_momentum": 2.41,
+   "status": "created",
+   "lp_locked": false,
+   "locked_by_cycle_id": null,
+   "cycle_collapsed": false,
+   "lp_rows": [
+    {
+     "lp_idx": 3786,
+     "as_of_idx": 3786,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 3793,
+     "pullback_momentum": 0.9008196721311476
+    },
+    {
+     "lp_idx": 3793,
+     "as_of_idx": 3793,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 3794,
+     "pullback_momentum": 0.8950819672131147
+    },
+    {
+     "lp_idx": 3794,
+     "as_of_idx": 3794,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 3795,
+     "pullback_momentum": 0.780327868852459
+    },
+    {
+     "lp_idx": 3795,
+     "as_of_idx": 3795,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 3796,
+     "pullback_momentum": 0.6299999999999999
+    },
+    {
+     "lp_idx": 3796,
+     "as_of_idx": 3796,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 3797,
+     "pullback_momentum": 0.5301639344262294
+    },
+    {
+     "lp_idx": 3797,
+     "as_of_idx": 3797,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 3802,
+     "pullback_momentum": 0.5118032786885246
+    },
+    {
+     "lp_idx": 3802,
+     "as_of_idx": 3802,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 3803,
+     "pullback_momentum": 0.5262295081967213
+    },
+    {
+     "lp_idx": 3803,
+     "as_of_idx": 3803,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 3805,
+     "pullback_momentum": 0.7608196721311475
+    },
+    {
+     "lp_idx": 3805,
+     "as_of_idx": 3805,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 3812,
+     "pullback_momentum": 1.3475409836065573
+    },
+    {
+     "lp_idx": 3812,
+     "as_of_idx": 3812,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 3813,
+     "pullback_momentum": 2.5278688524590165
+    },
+    {
+     "lp_idx": 3813,
+     "as_of_idx": 3813,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 3814,
+     "pullback_momentum": 2.3540983606557377
+    },
+    {
+     "lp_idx": 3814,
+     "as_of_idx": 3814,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 3816,
+     "pullback_momentum": 1.0770491803278688
+    },
+    {
+     "lp_idx": 3816,
+     "as_of_idx": 3816,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 3817,
+     "pullback_momentum": 1.9229508196721312
+    },
+    {
+     "lp_idx": 3817,
+     "as_of_idx": 3817,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 3829,
+     "pullback_momentum": 1.1991803278688524
+    },
+    {
+     "lp_idx": 3829,
+     "as_of_idx": 3829,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 3838,
+     "pullback_momentum": 0.6322950819672131
+    },
+    {
+     "lp_idx": 3838,
+     "as_of_idx": 3838,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 3848,
+     "pullback_momentum": 0.2122950819672131
+    },
+    {
+     "lp_idx": 3848,
+     "as_of_idx": 3848,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 3852,
+     "pullback_momentum": 0.41475409836065574
+    },
+    {
+     "lp_idx": 3852,
+     "as_of_idx": 3852,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 3853,
+     "pullback_momentum": 1.318032786885246
+    },
+    {
+     "lp_idx": 3853,
+     "as_of_idx": 3853,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 3999,
+     "pullback_momentum": 1.198360655737705
+    },
+    {
+     "lp_idx": 3999,
+     "as_of_idx": 3999,
+     "lp_status": "temporary",
+     "lp_status_reason": "replaced by a further close",
+     "lp_status_idx": 4002,
+     "pullback_momentum": 1.3621311475409836
+    },
+    {
+     "lp_idx": 4002,
+     "as_of_idx": 4002,
+     "lp_status": "unlocked",
+     "lp_status_reason": "sub replaced",
+     "lp_status_idx": 4143,
+     "pullback_momentum": 2.414754098360656
+    }
+   ],
+   "owner": "sub6"
+  }
+ ]
+}
