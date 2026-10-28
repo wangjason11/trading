@@ -549,8 +549,8 @@ Around an IC candidate, read with the agreed direction (PLAN_H §1 items 2–9):
 - **true dojis** (candle AND volume direction 0) never break a run and are full members of the leg they are assigned
   to: between opp and continuation → the continuation; between initial and opp → tried in each leg (J1); never the
   pattern's first or last candle (E1);
-- a leg is **stacked** (first open, max high, min low, last close) and classified by the SAME classifier and per-TF
-  params as a single candle, against the body floor of its LAST candle (the frame's `pinbar_body_floor`, the moment
+- a leg is **stacked** (first open, max high, min low, last close) and classified by the SAME classifier and params
+  (`CandleParams()`) as a single candle, against the body floor of its LAST candle (the frame's `pinbar_body_floor`, the moment
   the leg is complete — PLAN_U §3.3); big flags = the single-candle ratio vs the 5 marus before the pattern's first candle
   (`pattern_anchor_idx`): big_maru = maru + ratio ≥ 0.65, big_normal = normal + ratio ≥ 0.5;
 - **requirement:** the continuation is big_maru with a stacked body strictly greater than the opp leg's;
@@ -590,8 +590,9 @@ MarketStructure's in-flight read (`poi_inner_for_fib`, on its embedded FibTracke
 CTS_ESTABLISHED / CTS_UPDATED — PLAN_I S5, the drawn fib's own decision; its pick can differ from the final one while
 the CTS still extends) call the same `select_ic`, each with the record's IC reference (§3.2) from the same builder
 at its own moment (PLAN_H D2; PLAN_K §3.1). The
-candle params and the leg cap come from the FRAME (`df.attrs["timeframe"]`, stamped by
-`apply_candle_classification`; a missing stamp raises). The selection is computed once per pipeline run
+leg cap comes from the FRAME (`df.attrs["timeframe"]`, stamped by
+`apply_candle_classification`; a missing stamp raises), as does each stacked leg's body floor (the frame's
+`pinbar_body_floor` column; the candle params are `CandleParams()` on every frame since PLAN_U U2). The selection is computed once per pipeline run
 (`select_ic_records`: the lifecycle gate, then the cycle's CTS_ESTABLISHED, then `select_ic(..., classify_all=True)`)
 and handed to both
 the drawn POIs and the debug CSV (§3.5). The read's fail-loud scope: LANDMINES "The POI Resolver Fails Loudly".

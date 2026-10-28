@@ -149,7 +149,9 @@ _F16_ROWS = [
 
 
 def _f16_ms():
-    df = _prepare_df([dict(o=o, h=h, l=l, c=c) for o, h, l, c in _F16_ROWS])
+    # the candles as pinned (PLAN_J J1), classified with the fixed 2.2-pip floor of that time: 30 rows hold no
+    # rolling window (PLAN_U U2), so the floor is explicit
+    df = _prepare_df([dict(o=o, h=h, l=l, c=c) for o, h, l, c in _F16_ROWS], body_floor_pips=2.2)
     return se._make_market_structure(df, struct_direction=-1, start_idx=11, structure_id=0, timeframe="M15",
                                      pip_size=se._pip_size_from_pair(df), cycle0_proximity_blocked=True, cross_fib_limit=NO_P)
 

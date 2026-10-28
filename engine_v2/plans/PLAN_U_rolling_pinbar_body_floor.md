@@ -1,8 +1,8 @@
 # PLAN_U — the rolling pinbar body floor: p90 of the 90 most recent pinbars, the history fetched before the frame (the user's floor calibration, 2026-10-27 / 28)
 
-**Status: U1 LANDED 2026-10-28 (= §4.2; source `b64b10a`, save **S_U1** `20261028_090632_b64b10a` = the new
-`LATEST_<branch>`, U2's `/compare` baseline; §9); the cold review DONE (§8 — no blocker; its U2 amendments listed
-there); U2 NEXT (a fresh session), then U3.** U1's baseline **S_controls**
+**Status: U1 LANDED 2026-10-28 (= §4.2; source `b64b10a`, save **S_U1** `20261028_090632_b64b10a`, U2's `/compare`
+baseline; §9); the cold review DONE (§8 — no blocker; its U2 amendments carried, §9 "U2"); U2 BUILT 2026-10-28 (= §5.2
+exactly; the `/compare` vs S_U1 done, the user's chart look pending, then `/commit-save`; §9 "U2"), then U3.** U1's baseline **S_controls**
 `artifacts/commits/week9-entries-decisions/20261027_164527_5dfb5b3` (`LATEST_week9-entries-decisions` until S_U1; source
 `5dfb5b3`, HEAD at drafting `4914f31`, code = `5dfb5b3`); suite 2108. Session order item 7 (register
 `IDEA_PARKING_LOT.md` §D "SESSION ORDER" = §D.1 item 4). THREE landings, one cause per `/compare`, each with its own
@@ -18,7 +18,11 @@ the per-candle list); the seed guard's step counts `seed_guard_steps.py` (H1 2 s
 pinbars, M15 2 steps = 480 / 189); the cold review's independent re-derivation `review_rederive_predictions.py` (its
 own floor loop + the literal guard; = every §5.2 / §6 count — the oracle for U2 / U3: the engine's types must equal
 its U2 / U3 columns); U1's checks `u1_landing_check.py`, `m15_hover_floor_count.py`, `u1_hover_example.py` (the
-rendered hover example); each with its `.txt` where it prints one.
+rendered hover example); U2's checks `u2_engine_vs_oracle.py` (the engine's own fetch + classify vs the
+prediction's per-candle list), `u2_compare.py` (the downstream keyed per structure vs S_U1), `u2_causes.py` (the
+classification deltas in each moved event's window), `gate_floor_seed_sim.py` (the fetch gate's seed branches),
+`mutants_u2.py` (+ `u2_fig_named_diff.txt`, `u2_chart_look_times.txt`, `mutants_u2_rerun.txt`); each with its `.txt`
+where it prints one.
 
 ---
 
@@ -340,3 +344,73 @@ each lands:
   the final code: FETCH GATE PASS, skip grep 33, timing total 120.17 s; `u1_landing_check.py` ALL AS PREDICTED vs
   S_controls; the PNGs byte-equal). Suite 2121. S_U1 is U2's `/compare` baseline; its `*_final.csv` has the 3 columns,
   so U2's diff of that file is positional-safe (same columns).
+
+### U2 — BUILT 2026-10-28, = §5.2 exactly (the `/compare` vs S_U1 done; the user's chart look pending)
+- **Code:** new `features/pinbar_body_floor.py` (`rolling_pinbar_body_floor` → `(floor, demoted)`,
+  `pinbar_body_floor_for_frame`; the seed asserted strictly before the frame); `candles_v2.floor_demotes` = the ONE
+  predicate (step 4 + the final window; §8 A1) — `fixed_body_floor`, `_pip_size` and the params-floor raise removed;
+  `compute_candle_features(…, floor_seed=None, body_floor=None)` (the rolling floor; `body_floor` the test seam, §8
+  A5; asserts the function's demotions == `is_floor_pinbar` in BOTH modes — stronger than §8's "final mode");
+  `CandleParams` the four settings, `pinbar_body_pip_floor` removed; `candle_classifier`: the table and
+  `candle_params_for_timeframe` removed, `apply_candle_classification(…, floor_seed=None, body_floor=None)` with
+  `CandleParams()`; `poi_zones.select_ic` `CandleParams()` (+ the :848 docstring); `data_bridge.prepare_lower_tf_data(…,
+  floor_seed=None)`; `orchestrator.run_pipeline(…, floor_seeds=None)` (asserts the keys ⊆ {H1, M15}) →
+  `_run_multi_tf_dual(…, m15_floor_seed=None)`; `run_replay`: `fetch_floor_seed`, `fetch_floor_seeds` (what `main()`
+  calls — so the 180 and the M15 condition are unit-testable), `_get_history_retrying(…, prefix=, allow_empty=)`.
+  Debug: `zone_proximity_diag.py`, `probe_fc_finalize.py` fetch the seeds; `candle_size_distribution.py`'s demotion
+  table retired (its natural classes via an all-NaN `body_floor`).
+- **Deviations from §3 / §8:** (1) the seed's requests REUSE `_get_history_retrying` (a `prefix` + `allow_empty`
+  parameter) instead of a new retry function — so `test_exception_scopes.py`'s allowlist needs no new entry (B2's
+  intent, every broad handler listed, holds); LANDMINES now says "two retry SITES, three uses". (2) An empty seed step
+  is not an error (`allow_empty`): it holds no pinbar, the guard steps on.
+- **Prediction met** (`qa_pinbar_floor_inputs/u2_engine_vs_oracle.py` — the engine's own fetch + classify vs
+  `plan_u_prediction.txt`'s per-candle list, 0 mismatches on both TFs; the oracle `review_rederive_predictions.txt`'s
+  U2 column): H1 74 become pinbars, 0 stop (15 / 59, 6 with a direction), 289 / 233 / 536 → 274 / 174 / 610,
+  `is_floor_pinbar` 114 (22 / 92); M15 294 (91 / 203, 31), 1358 / 920 / 1950 → 1267 / 717 / 2244, `is_floor_pinbar`
+  436 (125 / 311) on both lens charts (`m15_hover_floor_count.py`); every frame candle has a floor (H1 2.30 – 3.50
+  pips, M15 from 1.02). The seed lines = `seed_guard_steps.txt` (H1 559 / 232, M15 480 / 189, 2 steps).
+- **Replay** (run mode): FETCH GATE PASS + both `[floor_seed]` lines; skip grep 33 (the same lines as S_U1); timing
+  total 62.04 s (`data_fetch` 2.60 s with both seeds). The gate snippet (all three copies) checks the seed lines in
+  every completed branch — `gate_floor_seed_sim.py`: 10 / 10 cases as expected.
+- **Downstream vs S_U1** (`u2_compare.py` + `.txt` keyed per structure; `u2_causes.py` + `.txt` the classification
+  deltas in each window; `u2_fig_named_diff.txt`): 21 / 30 CSVs differ; byte-equal: both lens `subs` + `triggers`,
+  the unresolved table, the H1 + confluence POI zones, imbalance instances, raw — **no sub, trigger, POI pick or IC
+  pick moves** (§5.2 expected subs / triggers might). What moves, each with its cause:
+  - H1 sid 0 cycle 0: CTS_CONFIRMED 439 (anchor 430, `one_maru_continuous` from 436) → 485 (anchor 448, from 484):
+    candle 439 (normal 2.4 pips, floor 3.03) is a pinbar, the pattern fails; price makes raw CTS highs 447 / 448
+    first. With it: the CTS KL zone (confirmed 439 → 485, base 430 'base inside bar' → 448 'base', bottom 0.58132 →
+    0.58178; 2 bounds steps fewer → −4 traces / −2 shapes on H1 and on both M15 overlays), the fib's `cts_idx` 430 →
+    448 (+ `locked_at`, `ic_ref_price`; its IC record 151 → 157 check rows, the same pick), the WVMI (0,0) LB 430 →
+    447, FP 436 → 473 (pullback 0.521 → 0.237), H1 WVMI LP rows 57 → 54, the range / state rows 436 – 485. Cycle 1
+    and the reversal unchanged.
+  - counter sub 6 cycle 0: CTS_ESTABLISHED / BOS_CONFIRMED 3656 (`double_maru` 3655 – 3656) → 3657
+    (`one_maru_continuous` 3656 – 3657): 3655 (maru 1.1, floor 1.30) is a pinbar (its POI meta
+    `cts_established_idx`, the fib `activated_at` follow).
+  - confluence sub 0 cycle 0: the pattern-path CTS_UPDATEDs 780 / 784 → 783 — no type change there: marus demoted
+    earlier left the prior-5-maru pool, the pool's max range rose (0.44 → 1.26 pips at 775), so 774 – 782 lost their
+    big flags.
+  - confluence sub 0 cycle 3: CTS_CONFIRMED 1748 → 1751 (the same pattern from 1747): the big flags again — 1747
+    (maru 6.2) ratio 0.95 → 0.34; with it WVMI (0,3) FP 1747 → 1748 (pullback 1.239 → 0.721).
+  - confluence sub 1: cycle 0 CTS_CONFIRMED 1818 → 1833 (1818, maru 1.2 / floor 1.61, a pinbar; 1817 lost its big
+    flags) — the range from 1821, WVMI (1,0) FP 1817 → 1828 (3.624 → 2.096); cycle 1 CTS_RECONFIRMED 1904 → 1903
+    (1903 a pinbar); cycle 4 the CTS_UPDATED at 2364 `one_maru_continuous` → `double_maru` (2363 lost big_maru).
+  - sub 3 cycle 2 (both lenses): the BOS KL zone's base 2914 'no base star' → 2915 'base' (2914 maru 1.3 → pinbar);
+    WVMI (3,1) LP 2914's weight 1.0 → 0.7 (pullback 0.912 → 0.638) — `wvmi._compute_last_wave_weight` (§8 A10): a
+    new pdir-0 pinbar with only a big-normal ratio; WVMI (3,2) FB 2916 → 2917 (2916, a big-normal normal before,
+    is a big-maru pinbar with `pinbar_dir` +1 — against sub 3's sell wave, so
+    `wave_candles._is_compound_first_wave` (:103-105) rejects it; measured, `u2_causes` + the frame check).
+  - Charts (`fig_named_diff.py`): H1 83 / 234 → 79 / 232, counter 158 / 136 → 154 / 134, confluence 306 / 307 →
+    302 / 305 — the H1 CTS zone above; the moved dots, swings, state labels, wave-candle traces, sub 3 c2's BOS zone,
+    the WVMI LP marks; the candle hovers (every floor).
+- **Tests:** suite 2121 → **2146** (`test_plan_u_rolling_floor.py` new, 26: the floor function, the seed, the guard with a
+  stubbed OANDA, the pipeline wiring; reworked: `test_candles_v2.py` the floor tests on explicit floors (−3: the
+  params raise, the JPY pip, `fixed_body_floor`; +1 `floor_demotes`), `test_institutional_pattern.py` (the fixture
+  frames keep U1's 2.2 / 1.0 pips through the seam — `_FIXTURE_FLOOR_PIPS`; the floor-table test removed; N32
+  re-pinned on the frame's column, no longer vacuous — §8 B3), `test_plan_u_body_floor.py` (frame-only + the seam),
+  `test_unified_probe._prepare_df(body_floor_pips=)` for the F16 frame (`test_plan_i_s5_ms_reads_the_fib.py`: real M15
+  rows pinned under the 2.2-pip floor, 30 rows hold no window — §8 B3's predicted failure), the 8
+  `prepare_lower_tf_data` stubs `lambda df, **_k: df`. **Mutants** `mutants_u2.py` (+ `.txt`): first run 28 / 29 —
+  `u2_function_no_eps` SURVIVED: its pin used a frame whose float bodies (c − o) put the maru exactly AT its floor, so
+  the EPS never mattered; re-pinned on exact arrays + a new pin for the agreement assert (`u2_assert_dropped`, now a
+  killable mutant) — the re-run 2 / 2 KILLED (`mutants_u2_rerun.txt`): **30 / 30 in all**, each by its sketched pin.
+

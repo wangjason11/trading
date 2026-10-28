@@ -1,0 +1,76 @@
+## 1. H1 candle types (*_final.csv, by name)
+   S_U1 -> U2: 74 candles change type (74 become pinbars, 0 stop); from maru 15, normal 59; with a pin direction 6
+   types maru/normal/pinbar 289/233/536 -> 274/174/610
+   is_floor_pinbar 114 (maru 22, normal 92); pinbar_body_floor empty on 0 rows
+   vs the prediction's per-candle list: 0 mismatches []
+   *_final.csv columns that changed (rows):
+     candle_type 74, pinbar_dir 6, normal_dir 32, is_special_maru 13, pinbar_body_floor 1058, is_floor_pinbar 74, is_big_maru_as0 26, is_big_normal_as0 28
+     prior_maru_max_len_as0 62, big_ratio_as0 56, is_big_maru_as1 26, is_big_normal_as1 25, prior_maru_max_len_as1 62, big_ratio_as1 58, is_big_maru_as2 22, is_big_normal_as2 19
+     prior_maru_max_len_as2 62, big_ratio_as2 57, pat 19, pat_dir 18, pat_status 19, pat_start_idx 20, pat_end_idx 20, pat_confirm_idx 17
+     market_state 46, range_lo 5, pullback_th 5, range_break_frac 4, cts_idx 205, cts_price 205, cts_event 4, cts_threshold 46
+     cycle_stage 46, cts_phase_debug 46
+
+## 2. structure events, per (sub_id, structure_id, cycle_id, type): (idx, anchor, via/to) before -> after
+### H1: 329 -> 325 events; 5 keys differ
+   sub=None sid=0 cyc=0 CTS_CONFIRMED: -[(439, 'cts430', 'one_maru_continuous')] +[(485, 'cts448', 'one_maru_continuous')]
+   sub=None sid=0 cyc=0 CTS_THRESHOLD_UPDATED: -[(447, '', ''), (448, '', '')] +[]
+   sub=None sid=0 cyc=0 CTS_UPDATED: -[] +[(447, '', 'replay_raw'), (448, '', 'replay_raw')]
+   sub=None sid=0 cyc=None RANGE_UPDATED: -[(439, '', ''), (439, '', ''), (484, '', '')] +[(436, '', ''), (437, '', ''), (438, '', '')]
+   sub=None sid=0 cyc=None STATE_CHANGED: -[(439, '', 'pullback'), (441, '', 'pullback_range'), (474, '', 'pullback'), (475, '', 'pullback_range'), (484, '', 'pullback')] +[(485, '', 'pullback')]
+### counter: 592 -> 591 events; 4 keys differ
+   sub=6 sid=0 cyc=0 BOS_CONFIRMED: -[(3656, 'bos3621', '')] +[(3657, 'bos3621', '')]
+   sub=6 sid=0 cyc=0 CTS_ESTABLISHED: -[(3656, 'cts3656', 'double_maru')] +[(3657, 'cts3657', 'one_maru_continuous')]
+   sub=6 sid=0 cyc=0 CTS_UPDATED: -[(3657, '', 'replay_raw')] +[]
+   sub=6 sid=0 cyc=None STATE_CHANGED: -[(3656, '', 'breakout')] +[(3657, '', 'breakout')]
+### confluence: 1391 -> 1386 events; 10 keys differ
+   sub=0 sid=0 cyc=0 CTS_UPDATED: -[(780, 'cts780', 'one_maru_continuous'), (783, '', 'replay_raw'), (784, 'cts784', 'one_maru_continuous')] +[(780, '', 'replay_raw'), (783, 'cts783', 'one_maru_continuous'), (784, '', 'replay_raw')]
+   sub=0 sid=0 cyc=3 CTS_CONFIRMED: -[(1748, 'cts1721', 'one_maru_continuous')] +[(1751, 'cts1721', 'one_maru_continuous')]
+   sub=0 sid=0 cyc=None RANGE_UPDATED: -[(1748, '', ''), (1749, '', '')] +[(1751, '', ''), (1751, '', '')]
+   sub=0 sid=0 cyc=None STATE_CHANGED: -[(1748, '', 'pullback'), (1750, '', 'pullback_range'), (1752, '', 'pullback')] +[(1751, '', 'pullback')]
+   sub=1 sid=0 cyc=0 CTS_CONFIRMED: -[(1818, 'cts1816', 'one_maru_continuous')] +[(1833, 'cts1816', 'one_maru_continuous')]
+   sub=1 sid=0 cyc=1 CTS_RECONFIRMED: -[(1904, 'cts1898', 'one_maru_opposite')] +[(1903, 'cts1898', 'one_maru_opposite')]
+   sub=1 sid=0 cyc=4 CTS_UPDATED: -[(2364, 'cts2364', 'one_maru_continuous')] +[(2364, 'cts2364', 'double_maru')]
+   sub=1 sid=0 cyc=None RANGE_STARTED: -[(1818, 'cts1816', '')] +[(1821, 'cts1816', '')]
+   sub=1 sid=0 cyc=None RANGE_UPDATED: -[(1832, '', '')] +[(1818, '', ''), (1903, '', '')]
+   sub=1 sid=0 cyc=None STATE_CHANGED: -[(1818, '', 'pullback'), (1819, '', 'pullback_range'), (1820, '', 'pullback'), (1821, '', 'pullback_range'), (1832, '', 'pullback'), (1904, '', 'pullback')] +[(1821, '', 'range'), (1833, '', 'pullback'), (1903, '', 'pullback')]
+
+## 3. zones, fibs, ICs, WVMI (keyed per structure)
+### KL H1: 10 -> 10 rows; 1 keys differ
+   (None, 0, 0, 'CTS'): [(439, 430, 'base inside bar', '0.58448', '0.58132', '2025-12-24 02:00')] -> [(485, 448, 'base', '0.58448', '0.58178', '2025-12-24 02:00')]
+   meta keys that differ (rows, positional): activation_history 1, anchor_idx 1, base_idx 1, base_pattern 1, bounds_steps 1, confirmed_idx 1, inner 1, outer 1
+### KL counter: 8 -> 8 rows; 1 keys differ
+   (3, 0, 2, 'BOS'): [(2992, 2914, 'no base star', '0.58196', '0.58171', '2026-01-08 06:45')] -> [(2992, 2915, 'base', '0.58196', '0.5817', '2026-01-08 06:45')]
+   meta keys that differ (rows, positional): base_idx 1, base_pattern 1, bounds_steps 1, inner 1
+### KL confluence: 21 -> 21 rows; 1 keys differ
+   (3, 0, 2, 'BOS'): [(2992, 2914, 'no base star', '0.58196', '0.58171', '2026-01-08 06:45')] -> [(2992, 2915, 'base', '0.58196', '0.5817', '2026-01-08 06:45')]
+   meta keys that differ (rows, positional): base_idx 1, base_pattern 1, bounds_steps 1, inner 1
+### POI H1: byte-equal
+### POI counter: 7 -> 7 rows; 0 keys differ
+   meta keys that differ (rows, positional): cts_established_idx 1
+### POI confluence: byte-equal
+### fib H1: 5 -> 5 rows; 1 keys differ
+   ('H1.main', None, '0', '0', ''): [('115.0', '652.0', 'ended', '96', '430', 'True', 'True')] -> [('115.0', '652.0', 'ended', '96', '448', 'True', 'True')]
+   meta keys that differ (rows, positional): locked_at 1, ic_ref_price 1
+### fib counter: 8 -> 8 rows; 0 keys differ
+   meta keys that differ (rows, positional): activated_at 1
+### fib confluence: 21 -> 21 rows; 0 keys differ
+   meta keys that differ (rows, positional): locked_at 2
+### picked IC H1: 7 -> 7 rows; 1 keys differ
+   ('', '0', '0'): [(('check row',), 'x151')] -> [(('check row',), 'x157')]
+### picked IC counter: 15 -> 15 rows; 0 keys differ
+### picked IC confluence: 38 -> 38 rows; 0 keys differ
+### WVMI H1: 5 -> 5 rows; 1 keys differ
+   ('', '0', '0'): [('110', '430', '436', '590', '0.733211319160918', '0.5210227272727272', 'locked')] -> [('110', '447', '473', '590', '0.5130226664789526', '0.2369100930072339', 'locked')]
+### WVMI counter: 7 -> 7 rows; 2 keys differ
+   ('3', '0', '1'): [('2758', '2841', '2843', '2914', '0.7871235721703012', '0.9121338912133892', 'locked')] -> [('2758', '2841', '2843', '2914', '0.7871235721703012', '0.6384937238493723', 'locked')]
+   ('3', '0', '2'): [('2916', '3045', '3048', '3299', '1.2865209471766847', '0.2647668393782383', 'created')] -> [('2917', '3045', '3048', '3299', '1.0967391304347824', '0.2647668393782383', 'created')]
+### WVMI confluence: 18 -> 18 rows; 4 keys differ
+   ('0', '0', '3'): [('1352', '1720', '1747', '1761', '4.165948275862069', '1.2394881170018281', 'locked')] -> [('1352', '1720', '1748', '1761', '4.165948275862069', '0.7212765957446808', 'locked')]
+   ('1', '0', '0'): [('1801', '1815', '1817', '1837', '0.4353448275862069', '3.6243093922651934', 'locked')] -> [('1801', '1815', '1828', '1837', '0.4353448275862069', '2.0958466453674123', 'locked')]
+   ('3', '0', '1'): [('2758', '2841', '2843', '2914', '0.7871235721703012', '0.9121338912133892', 'locked')] -> [('2758', '2841', '2843', '2914', '0.7871235721703012', '0.6384937238493723', 'locked')]
+   ('3', '0', '2'): [('2916', '3045', '3048', '3299', '1.2865209471766847', '0.2647668393782383', 'created')] -> [('2917', '3045', '3048', '3299', '1.0967391304347824', '0.2647668393782383', 'created')]
+### WVMI LP rows H1: 57 -> 54
+### WVMI LP rows counter: 76 -> 76
+### WVMI LP rows confluence: 216 -> 214
+
+## 4. byte-equal (9 of 30): _raw.csv, _M15_confluence_poi_zones.csv, _M15_confluence_subs.csv, _M15_confluence_triggers.csv, _M15_counter_subs.csv, _M15_counter_triggers.csv, _M15_unresolved_triggers.csv, _imbalance_instances.csv, _poi_zones.csv

@@ -37,7 +37,7 @@ import pandas as pd
 
 from engine_v2.config import CONFIG
 from engine_v2.pipeline.orchestrator import run_pipeline
-from engine_v2.run_replay import fetch_history_with_auto_extend, _floor_to_day_start
+from engine_v2.run_replay import fetch_floor_seeds, fetch_history_with_auto_extend, _floor_to_day_start
 from engine_v2.structure.structure_engine import _pip_size_from_pair
 
 
@@ -112,7 +112,9 @@ def main() -> None:
     df.attrs["pair"] = CONFIG.pair
     # H1 only: the PARENT-ZONE batch lists (PLAN_R step 1). Since PLAN_R step 2 a replay's final lists also read sub
     # zones (the proximity overlay, inside the M15 sweep) — on the reference window 10 triggers, not these 6.
-    res = run_pipeline(df, lower_timeframes=())
+    # the H1 floor seed, as a replay classifies (PLAN_U U2; GOTCHAS "A Frame Classified Without Its Floor Seed")
+    seeds = fetch_floor_seeds(CONFIG.pair, CONFIG.timeframe, df["time"].iloc[0], ())
+    res = run_pipeline(df, lower_timeframes=(), floor_seeds=seeds)
     h1_df = res.df
     pip_size = _pip_size_from_pair(h1_df)
     zpt: Dict[Tuple[int, int], List[Any]] = res.meta.get(

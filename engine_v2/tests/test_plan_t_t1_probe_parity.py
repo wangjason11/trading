@@ -255,7 +255,7 @@ def test_the_orchestrator_hands_a_first_confluence_its_limit_and_the_sweep_its_c
                                                        lower_sd=+1))
     monkeypatch.setattr("engine_v2.multitf.uc1_trigger.detect_uc1_triggers", lambda *a, **k: [])
     monkeypatch.setattr("engine_v2.multitf.data_bridge.fetch_lower_tf_data", lambda *a, **k: pd.DataFrame({"time": [0]}))
-    monkeypatch.setattr("engine_v2.multitf.data_bridge.prepare_lower_tf_data", lambda df: df)
+    monkeypatch.setattr("engine_v2.multitf.data_bridge.prepare_lower_tf_data", lambda df, **_k: df)
     monkeypatch.setattr("engine_v2.multitf.parent_tables.build_parent_tables",
                         lambda *a, **k: SimpleNamespace(cts_moment={(0, 0): 5, (0, 1): 20}, floor=lambda s, c: 0,
                                                         parent_sd={0: 1}))

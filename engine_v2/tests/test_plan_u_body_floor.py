@@ -1,6 +1,6 @@
 """PLAN_U — the pinbar body floor as a per-candle input (U1, 2026-10-28).
 
-Pinned here: the frame-level wiring (`apply_candle_classification` → `compute_candle_features` → the per-TF floor on
+Pinned here: the frame-level wiring (`apply_candle_classification` → `compute_candle_features` → the floor on
 every row + the three columns), and the candle hover's body-floor line on the H1 and M15 charts (CHARTING_SPEC §15).
 The classifier's step 4 itself: `test_candles_v2.py`; the stacked legs: `test_institutional_pattern.py`.
 """
@@ -27,13 +27,22 @@ _TINY_MARU = {"o": 0.60000, "h": 0.60022, "l": 0.59999, "c": 0.60020}    # a 2.0
 _BIG_MARU = {"o": 0.60000, "h": 0.60052, "l": 0.59999, "c": 0.60050}     # a 5.0-pip body
 
 
-@pytest.mark.parametrize("tf,floor,tiny_type", [("H1", 0.00022, "pinbar"), ("M15", 0.0001, "maru")])
-def test_the_frame_carries_its_timeframe_floor_on_every_candle(tf, floor, tiny_type):
+@pytest.mark.parametrize("tf", ["H1", "M15"])
+def test_a_frame_without_a_window_has_no_floor_on_any_timeframe(tf):
+    """Since U2 the floor is the rolling one, the same rule on every TF (no per-TF table): a 2-candle frame without
+    a seed has no window → no floor, the body-% types (the rolling floor: `test_plan_u_rolling_floor.py`)."""
     out = apply_candle_classification(_raw([_TINY_MARU, _BIG_MARU]), timeframe=tf).df
-    assert list(out["pinbar_body_floor"]) == pytest.approx([floor, floor])
-    assert list(out["candle_type"]) == [tiny_type, "maru"]
-    assert list(out["candle_type_before_floor"]) == ["maru", "maru"]
-    assert list(out["is_floor_pinbar"]) == [tiny_type == "pinbar", False]
+    assert out["pinbar_body_floor"].isna().all()
+    assert list(out["candle_type"]) == list(out["candle_type_before_floor"]) == ["maru", "maru"]
+    assert not out["is_floor_pinbar"].any()
+
+
+def test_an_explicit_body_floor_reaches_every_candle():
+    """The `body_floor` seam of `apply_candle_classification` (PLAN_U §8 A5): one floor per row."""
+    out = apply_candle_classification(_raw([_TINY_MARU, _BIG_MARU]), body_floor=[0.00022, 0.00022]).df
+    assert list(out["pinbar_body_floor"]) == pytest.approx([0.00022, 0.00022])
+    assert list(out["candle_type"]) == ["pinbar", "maru"]
+    assert list(out["is_floor_pinbar"]) == [True, False]
 
 
 def test_candle_floor_hover_lines():

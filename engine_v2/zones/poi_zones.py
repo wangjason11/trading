@@ -42,7 +42,7 @@ import numpy as np
 import pandas as pd
 
 from engine_v2.common.types import IMBALANCE_FILL_THRESHOLD, ImbalanceInstance
-from engine_v2.features.candle_classifier import candle_params_for_timeframe
+from engine_v2.features.candle_params import CandleParams
 from engine_v2.features.candles_v2 import agreed_direction
 from engine_v2.features.fibonacci import FibRetracement, calculate_fib_price
 from engine_v2.patterns.imbalance import has_unfilled_imbalance, iter_unfilled_imbalances
@@ -845,16 +845,16 @@ def select_ic(
     runs ONLY when Step 1 finds no candidate — never after Steps 2–3 (an all-pinbar answer stays no IC; the user,
     2026-10-13). A fib neither active nor locked has no checks → `NO_IC_CANDIDATE` (PLAN_L A6).
 
-    The candle params come from the FRAME (`df.attrs["timeframe"]` → `candle_params_for_timeframe`; a KeyError when
-    unstamped — fail loudly — read BEFORE the active-or-locked guard), as does the leg cap (`config.ip_leg_cap_by_tf`,
-    KeyError on an unknown TF). `classify_all` (the drawn record + the debug CSV) classifies the pattern of EVERY
+    The leg cap comes from the FRAME (`df.attrs["timeframe"]` → `config.ip_leg_cap_by_tf`; a KeyError when unstamped or
+    on an unknown TF — fail loudly — read BEFORE the active-or-locked guard); the stacked legs classify with
+    `CandleParams()` and each stack's body floor is the frame's `pinbar_body_floor` at its LAST candle (PLAN_U §3.3). `classify_all` (the drawn record + the debug CSV) classifies the pattern of EVERY
     checked candle (PLAN_H §6 ICR-11 — never picked unless an IC candidate) and evaluates Step 1B on every check;
     without it only the IC candidates.
 
     `ic_reference` (REQUIRED — PLAN_K A1; built by `FibTracker.ic_reference` as of the reader's moment): IC condition
     2, evaluated per checked candle at IC selection (RX1-E)."""
     timeframe = df.attrs["timeframe"]
-    params = candle_params_for_timeframe(timeframe)
+    params = CandleParams()
     cap = config.ip_leg_cap_by_tf[timeframe]
     fib = fib_state.fib
     if fib is None or not (fib_state.active or fib_state.locked):

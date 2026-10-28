@@ -175,20 +175,28 @@ among the saved CSVs, so a truncated run saved here would make every later
 `multitf/data_bridge.fetch_lower_tf_data` fails loudly (a failed OANDA chunk
 request is retried twice, then the fetch raises `[data_bridge] ERROR …`
 and the replay crashes — it used to print the error and exit 0 on a truncated
-frame; the H1 fetch retries the same way since 2026-09-28, `[auto_extend] …`);
-the gate ties the log to the outputs and checks the exact candle
+frame; the H1 fetch retries the same way since 2026-09-28, `[auto_extend] …`;
+the floor seeds since PLAN_U U2, 2026-10-28, `[floor_seed] …` — their exact
+lines are checked in every completed branch, `FAIL - do NOT save (floor seed)`
+otherwise); the gate ties the log to the outputs and checks the exact candle
 count. The full rationale, the N/A cases and the canonical expected value are
 in the `/compare` skill §2b "Fetch-completeness gate". Keep the snippet below
 identical to the one there (only the FAIL messages differ), including the
-`EXPECTED_FETCH` value.
+`EXPECTED_FETCH` and `EXPECTED_SEED_H1` / `_M15` values.
 
 ```bash
 RAW=$(ls -t artifacts/debug/*_raw.csv | head -1); \
 EXPECTED_FETCH="[data_bridge] Fetched 4228 M15 candles for NZD_USD in 5 chunks"; \
+EXPECTED_SEED_H1="[floor_seed] H1: 559 candles 2025-10-14 14:00:00+00:00 -> 2025-11-14 21:00:00+00:00, 2 steps, 232 body-% pinbars (need 180)"; \
+EXPECTED_SEED_M15="[floor_seed] M15: 480 candles 2025-11-09 22:00:00+00:00 -> 2025-11-14 21:45:00+00:00, 2 steps, 189 body-% pinbars (need 180)"; \
 if ! { [ run.log -nt "$RAW" ] && grep -aqF "=== Replay Timing ===" run.log; }; then \
-    echo "FETCH GATE: FAIL - do NOT save (stale log or crashed run: not newer than *_raw.csv, or no timing block)"; grep -aF "[data_bridge]" run.log; grep -aE "^([A-Za-z_][A-Za-z0-9_]*\.)*([A-Za-z0-9_]*(Error|Exception|Timeout)|KeyboardInterrupt|SystemExit)(: |[[:space:]]*$)" run.log; tail -n 3 run.log; \
+    echo "FETCH GATE: FAIL - do NOT save (stale log or crashed run: not newer than *_raw.csv, or no timing block)"; grep -aF "[data_bridge]" run.log; grep -aF "[floor_seed]" run.log; grep -aE "^([A-Za-z_][A-Za-z0-9_]*\.)*([A-Za-z0-9_]*(Error|Exception|Timeout)|KeyboardInterrupt|SystemExit)(: |[[:space:]]*$)" run.log; tail -n 3 run.log; \
+elif ! grep -aqF "$EXPECTED_SEED_H1" run.log || grep -aqF "[floor_seed] ERROR" run.log; then \
+    echo "FETCH GATE: FAIL - do NOT save (floor seed)"; grep -aF "[floor_seed]" run.log; \
 elif ! grep -aqF "[data_bridge]" run.log && ! grep -aqF "[multi_tf:dual]" run.log; then \
     echo "FETCH GATE: N/A (no lower timeframe)"; \
+elif ! grep -aqF "$EXPECTED_SEED_M15" run.log; then \
+    echo "FETCH GATE: FAIL - do NOT save (floor seed)"; grep -aF "[floor_seed]" run.log; \
 elif ! grep -aqF "[data_bridge]" run.log && grep -aqF "[multi_tf:dual] no triggers" run.log; then \
     echo "FETCH GATE: N/A (no H1 triggers - no M15 fetch)"; \
 elif grep -aqF "$EXPECTED_FETCH" run.log && ! grep -aqF "[data_bridge] ERROR" run.log; then \
@@ -213,7 +221,8 @@ that run writes no M15 CSVs.
 
 **On FAIL, STOP and do not run Steps 5–7.** Report a data-fetch failure, quote
 the printed exception lines (`[data_bridge] ERROR …` M15 / `[auto_extend] ERROR …`
-H1) or, on a plain FAIL, the `[data_bridge]` lines, and re-run Step 4. The Step 3 folder and its
+H1 / `[floor_seed] ERROR …` a seed) or, on a plain FAIL, the `[data_bridge]` lines
+(on `FAIL … (floor seed)` the `[floor_seed]` lines), and re-run Step 4. The Step 3 folder and its
 `.before_replay_marker` are still valid, and the re-run's outputs are newer than
 the marker. In reuse mode, switch to run mode. If the fetch keeps failing (an
 OANDA outage), remove the still-empty save folder (re-derive `FOLDER_PATH` as in

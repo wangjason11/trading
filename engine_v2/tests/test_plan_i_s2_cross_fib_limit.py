@@ -970,7 +970,7 @@ def test_the_driver_wires_the_fire_time_rule_and_the_tripwire(monkeypatch):
     monkeypatch.setattr("engine_v2.multitf.uc1_trigger.detect_uc1_triggers", lambda *a, **k: [])
     monkeypatch.setattr("engine_v2.multitf.data_bridge.fetch_lower_tf_data",
                         lambda *a, **k: pd.DataFrame({"time": [0]}))
-    monkeypatch.setattr("engine_v2.multitf.data_bridge.prepare_lower_tf_data", lambda df: df)
+    monkeypatch.setattr("engine_v2.multitf.data_bridge.prepare_lower_tf_data", lambda df, **_k: df)
     tables = _tables({0: +1},                              # the trigger (+1) is a CONFLUENCE sub of sid 0
                      {(0, 0): ((10, 43, 0.59, "BOS_CONFIRMED"),), (0, 1): ((30, 123, 0.58, "BOS_CONFIRMED"),)},
                      {(0, 0): 30, (0, 1): None})

@@ -54,7 +54,8 @@ zoom | Pan, an idx box; CHARTING_SPEC §14) — item 5 COMPLETE); updated by the
 adjustments MOVED to Parts 2 / 3 (applied to the entry price and stop loss, the zones unchanged — SYLLABUS Week 9
 "Zone size at entry and stop-loss") and the entry confirmation candle patterns to Part 2 (register §D.3); NOW the
 pinbar body-pip floor calibration (the last major Part 1 item; IN PROGRESS since 2026-10-28 — PLAN_U, a rolling floor:
-U1 the per-candle plumbing + columns + hover landed, U2 the rolling floor next, then U3), then the remaining minor
+U1 the per-candle plumbing + columns + hover landed, U2 the rolling floor (natural window) landed 2026-10-28, U3 the
+final-window flip next — the user picks one), then the remaining minor
 pre-Part-2 items, which complete Part 1),
 Part 2 entry decisions, Part 3 other decisions.
 

@@ -13,25 +13,23 @@ class CandleParams:
     big_normal_threshold: float = 0.5
     lookback: int = 5
 
-    # Absolute-pip floor on real-body length. Any candle whose body is SHORTER
-    # than this floor is reclassified `pinbar` (trumping maru/normal/pinbar),
-    # regardless of body_pct — a body that small carries no directional
-    # conviction. Applied LAST in `classify_candles` (after the special-maru
-    # promotion). 0.0 = disabled (legacy: candle_type purely body_pct-driven).
-    # Per-TF defaults are wired by `apply_candle_classification(timeframe=...)`
-    # via the `DEFAULT_PINBAR_BODY_PIP_FLOOR_BY_TF` table in
-    # `candle_classifier.py`. `compute_candle_features` turns it into the
-    # per-candle floor `classify_candles` reads (`candles_v2.fixed_body_floor`,
-    # price units; pip size per-pair, JPY=0.01 else 0.0001 — PLAN_U U1); a
-    # direct `classify_candles` call without `body_floor` has no floor.
-    #
-    # NOTE: this replaced the former `big_body_pip_floor`, which gated the
-    # `is_big_maru` flag only. That gate is now redundant — small-bodied
-    # candles can never be maru in the first place, so they never reach the
-    # big-maru ratio race nor the prior-maru pool. PROVISIONAL — see
-    # `engine_v2/features/CANDLE_BODY_FLOOR_NOTES.md` (old vs new logic + open
-    # questions; may be tuned/reworked).
-    pinbar_body_pip_floor: float = 0.0
+    # The rolling pinbar body floor (PLAN_U U2; the user, 2026-10-27 / 28 —
+    # `engine_v2/features/CANDLE_BODY_FLOOR_NOTES.md`). A candle's floor = the
+    # `pinbar_floor_percentile` (numpy linear) of the bodies of the
+    # `pinbar_floor_window` most recent pinbars STRICTLY before it; a body-%
+    # maru / normal whose body is strictly below it becomes a pinbar
+    # (`classify_candles` step 4). No full window -> no floor.
+    # `pinbar_floor_window_source`: "natural" = the body-% pinbars fill the
+    # window; "final" = the body-% pinbars + the ones the floor demoted.
+    # `pinbar_floor_seed_windows`: the history fetched before a replay's frame
+    # (`run_replay.fetch_floor_seed`) holds at least this many windows of
+    # body-% pinbars. Read by `features/pinbar_body_floor.py` and the seed
+    # guard. Replaced the fixed per-TF pip table (H1 2.2 / M15 1.0 / M5 0.5,
+    # `pinbar_body_pip_floor`, removed at U2).
+    pinbar_floor_window: int = 90
+    pinbar_floor_percentile: float = 90.0
+    pinbar_floor_window_source: str = "natural"
+    pinbar_floor_seed_windows: int = 2
 
     special_maru: float = 0.5
     special_maru_distance: float = 0.1

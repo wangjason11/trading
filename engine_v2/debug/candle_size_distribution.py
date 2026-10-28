@@ -1,13 +1,8 @@
-"""Candle size (range + body) distribution + pinbar-floor demotion tables.
+"""Candle size (range + body) distribution tables, by body-% candle type.
 
-Standalone calibration tool for the `pinbar_body_pip_floor` candle-classification
-rule (features/candle_params.py + candles_v2.py:classify_candles). It answers two
-questions used to pick the per-TF floor values:
-
-  1. How are candle RANGE (`candle_len`) and BODY (`body_len`) lengths distributed
-     at each TF, split by candle_type?
-  2. For a given body-pip floor, how many natural maru/normal candles would be
-     demoted to `pinbar`?
+Standalone measurement tool for the pinbar body floor (features/pinbar_body_floor.py + candles_v2.py:classify_candles
+step 4). It answers: how are candle RANGE (`candle_len`) and BODY (`body_len`) lengths distributed at each TF, split
+by the body-% candle type (the floor not applied)?
 
 Run:
     python -m engine_v2.debug.candle_size_distribution
@@ -17,22 +12,24 @@ Methodology (important for reproducibility):
     (so the H1 candle set matches a real replay exactly), and M15/M5 fetched over
     the resulting H1 time span via `data_bridge.fetch_lower_tf_data`. M5 is NOT run
     through market structure anywhere in the engine — here we only fetch + classify
-    it, purely for this calibration exercise.
-  - Classification is the NATURAL (ratio-based) classification: candle features are
-    computed with a fresh `CandleParams()`, whose `pinbar_body_pip_floor` defaults
-    to 0.0 (floor DISABLED). This is deliberate — the floor's job is to act ON the
-    natural maru/normal population, so the tables must show that population before
-    the floor touches it. (With the floor enabled, the demoted candles would already
-    be `pinbar` and the "how many would be demoted" question becomes circular.)
+    it, purely for this measurement.
+  - Classification is the NATURAL (body-%) classification: an all-NaN `body_floor`
+    (no floor on any candle). This is deliberate — the floor acts ON the natural
+    maru/normal population, so the tables show that population before the floor
+    touches it.
   - Pip size is resolved per-pair (JPY=0.01 else 0.0001), matching the engine.
-  - "non-maru" = normal + pinbar. The demotion table only counts maru+normal, since
-    pinbars are already pinbar (a floor can't demote them further).
+  - "non-maru" = normal + pinbar.
+
+The fixed-floor demotion table this tool printed until PLAN_U U2 (2026-10-28) is retired with the fixed per-TF floor
+it measured (and it compared without the EPS guard). The rolling floor's measurements live in
+`plans/qa_pinbar_floor_inputs/` (`rolling_floor_demotions.py`, `plan_u_prediction.py`, ...).
 
 To regenerate after a data-window change, just rerun — it reads engine_v2.config
-for pair/window/timeframe. Edit FLOORS / GROUPS / LOWER_TFS below to adjust.
+for pair/window/timeframe. Edit GROUPS / LOWER_TFS below to adjust.
 """
 from __future__ import annotations
 
+import numpy as np
 import pandas as pd
 
 from engine_v2.config import CONFIG
@@ -44,7 +41,6 @@ from engine_v2.run_replay import fetch_history_with_auto_extend, _floor_to_day_s
 
 # --- knobs ---------------------------------------------------------------
 LOWER_TFS = ("M15", "M5")          # fetched + classified (no MS); H1 always included
-FLOORS = [round(0.25 * k, 2) for k in range(1, 13)]  # 0.25 .. 3.00 pips
 GROUPS = ("ALL", "MARU", "NON-MARU", "NORMAL", "PINBAR")
 
 
@@ -53,10 +49,11 @@ def _pip_size(pair: str) -> float:
 
 
 def _classify_natural(df_raw: pd.DataFrame, pair: str) -> pd.DataFrame:
-    """Compute candle features with the pinbar floor DISABLED (natural classes)."""
+    """Compute candle features with NO pinbar floor (natural classes): an all-NaN `body_floor`."""
     df_raw = df_raw.copy()
     df_raw.attrs["pair"] = pair
-    return compute_candle_features(df_raw, CandleParams(), anchor_shifts=(0, 1, 2))
+    return compute_candle_features(df_raw, CandleParams(), anchor_shifts=(0, 1, 2),
+                                   body_floor=np.full(len(df_raw), np.nan))
 
 
 def _group_mask(df: pd.DataFrame, name: str) -> pd.Series:
@@ -89,23 +86,6 @@ def report_distribution(df: pd.DataFrame, tf: str, pip: float) -> None:
             print(f"  {g:9} {mn:6.2f} {p25:7.2f} {md:7.2f} {av:7.2f} {p75:7.2f} {mx:7.2f}")
 
 
-def report_demotion(df: pd.DataFrame, tf: str, pip: float) -> None:
-    df = df.copy()
-    df["body_p"] = df["body_len"] / pip
-    n = len(df)
-    nmaru = int((df.candle_type == "maru").sum())
-    nnorm = int((df.candle_type == "normal").sum())
-    print(f"\n{tf} (all={n}, maru={nmaru}, normal={nnorm}):")
-    print(f"  {'floor':>6} {'tot demoted':>13} {'maru hit':>17} {'normal hit':>19}")
-    for fl in FLOORS:
-        dm = int(((df.candle_type == "maru") & (df.body_p < fl)).sum())
-        dn = int(((df.candle_type == "normal") & (df.body_p < fl)).sum())
-        tot = dm + dn
-        mp = dm / nmaru * 100 if nmaru else 0.0
-        npc = dn / nnorm * 100 if nnorm else 0.0
-        print(f"  {fl:5.2f}p {tot:5} ({tot/n*100:4.1f}%) {dm:5} ({mp:4.1f}% of maru) {dn:5} ({npc:5.1f}% of normal)")
-
-
 def main() -> None:
     pair = CONFIG.pair
     pip = _pip_size(pair)
@@ -133,10 +113,6 @@ def main() -> None:
     print("\n" + "=" * 30 + " DISTRIBUTION STATS (natural classification) " + "=" * 30)
     for tf, df in classified:
         report_distribution(df, tf, pip)
-
-    print("\n\n" + "=" * 30 + " FLOOR DEMOTION IMPACT (natural -> pinbar) " + "=" * 30)
-    for tf, df in classified:
-        report_demotion(df, tf, pip)
 
 
 if __name__ == "__main__":

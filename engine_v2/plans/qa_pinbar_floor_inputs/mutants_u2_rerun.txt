@@ -1,0 +1,3 @@
+KILLED    u2_function_no_eps                 1 failing: test_the_function_uses_the_shared_predicate_with_eps
+KILLED    u2_assert_dropped                  1 failing: test_compute_candle_features_asserts_the_demotions_agree
+2/2 KILLED  (results: C:\Users\wangj\AppData\Local\Temp/mtU2b\results.json)

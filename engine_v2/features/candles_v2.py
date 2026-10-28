@@ -88,18 +88,14 @@ def compute_candle_metrics(df: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
-def _pip_size(df: pd.DataFrame) -> float:
-    """The frame's pip size from `attrs["pair"]` (JPY = 0.01, else 0.0001; same source as classify_big_flags)."""
-    return 0.01 if "JPY" in str(df.attrs.get("pair", "")).upper() else 0.0001
-
-
-def fixed_body_floor(df: pd.DataFrame, params: CandleParams):
-    """The per-candle body floor (price units) of a fixed `params.pinbar_body_pip_floor`: the same value on every
-    row, or None when the floor is 0.0 (disabled). PLAN_U U1 — the per-TF table's floor as a per-candle input."""
-    floor_price = float(params.pinbar_body_pip_floor) * _pip_size(df)
-    if floor_price <= EPS:
-        return None
-    return np.full(len(df), floor_price)
+def floor_demotes(body_len, type_before_floor, floor):
+    """The ONE demotion predicate (PLAN_U §8 A1): a body-% maru / normal whose body is strictly below its floor
+    (`body < floor - EPS`; NaN = no floor -> never). Step 4 of `classify_candles` and the rolling floor's "final"
+    window (`features/pinbar_body_floor.py`) both read it. Element-wise; scalars give a 0-d array."""
+    body = np.asarray(body_len, dtype=float)
+    fl = np.asarray(floor, dtype=float)
+    before = np.asarray(type_before_floor)
+    return ~np.isnan(fl) & (body < np.nan_to_num(fl, nan=0.0) - EPS) & (before != "pinbar")
 
 
 def classify_candles(df: pd.DataFrame, params: CandleParams, body_floor=None) -> pd.DataFrame:
@@ -162,26 +158,23 @@ def classify_candles(df: pd.DataFrame, params: CandleParams, body_floor=None) ->
     # legacy `is_big_maru` body-pip floor was removed: these small candles can no
     # longer be maru in the first place. The floor is a per-row input in price
     # units (`body_floor`; None / NaN = no floor) — `compute_candle_features`
-    # builds it (`fixed_body_floor`). Strict `<` with an EPS guard so a body
-    # sitting exactly at the floor keeps its original type (a nominal N-pip body
-    # can float-round to N*pip - ~2e-15).
+    # builds it (the rolling floor, `features/pinbar_body_floor.py`). Strict `<`
+    # with an EPS guard so a body sitting exactly at the floor keeps its
+    # original type (a nominal N-pip body can float-round to N*pip - ~2e-15) —
+    # `floor_demotes`, the predicate the rolling floor's "final" window shares.
     out["candle_type_before_floor"] = out["candle_type"]
-    if body_floor is None and float(params.pinbar_body_pip_floor) > 0.0:
-        # fail loudly: the floor reaches step 4 only as `body_floor` (a params floor alone would be ignored)
-        raise ValueError("[candles_v2] params.pinbar_body_pip_floor is set but no body_floor was given "
-                         "(build it with fixed_body_floor, or use compute_candle_features)")
     floor = (np.full(len(out), np.nan) if body_floor is None
              else np.asarray(body_floor, dtype=float).reshape(-1))
     if len(floor) != len(out):
         raise ValueError(f"[candles_v2] body_floor has {len(floor)} values for {len(out)} candles")
     out["pinbar_body_floor"] = floor
-    body_len = out["body_len"].astype(float).to_numpy()
-    is_tiny_body = ~np.isnan(floor) & (body_len < np.nan_to_num(floor, nan=0.0) - EPS)
-    out["is_floor_pinbar"] = is_tiny_body & (out["candle_type_before_floor"] != "pinbar").to_numpy()
-    out.loc[is_tiny_body, "candle_type"] = "pinbar"
+    demoted = floor_demotes(out["body_len"].to_numpy(dtype=float),
+                            out["candle_type_before_floor"].to_numpy(), floor)
+    out["is_floor_pinbar"] = demoted
+    out.loc[demoted, "candle_type"] = "pinbar"
     # Keep the (downstream-unused) flag self-consistent: a tiny-body pinbar
     # is not a maru. No behavioral effect — nothing reads is_special_maru.
-    out.loc[is_tiny_body, "is_special_maru"] = False
+    out.loc[demoted, "is_special_maru"] = False
 
     # Pinbar direction: body near top => up pinbar; body near bottom => down pinbar.
     # Computed AFTER candle_type is final (incl. special-maru promotion AND the
@@ -367,13 +360,28 @@ def compute_candle_features(
     params: CandleParams,
     *,
     anchor_shifts: tuple[int, ...] = (0, 1, 2),
+    floor_seed: pd.DataFrame | None = None,
+    body_floor=None,
 ) -> pd.DataFrame:
     """
     Convenience: metrics -> primary classification -> big flags -> volume features.
-    The body floor of `classify_candles` step 4 = `fixed_body_floor` (params.pinbar_body_pip_floor).
+    The body floor of `classify_candles` step 4 = the rolling floor over `floor_seed` + this frame
+    (`pinbar_body_floor_for_frame`; `floor_seed` = None -> frame-only windows). The seed fills only the
+    windows — the prior-maru pool, big flags and volume features stay this frame's. `body_floor` (one
+    floor per row, price units) overrides the rolling floor: a test seam for frames too short to hold a
+    window (PLAN_U §8 A5).
     """
     out = compute_candle_metrics(df)
-    out = classify_candles(out, params, body_floor=fixed_body_floor(out, params))
+    if body_floor is not None:
+        out = classify_candles(out, params, body_floor=body_floor)
+    else:
+        from engine_v2.features.pinbar_body_floor import pinbar_body_floor_for_frame
+
+        floor, demoted = pinbar_body_floor_for_frame(out, floor_seed, params)
+        out = classify_candles(out, params, body_floor=floor)
+        # the floor function's own demotions (its "final" window) are the classifier's (PLAN_U §8 A1)
+        assert np.array_equal(out["is_floor_pinbar"].to_numpy(dtype=bool), demoted), \
+            "[candles_v2] the rolling floor's demotions differ from classify_candles step 4"
     out = classify_big_flags(out, params, anchor_shifts=anchor_shifts)
     out = compute_volume_features(out)
     return out

@@ -1,6 +1,6 @@
 # Candle body-pip floor — design notes
 
-> **STATUS: PROVISIONAL (2026-06-16).** The candle-classification body-pip floor
+> **STATUS: PROVISIONAL (2026-06-16; the rolling floor since 2026-10-28 — PLAN_U U2).** The candle-classification body floor
 > below is **not finalized**. Both the floor *values* and the *approach itself*
 > (reclassify-to-pinbar) are expected to be revisited and possibly re-edited or
 > reverted as the strategy is optimized. Treat this as a working iteration, not
@@ -10,60 +10,72 @@
 
 ## What this controls
 
-A per-timeframe absolute floor on a candle's **real body length** (in pips),
-wired by `apply_candle_classification(timeframe=...)` →
-`DEFAULT_PINBAR_BODY_PIP_FLOOR_BY_TF` (`candle_classifier.py`) →
-`CandleParams.pinbar_body_pip_floor` → `compute_candle_features` builds the
-per-candle floor (`candles_v2.fixed_body_floor`: the same value on every row, in
-price units) → consumed by `candles_v2.py::classify_candles(…, body_floor=…)`
-step 4. Pip size is per-pair (JPY=0.01 else 0.0001).
+A per-candle floor on a candle's **real body length** (price units): a body-% maru / normal whose body is strictly
+below its candle's floor is classified `pinbar` (`classify_candles` step 4). **Since PLAN_U U2 (2026-10-28) the floor
+is ROLLING** — each candle's floor comes from the pinbars before it ("Current logic" below). Wiring:
+`apply_candle_classification(df, timeframe=…, floor_seed=…)` → `compute_candle_features(df, CandleParams(),
+floor_seed=…)` → `features/pinbar_body_floor.pinbar_body_floor_for_frame` (the floor per candle + the rows it demotes)
+→ `candles_v2.classify_candles(…, body_floor=…)` step 4, through the ONE demotion predicate `candles_v2.floor_demotes`
+(step 4 and the floor function's "final" window both read it; `compute_candle_features` asserts their demotions
+agree). `compute_candle_features(…, body_floor=…)` / `apply_candle_classification(…, body_floor=…)` take an explicit
+per-row floor instead — a test seam for frames too short to hold a window. Every frame is classified with
+`CandleParams()`; the floor is in price units, so it needs no pip size.
 
-**Since PLAN_U U1 (2026-10-28) the floor is a per-candle input**, and every
-classified frame carries three columns (H1 `*_final.csv`, the M15 lens dfs, every
-sub slice): `pinbar_body_floor` (the floor the candle was judged against, price
-units, NaN = no floor), `candle_type_before_floor` (the body-% type, after the
-special-maru promotion) and `is_floor_pinbar` (a pinbar because of the floor
-only). The candle hover shows them (`pinbar_body_floor=… | candle_type_before_floor=…`,
-CHARTING_SPEC §15 "The candle hover's body-floor line"). An institutional-pattern stacked leg is judged
-against the floor of its LAST candle (`institutional_pattern._stack_types`).
-U2 replaces the fixed value with the rolling one ("Direction" below; PLAN_U).
+**Since PLAN_U U1 (2026-10-28) the floor is a per-candle input**, and every classified frame carries three columns
+(H1 `*_final.csv`, the M15 lens dfs, every sub slice): `pinbar_body_floor` (the floor the candle was judged against,
+price units, NaN = no floor), `candle_type_before_floor` (the body-% type, after the special-maru promotion) and
+`is_floor_pinbar` (a pinbar because of the floor only). The candle hover shows them (`pinbar_body_floor=… |
+candle_type_before_floor=…`, CHARTING_SPEC §15 "The candle hover's body-floor line"). An institutional-pattern stacked
+leg is judged against the floor of its LAST candle (`institutional_pattern._stack_types`).
 
-Current floors (calibrated 2026-06-09 on NZD_USD via
-`debug/candle_size_distribution.py`):
+The settings (`CandleParams`; the user, 2026-10-27 / 28; read by `features/pinbar_body_floor.py` and the seed guard):
 
-| TF | floor (pips) |
-|----|--------------|
-| H1 | 2.20 |
-| M15 | 1.0 |
-| M5 | 0.5 |
+| setting | value | meaning |
+|---|---|---|
+| `pinbar_floor_window` | 90 | the pinbars in the window |
+| `pinbar_floor_percentile` | 90.0 | the percentile of their bodies (numpy linear) |
+| `pinbar_floor_window_source` | `"natural"` | `"natural"` = the body-% pinbars fill the window; `"final"` = + the ones the floor demoted (PLAN_U U3 tries it; the user picks one) |
+| `pinbar_floor_seed_windows` | 2 | the history fetched before a replay's frame holds 2 × 90 = 180 body-% pinbars |
 
-## Current logic (what we changed TO, 2026-06-09)
+## Current logic — the rolling floor (PLAN_U U2, 2026-10-28)
 
-**A candle whose real body is shorter than the per-TF floor is reclassified
-`pinbar`** — applied *last* in `classify_candles` (after the body_pct bands and
-the special-maru promotion), so it **trumps** maru/normal/special-maru
-regardless of `body_pct`. Rationale: a body that small carries no directional
-conviction, so it shouldn't be treated as a maru/normal regardless of how its
-body compares to its wicks.
+**The floor of candle i** = `numpy.percentile(body_len of the window, 90)` (linear interpolation), the window = the
+90 most recent pinbars STRICTLY before i; no full window → no floor (NaN). **Step 4:** a candle whose body-% type
+(after the special-maru promotion) is maru or normal and whose `body_len < floor − EPS` becomes a pinbar
+(`is_special_maru = False`); `pinbar_dir` / `normal_dir` are computed after it, so a floor pinbar is directioned by the
+same wick rule. Natural window: a candle's floor depends only on the candles before it, never on where the history
+starts.
 
-Consequences:
-- The `is_big_maru` body-pip floor (see "previous logic") was **removed** — it's
-  now redundant: a sub-floor candle can no longer be a maru in the first place,
-  so it never reaches the big-maru ratio race nor the prior-maru pool.
-- `is_big_maru` / `is_big_normal` are therefore back to **ratio-only**.
-- `pinbar_dir` computation was **moved below** the special-maru block so the
-  newly reclassified pinbars are directioned by the same wick-geometry rule.
-- Strict `<` with an `EPS` guard (1e-12) so a body sitting exactly at the floor
-  keeps its original type: a nominal N-pip body can float-round to
-  N × pip − ~2e-15. (The GOTCHAS entry "Body-pip floor float precision" this
-  line used to cite was never written — the reason lives here and in the
-  `classify_candles` comment.)
+**The history before the frame — the floor seed** (`run_replay.fetch_floor_seed` / `fetch_floor_seeds`, in
+`main()` right after the H1 fetch; counted in the `data_fetch` timing): step k fetches `[first − k × 400 candles of
+the TF's time, first)` (the whole span per step) until the seed holds ≥ 180 body-% pinbars; the H1 seed always, the
+M15 seed whenever M15 is configured, both before the H1 frame's first candle (the M15 frame starts there). One log
+line each — `[floor_seed] H1: 559 candles 2025-10-14 14:00:00+00:00 -> 2025-11-14 21:00:00+00:00, 2 steps, 232 body-%
+pinbars (need 180)` and `M15: 480 candles …, 2 steps, 189 …` on the reference window — checked by the fetch gate
+(`/compare` skill §2b). A seed that cannot reach 180 raises `[floor_seed] ERROR` (the replay stops). The seed only
+fills the windows and is dropped: the frame, its candle indices, its prior-maru pool, big flags and volume features
+are the frame's own. A frame without a seed (`floor_seeds=None`: every test, a standalone script) has no floor
+before its 90th pinbar — GOTCHAS "A Frame Classified Without Its Floor Seed Gets Other Candle Types". No M5 seed (the
+replay builds no M5 frame); the rule is TF-agnostic, so an M5 frame needs no table.
+
+**Measured on the reference window (the U2 replay, 2026-10-28):** every frame candle has a floor; H1 floors 2.30 –
+3.50 pips (median 3.03, 34 distinct values), M15 from 1.02 pips (30 distinct values, most 1.2 – 1.6); against the
+fixed floor 74 H1 candles become pinbars, 0 stop (15 marus / 59 normals, 6 with a pin direction), types 289 / 233 /
+536 → 274 / 174 / 610; M15 294 (91 / 203, 31), 1358 / 920 / 1950 → 1267 / 717 / 2244; `is_floor_pinbar` H1 114 (22
+/ 92), M15 436 (125 / 311). The downstream, per structure: PLAN_U §9 "U2" (`qa_pinbar_floor_inputs/u2_compare.txt`,
+`u2_causes.txt`).
+
+Strict `<` with an `EPS` guard (1e-12) so a body sitting exactly at the floor keeps its original type: a nominal
+N-pip body can float-round to N × pip − ~2e-15 (measured at U2: 1 H1 / 12 M15 bodies sit under their floor by float
+noise alone, PLAN_U §8 A1). The `is_big_maru` body-pip floor of the logic before 2026-06-09 stays removed —
+`is_big_maru` / `is_big_normal` are ratio-only; a floor pinbar can never be a maru, so it never enters the
+prior-maru pool (a demoted maru leaves the pool, which moves the big flags of the candles after it — PLAN_U §9).
 
 Type-write order in `classify_candles` (last write wins):
 1. default `normal`
 2. body_pct bands → `pinbar` / `maru`
 3. special-maru promotion (0.50–0.64 band + tiny close-side wick) → `maru`
-4. **body-pip floor → `pinbar`** (this rule; trumps all the above)
+4. **the body floor → `pinbar`** (this rule; trumps all the above)
 
 ## Readers — what a floor pinbar reaches (code map, 2026-10-27)
 
@@ -82,7 +94,24 @@ read the type only (IC ranking rule 1's exclusion, the KL star's middle candle, 
 MS's range candidates) and fails the ones that read the direction (KL "long tail" / "big tail", wave candles, WVMI).
 The rolling floor keeps that shape: 68 of the 74 new H1 pinbars at U2 are directionless (PLAN_U §5.2).
 
-## Previous logic (what we changed FROM — replaced, kept here for reference)
+## Previous logic — the fixed per-TF floor (2026-06-09 → PLAN_U U2, 2026-10-28)
+
+One floor per timeframe, the same on every candle: `DEFAULT_PINBAR_BODY_PIP_FLOOR_BY_TF` (`candle_classifier.py`) →
+`candle_params_for_timeframe(tf)` → `CandleParams.pinbar_body_pip_floor` → `candles_v2.fixed_body_floor` (pips ×
+the pair's pip size, JPY = 0.01 else 0.0001) → step 4. Calibrated 2026-06-09 on NZD_USD via
+`debug/candle_size_distribution.py`'s demotion table (since retired — it compared without the EPS guard):
+
+| TF | floor (pips) |
+|----|--------------|
+| H1 | 2.20 |
+| M15 | 1.0 |
+| M5 | 0.5 |
+
+All three names, the table and `fixed_body_floor` were removed at U2 (the floor's history below; the calibration
+reasoning in "Why we replaced it"). On the reference window it demoted H1 40 (7 marus / 33 normals) and M15 142
+(34 / 108) candles.
+
+## Earlier logic — the big-maru body gate (until 2026-06-09; replaced, kept here for reference)
 
 The old mechanism was `big_body_pip_floor` (`DEFAULT_BIG_BODY_PIP_FLOOR_BY_TF`,
 values **H1=3 / M15=2 / M5=1**). It did NOT touch the candle *type*; it was an
@@ -282,7 +311,8 @@ and the floor should be the most recent 90 pinbar's p90. We would also need to p
 historical data if necessary to fulfill this requirement." 2026-10-28, on the open questions: "I generally agree
 with all your recommendations. The one thing I'd like to try though is both using body-% pinbars only and also the
 ones the floor itself demoted. I'd like to see how much they would differ." Agreed (the canonical build spec:
-`engine_v2/plans/PLAN_U_rolling_pinbar_body_floor.md` — U1 landed 2026-10-28, U2 and U3 next):
+`engine_v2/plans/PLAN_U_rolling_pinbar_body_floor.md` — U1 landed 2026-10-28, U2 (the natural window, "Current logic"
+above) landed 2026-10-28, U3 the final window next; the user then picks one):
 - the floor of a candle = the p90 (numpy linear interpolation) of the bodies of the 90 most recent pinbars strictly
   before it; a body strictly below it makes a pinbar (today's `<` rule; a body equal to the floor keeps its type);
   the window size and the percentile are config settings;
@@ -296,8 +326,9 @@ ones the floor itself demoted. I'd like to see how much they would differ." Agre
 - the fixed per-TF table (`DEFAULT_PINBAR_BODY_PIP_FLOOR_BY_TF`, `CandleParams.pinbar_body_pip_floor`) is removed.
 
 ## Open / may-revisit (why this is provisional)
-- **Floor values** are a first calibration on NZD_USD only — likely to be tuned,
-  and possibly **split per currency pair**, during strategy optimization.
+- **The window and the percentile** (90 / p90) are a first choice on NZD_USD only — likely to be tuned during
+  strategy optimization (a flip to p85 / p80 is one setting, PLAN_U §7). The rolling floor is in price units from the
+  pair's own bodies, so it needs no per-pair table.
 - **The reclassify-to-pinbar approach itself** may be revisited (e.g. a separate
   "no-conviction" type, or a softer demotion) if it interacts badly with pattern
   detection downstream. Input: most floor pinbars are directionless, so they already act like a separate type for

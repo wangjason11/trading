@@ -5,7 +5,7 @@
 Each test pins ONE rule and names the mutant it kills. Structural rules run on
 `leg_variants` over a bare agreed-direction array (U = sd, D = opp, Z = a true
 doji, S = a split candle); ranking rules on synthetic candle frames classified by
-the real `apply_candle_classification` (H1 params); selection rules through
+the real `apply_candle_classification` (with the fixture floors `_FIXTURE_FLOOR_PIPS`); selection rules through
 `select_ic` with a hand-built fib and hand-built imbalance instances.
 """
 from __future__ import annotations
@@ -21,10 +21,7 @@ import pytest
 from engine_v2.tests._cross_fib_limits import main_limits
 
 from engine_v2.common.types import IMBALANCE_FILL_THRESHOLD, ImbalanceInstance
-from engine_v2.features.candle_classifier import (
-    apply_candle_classification,
-    candle_params_for_timeframe,
-)
+from engine_v2.features.candle_classifier import apply_candle_classification
 from engine_v2.features.candle_params import CandleParams
 from engine_v2.features.candles_v2 import (
     AGREED_SPLIT,
@@ -61,7 +58,10 @@ from engine_v2.zones.cross_cycle_fib import ICReference
 
 U, D, Z, S = 1, -1, 0, AGREED_SPLIT
 PIP = 0.0001
-H1 = candle_params_for_timeframe("H1")
+PARAMS = CandleParams()          # every frame's candle params (no per-TF params since PLAN_U U2)
+# The fixture frames are too short for the rolling floor's window (90 pinbars), so each carries an explicit floor
+# through the `body_floor` seam: U1's fixed per-TF floors, in pips (PLAN_U §8 A5).
+_FIXTURE_FLOOR_PIPS = {"H1": 2.2, "M15": 1.0}
 
 
 # ---------------------------------------------------------------------------
@@ -110,13 +110,14 @@ def _frame(specs, *, prefix=_PREFIX, start=0.6000, timeframe="H1"):
     df.insert(0, "time", pd.date_range("2026-01-05", periods=len(df), freq="h", tz="UTC"))
     df["volume"] = 1.0
     df.attrs["pair"] = "NZD_USD"
-    return apply_candle_classification(df, timeframe=timeframe).df
+    return apply_candle_classification(df, timeframe=timeframe,
+                                       body_floor=np.full(len(df), _FIXTURE_FLOOR_PIPS[timeframe] * PIP)).df
 
 
 N_PREFIX = 6
 
 
-def _ip(specs, ic, *, prefix=None, bos=N_PREFIX, cts=None, params=H1, sd=1, cap=3):
+def _ip(specs, ic, *, prefix=None, bos=N_PREFIX, cts=None, params=PARAMS, sd=1, cap=3):
     """The IP of the IC at pattern position `ic` (0 = the first spec)."""
     df = _frame(specs) if prefix is None else _frame(specs, prefix=prefix)
     n_pre = len(df) - len(specs)
@@ -211,11 +212,6 @@ def test_qualified_rule_reads_the_agreed_direction_unchanged():
             assert _is_qualified(no_vol, i, req) == (d == req), (d, req)
 
 
-def test_candle_params_for_timeframe_is_the_one_floor_table():
-    assert [candle_params_for_timeframe(tf).pinbar_body_pip_floor for tf in ("H1", "M15", "M5", "D1")] == \
-        [2.2, 1.0, 0.5, 0.0]
-
-
 def test_classification_stamps_the_frame_timeframe_and_it_survives_slicing():
     df = _frame([("M", U, 10)])
     assert df.attrs["timeframe"] == "H1"
@@ -251,7 +247,7 @@ def test_unknown_timeframe_cap_raises():
 def test_big_ratio_flags_is_classify_big_flags_per_candle():
     df = _frame([("M", U, 7), ("N", D, 4), ("M", U, 12), ("P", D, 3), ("M", U, 5)])
     for i in range(len(df)):
-        got = big_ratio_flags(float(df.loc[i, "candle_len"]), float(df.loc[i, "prior_maru_max_len_as0"]), H1)
+        got = big_ratio_flags(float(df.loc[i, "candle_len"]), float(df.loc[i, "prior_maru_max_len_as0"]), PARAMS)
         if got is None:
             assert df.loc[i, "big_ratio_as0"] == 0.0 and not df.loc[i, "is_big_maru_as0"]
             continue
@@ -260,9 +256,9 @@ def test_big_ratio_flags_is_classify_big_flags_per_candle():
 
 
 def test_big_ratio_is_rounded_before_the_thresholds():
-    assert big_ratio_flags(0.000649, 0.001, H1) == (0.65, True, True)      # 0.649 → 0.65 ≥ 0.65 (big maru)
-    assert big_ratio_flags(0.000644, 0.001, H1) == (0.64, False, True)
-    assert big_ratio_flags(0.0005, 0.0, H1) is None                        # no prior maru → no flag
+    assert big_ratio_flags(0.000649, 0.001, PARAMS) == (0.65, True, True)      # 0.649 → 0.65 ≥ 0.65 (big maru)
+    assert big_ratio_flags(0.000644, 0.001, PARAMS) == (0.64, False, True)
+    assert big_ratio_flags(0.0005, 0.0, PARAMS) is None                        # no prior maru → no flag
 
 
 def test_iter_unfilled_imbalances_is_has_unfilled_imbalance():
@@ -447,12 +443,12 @@ def _ip_with_floor(floor_at):
     for i, f in floor_at.items():
         df.loc[i, "pinbar_body_floor"] = f
     agreed = agreed_direction(df["direction"].to_numpy(), df["vol_dir"].to_numpy())
-    return classify_ip(df, 7, 1, bos_anchor_idx=6, cts_anchor_idx=9, agreed=agreed, cap=3, params=H1)
+    return classify_ip(df, 7, 1, bos_anchor_idx=6, cts_anchor_idx=9, agreed=agreed, cap=3, params=PARAMS)
 
 
-def test_stacks_use_the_frame_pip_floor():
-    """Two tiny up marus stack to a 90 % body of 2.16 pips — under H1's 2.2-pip floor → a pinbar (not big_maru).
-    Without the floor the same stack is a big maru and the pattern passes (the floor is what fails it)."""
+def test_stacks_use_the_frame_body_floor():
+    """Two tiny up marus stack to a 90 % body of 2.16 pips — under the frame's 2.2-pip floor → a pinbar (not
+    big_maru). Without the floor the same stack is a big maru and the pattern passes (the floor is what fails it)."""
     res, _ = _ip(_TINY_CONT, 1, prefix=_SMALL)
     assert res.reason == "continuation_not_big_maru" and res.detail["continuation_type"] == "pinbar"
     no_floor = _ip_with_floor({8: np.nan, 9: np.nan})
@@ -515,7 +511,7 @@ def test_full_tie_rule_ab(specs, ic, counts):
 def test_classify_ics_batches_and_keeps_order():
     df = _frame([("M", U, 10), ("M", D, 6), ("M", U, 10), ("N", D, 6), ("M", U, 10), ("P", D, 6), ("M", U, 10)])
     agreed = agreed_direction(df["direction"].to_numpy(), df["vol_dir"].to_numpy())
-    got = classify_ics(df, [11, 7, 9], 1, bos_anchor_idx=6, cts_anchor_idx=12, agreed=agreed, cap=3, params=H1)
+    got = classify_ics(df, [11, 7, 9], 1, bos_anchor_idx=6, cts_anchor_idx=12, agreed=agreed, cap=3, params=PARAMS)
     assert [(r.ic_idx, r.ip_rank) for r in got] == [(11, "3A.i"), (7, "1A.i"), (9, "2A.i")]
 
 
@@ -952,7 +948,8 @@ def test_sell_direction_stacks():
     assert res.ip_rank == "1A.iii", (res.reason, res.detail)
 
 
-# N13 — a stack is classified with the frame's PAIR (JPY pip 0.01): the floor test on a USD_JPY frame
+# N13 — a stack is classified with the frame's PAIR (JPY pip 0.01): the floor test on a USD_JPY frame (its fixture
+# floor 2.2 JPY pips = 0.022 in price units — the floor itself is in price units, the pair's pip is the stacks')
 def _frame_jpy(specs, prefix):
     rows, c_prev = [], 60.0
     for kind, d, r in list(prefix) + list(specs):
@@ -964,14 +961,14 @@ def _frame_jpy(specs, prefix):
     df.insert(0, "time", pd.date_range("2026-01-05", periods=len(df), freq="h", tz="UTC"))
     df["volume"] = 1.0
     df.attrs["pair"] = "USD_JPY"
-    return apply_candle_classification(df, timeframe="H1").df
+    return apply_candle_classification(df, timeframe="H1", body_floor=np.full(len(df), _FIXTURE_FLOOR_PIPS["H1"] * 0.01)).df
 
 
 def test_jpy_stack_uses_the_frame_pair_pip():
     small = tuple(("M", U if k % 2 == 0 else D, 2.5) for k in range(6))
     df = _frame_jpy([("M", U, 2.5), ("P", D, 1), ("M", U, 1.2), ("M", U, 1.2)], small)
     agreed = agreed_direction(df["direction"].to_numpy(), df["vol_dir"].to_numpy())
-    res = classify_ip(df, 7, 1, bos_anchor_idx=6, cts_anchor_idx=9, agreed=agreed, cap=3, params=H1)
+    res = classify_ip(df, 7, 1, bos_anchor_idx=6, cts_anchor_idx=9, agreed=agreed, cap=3, params=PARAMS)
     assert res.reason == "continuation_not_big_maru" and res.detail["continuation_type"] == "pinbar"
 
 
@@ -1115,12 +1112,18 @@ def test_mirror_extends_across_subs_of_one_lens():
     assert [(r.meta["sub_id"], r.ic_idx) for r in lens.attrs["ic_candidates"]] == [(7, 103), (8, 153), (9, 203)]
 
 
-# N32 — select_ic classifies stacks against the FRAME's floor (an M15 frame: 1.0, not H1's 2.2)
-def test_select_uses_the_frame_timeframe_params():
+# N32 — select_ic classifies stacks against the FRAME's `pinbar_body_floor` (PLAN_U U2: no per-TF params — the same
+# candles with a 1.0-pip floor pass the pattern, with a 2.2-pip floor the stack 8..9 is a pinbar)
+def test_select_uses_the_frame_body_floor():
     small = tuple(("M", U if k % 2 == 0 else D, 2.5) for k in range(6))
-    df = _frame([("M", U, 2.5), ("P", D, 1), ("M", U, 1.2), ("M", U, 1.2)], prefix=small, timeframe="M15")
+    specs = [("M", U, 2.5), ("P", D, 1), ("M", U, 1.2), ("M", U, 1.2)]
+    df = _frame(specs, prefix=small, timeframe="M15")
+    assert list(df["pinbar_body_floor"]) == pytest.approx([1.0 * PIP] * len(df))
     sel = _select(df, 6, 9, [_far_gap(9)])
     assert sel.pick is not None and sel.pick.ic_idx == 7 and sel.pick.ip_rank == "3A.iii"
+    df.loc[:, "pinbar_body_floor"] = 2.2 * PIP                       # the frame's column, nothing else, changes
+    again = _select(df, 6, 9, [_far_gap(9)])
+    assert again.pick is None or again.pick.ip_rank != "3A.iii"
 
 
 # N33 — the zone of a SELL fib is measured up from the low
@@ -1170,7 +1173,7 @@ def test_a_non_contiguous_index_fails_loudly():
     bad = df.set_axis([0, 1, 1] + list(range(3, len(df))))       # first 0, last n-1, monotonic — not contiguous
     agreed = agreed_direction(bad["direction"].to_numpy(), bad["vol_dir"].to_numpy())
     with pytest.raises(AssertionError, match="0-based contiguous"):
-        classify_ip(bad, 7, 1, bos_anchor_idx=6, cts_anchor_idx=8, agreed=agreed, cap=3, params=H1)
+        classify_ip(bad, 7, 1, bos_anchor_idx=6, cts_anchor_idx=8, agreed=agreed, cap=3, params=PARAMS)
 
 
 def test_a_frame_without_its_pair_fails_loudly():
@@ -1179,7 +1182,7 @@ def test_a_frame_without_its_pair_fails_loudly():
     del df.attrs["pair"]
     agreed = agreed_direction(df["direction"].to_numpy(), df["vol_dir"].to_numpy())
     with pytest.raises(KeyError):
-        classify_ip(df, 7, 1, bos_anchor_idx=6, cts_anchor_idx=8, agreed=agreed, cap=3, params=H1)
+        classify_ip(df, 7, 1, bos_anchor_idx=6, cts_anchor_idx=8, agreed=agreed, cap=3, params=PARAMS)
 
 
 def test_a_locked_fib_without_its_cts_established_fails_loudly():

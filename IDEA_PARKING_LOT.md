@@ -41,8 +41,9 @@ The open lines below carry over (fold in when their files are next touched); D a
   + WVMI", D.2) — GONE 2026-10-26 with the function ("WVMI back on the chart" step 3, §D item 5). The first: OPEN.
 - **The H1-main frame is classified and stamped "H1" whatever the config timeframe** — `orchestrator.run_pipeline`
   calls `apply_candle_classification(df)` with its default (`timeframe="H1"`), so a re-enabled M15-main window
-  (`config.py` keeps them commented out) would get H1's pinbar floor AND the institutional pattern's H1 cap / params
-  through the frame's `attrs["timeframe"]` (PLAN_H landing review, 2026-10-06). Pass `CONFIG.timeframe` (or assert H1)
+  (`config.py` keeps them commented out) would get the institutional pattern's H1 cap through the frame's
+  `attrs["timeframe"]` (PLAN_H landing review, 2026-10-06; the H1 pinbar floor and params went with PLAN_U U2 —
+  the rolling floor is TF-agnostic, `CandleParams()` on every frame; `run_pipeline` keys its floor seed "H1"). Pass `CONFIG.timeframe` (or assert H1)
   when such a window comes back. OPEN; not reachable on the current config.
 
 ## B. Week 8 scope — decided 2026-09-30 (the M5 layer moved to D; the syllabus extras dropped — "Recently closed")
@@ -256,8 +257,9 @@ SYLLABUS Week 9 Part 2 "Zone size at entry and stop-loss".
    D.3 below; the zones keep their base form. Was D.1 item 3.
 7. **Pinbar body-pip floor calibration** — **IN PROGRESS: PLAN_U** (the user 2026-10-27: "the last major item I want
    to tackle in the next session"; 2026-10-28 the approach chosen — a rolling floor, the p90 of the 90 most recent
-   pinbars; U1 the per-candle plumbing + columns + hover LANDED 2026-10-28, format only; NEXT U2 the rolling floor,
-   then U3 the final-window flip) — D.1 item 4 below.
+   pinbars; U1 the per-candle plumbing + columns + hover LANDED 2026-10-28, format only; U2 the rolling floor, natural
+   window, BUILT 2026-10-28 = its prediction (the chart look, then `/commit-save`); NEXT U3 the final-window flip) —
+   D.1 item 4 below.
 8. **The remaining minor items before Part 2** — after item 7, in the next session(s) (the user 2026-10-27: "any
    remaining minor tasks & items in the next session(s) that we previously documented as pre-reqs to starting part 2
    of week 9"). Candidates on file: D.2 below (the backlog "decided after D.1 is complete", the user 2026-10-01) and
@@ -412,7 +414,8 @@ SYLLABUS Week 9 Part 2 "Zone size at entry and stop-loss".
    strictly before the candle, the history fetched before the frame; both windows tried — body-% pinbars only vs + the
    floor-demoted ones; the fixed per-TF table removed). Three landings: U1 the per-candle floor plumbing + the three
    columns + the candle hover on today's fixed floor — LANDED 2026-10-28, format only; U2 the rolling floor, natural
-   window (NEXT); U3 the final-window flip, the user picks one. The decisions verbatim:
+   window — BUILT 2026-10-28 (the fixed table removed; = the prediction: H1 74 / M15 294 candles become pinbars; no
+   sub, trigger or POI pick moves — PLAN_U §9 "U2"); U3 the final-window flip, the user picks one (NEXT). The decisions verbatim:
    `engine_v2/features/CANDLE_BODY_FLOOR_NOTES.md` "Direction — the rolling floor". Detail: memory
    `project_pinbar_body_pip_floor.md`.
 

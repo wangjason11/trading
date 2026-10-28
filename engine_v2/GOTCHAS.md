@@ -733,6 +733,16 @@ zones.
 
 ---
 
+## A Frame Classified Without Its Floor Seed Gets Other Candle Types (PLAN_U U2, 2026-10-28)
+
+**Problem:** the pinbar body floor is rolling — each candle's floor = the p90 of the bodies of the 90 most recent pinbars before it (`features/pinbar_body_floor.py`). A replay fills the first windows with the history fetched BEFORE the frame (`run_replay.fetch_floor_seed`: `[floor_seed] H1: …` / `M15: …` in the log). `apply_candle_classification(df)` / `prepare_lower_tf_data(df)` / `run_pipeline(df)` without `floor_seed(s)=` classify with frame-only windows: no floor until the frame's 90th pinbar.
+
+**Symptom:** a standalone script that re-classifies a replay window gets other candle types on the frame's first candles — on the reference window H1 idx 0–211 and M15 0–220 have no floor (measured, PLAN_U §8 A8), so some of the replay's floor pinbars are marus / normals there, and every pattern / CTS / zone that reads them can move.
+
+**Rule:** reproduce a replay's classification with its seeds — `fetch_floor_seeds(pair, timeframe, first_time, lower_timeframes)` and `run_pipeline(df, floor_seeds=…)` / `prepare_lower_tf_data(m15, floor_seed=…)` (`debug/zone_proximity_diag.py`, `debug/probe_fc_finalize.py` do), or read the replay's own outputs (the H1 `*_final.csv` has `pinbar_body_floor` per candle). The seed is fetched before the frame's FIRST candle, so it also depends on the auto-extend (the entry above).
+
+---
+
 ## CTS_CONFIRMED `ev.idx` Is the Confirmation Candle, Not the CTS Anchor
 
 **Problem:** `CTS_CONFIRMED` events have `ev.idx` set to the **confirmation candle** (where the pullback — or, under dual confirmation, the sd-zone proximity — confirmed the CTS level), not the CTS anchor candle (where the high/low was set). The anchor candle index is in `ev.meta["cts_anchor_idx"]`.

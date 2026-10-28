@@ -1,0 +1,11 @@
+OK  the real log                     -> FETCH GATE: PASS
+OK  H1 seed line missing             -> FETCH GATE: FAIL (floor seed)
+OK  M15 seed line missing            -> FETCH GATE: FAIL (floor seed)
+OK  H1 seed with another count       -> FETCH GATE: FAIL (floor seed)
+OK  a seed RETRY line (benign)       -> FETCH GATE: PASS
+OK  crashed on [floor_seed] ERROR    -> FETCH GATE: FAIL (stale log or crashed run: not newer than *_raw.csv, or no timing block)
+OK  no lower TF, H1 seed present     -> FETCH GATE: N/A (no lower timeframe)
+OK  no lower TF, no H1 seed          -> FETCH GATE: FAIL (floor seed)
+OK  no H1 trigger, both seeds        -> FETCH GATE: N/A (no H1 triggers - no M15 fetch)
+OK  no H1 trigger, no M15 seed       -> FETCH GATE: FAIL (floor seed)
+ALL AS EXPECTED

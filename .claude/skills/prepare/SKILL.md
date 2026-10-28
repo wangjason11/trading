@@ -68,7 +68,8 @@ engine_v2/
 ├── pipeline/
 │   └── orchestrator.py              # Pipeline ordering (LOCKED)
 ├── features/
-│   └── candles_v2.py                # Candle classification
+│   ├── candles_v2.py                # Candle classification (step 4 = the pinbar body floor)
+│   └── pinbar_body_floor.py         # The rolling pinbar body floor (PLAN_U U2)
 ├── structure/
 │   ├── market_structure.py          # CTS/BOS state machine (core)
 │   ├── structure_engine.py          # Multi-structure wrapper
@@ -107,7 +108,7 @@ engine_v2/
 
 **Read and understand the pipeline ordering in `orchestrator.py`:**
 
-1. **features/candles_v2.py** - Candle classification (pinbar, maru, star, etc.)
+1. **features/candles_v2.py** - Candle classification (pinbar, maru, star, etc.); its body floor = `features/pinbar_body_floor.py` (rolling, seeded by `run_replay.fetch_floor_seeds`)
 2. **patterns/structure_patterns.py** - Structure pattern detection
 3. **patterns/imbalance.py** - Imbalance (FVG) detection
 4. **structure/market_structure.py** - CTS/BOS state machine (via structure_engine.py)

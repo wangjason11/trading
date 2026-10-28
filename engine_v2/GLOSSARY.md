@@ -165,7 +165,7 @@ meta `activated_at` is a moment (the activating event's; Plan E E3a, 2026-09-24 
 | Term | Definition |
 |------|------------|
 | **pinbar** | Single candle with long wick rejecting price level |
-| **pinbar body floor** (`pinbar_body_floor`, `is_floor_pinbar`, `candle_type_before_floor`) | A body-% maru / normal whose real body is strictly below its candle's floor is classified `pinbar` (`classify_candles` step 4); `is_floor_pinbar` marks those, `candle_type_before_floor` keeps the body-% type, `pinbar_body_floor` the floor itself (price units, NaN = none). A per-candle column since PLAN_U U1 (2026-10-28; today the fixed per-TF value); canonical `features/CANDLE_BODY_FLOOR_NOTES.md` |
+| **pinbar body floor** (`pinbar_body_floor`, `is_floor_pinbar`, `candle_type_before_floor`) | A body-% maru / normal whose real body is strictly below its candle's floor is classified `pinbar` (`classify_candles` step 4); `is_floor_pinbar` marks those, `candle_type_before_floor` keeps the body-% type, `pinbar_body_floor` the floor itself (price units, NaN = none). A per-candle column since PLAN_U U1 (2026-10-28); since U2 the ROLLING floor — the p90 (numpy linear) of the bodies of the 90 most recent pinbars strictly before the candle (`CandleParams.pinbar_floor_*`; a replay fills the first windows with the history before the frame, the floor seed); canonical `features/CANDLE_BODY_FLOOR_NOTES.md` |
 | **star** | Small-bodied candle indicating indecision |
 | **long-tail** | Candle with extended tail showing price rejection |
 | **maru** | Strong-bodied candle (marubozu-like) |

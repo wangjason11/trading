@@ -72,7 +72,10 @@ print(f"H1 events: {len(events)}")
 
 # ---- M15 entity frame -------------------------------------------------------
 m15_raw = fetch_lower_tf_data("NZD_USD", "M15", h1["time"].iloc[0], h1["time"].iloc[-1])
-m15 = prepare_lower_tf_data(m15_raw.copy())
+# the M15 floor seed, as a replay classifies (PLAN_U U2; GOTCHAS "A Frame Classified Without Its Floor Seed")
+from engine_v2.run_replay import fetch_floor_seeds
+m15_seed = fetch_floor_seeds("NZD_USD", "H1", h1["time"].iloc[0], ("M15",))["M15"]
+m15 = prepare_lower_tf_data(m15_raw.copy(), floor_seed=m15_seed)
 m15.attrs["pair"] = "NZD_USD"
 print(f"M15 frame: {len(m15)} rows\n")
 

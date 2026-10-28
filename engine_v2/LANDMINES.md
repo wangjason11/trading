@@ -660,7 +660,11 @@ sub, not one trigger): `multitf/data_bridge.fetch_lower_tf_data` retries a
 failed OANDA chunk request twice, then raises, and an all-empty fetch
 raises — never catch it into a skip (fixed 2026-09-27; in the 2026-09-22
 audit a swallowed chunk error let a replay exit 0 on 2500 of 4228 M15
-candles; `/compare` skill §2b).
+candles; `/compare` skill §2b). Likewise the FLOOR SEED (PLAN_U U2, 2026-10-28 —
+`run_replay.fetch_floor_seed`, the history before the H1 / M15 frame that fills the rolling
+pinbar body floor's first windows): a seed request retries under `[floor_seed]`, and a seed
+that cannot reach its pinbar count raises `[floor_seed] ERROR` — never fall back to frame-only
+floors in a replay (the first ~200 candles of each frame would get other candle types).
 
 ---
 
@@ -697,12 +701,14 @@ MS's read computes goes inside that `try` too.
 **Guard (PLAN_H §8.5c LR2, 2026-10-06c):** `tests/test_exception_scopes.py` lists every `except` in the engine modules
 that catches `RuntimeError` / `Exception` / `BaseException` / everything (bare) against an allowlist — today the
 read's re-raise (`poi_inner_for_fib`), MS's tracker feed (`_feed_fib_tracker`: re-raise / re-type, never swallow —
-PLAN_I S5), the two OANDA `get_history` retries (`RuntimeError`),
+PLAN_I S5), the two OANDA `get_history` retry sites (`RuntimeError`; `run_replay._get_history_retrying` serves the H1
+frame AND, since PLAN_U U2, the floor seeds — one scope, three uses),
 `run_replay`'s `export_sub_tables` scope and four leaf helpers; none encloses an MS run or the IP selector (the landing
 review traced all 4 call paths to `select_ic` — the drawn POIs, the main MS, the sub geometry, the probe Phase 2).
 A new broad handler fails the test: check it against those paths before adding it to the allowlist.
 
-**Why it matters:** the IP reads the frame's stamp (`df.attrs["timeframe"]` — the candle params + the leg cap) and
+**Why it matters:** the IP reads the frame's stamp (`df.attrs["timeframe"]` — the leg cap; until PLAN_U U2 also the
+per-TF candle params, `CandleParams()` on every frame since) and
 `attrs["pair"]`, plus the classifier columns (`candle_type`, `prior_maru_max_len_as0`, `vol_dir`, and since PLAN_U U1
 `pinbar_body_floor` — a stacked leg's floor = its last candle's); an unstamped frame
 (a hand-built test frame, a future frame builder) raises. Swallowed, that would look exactly like "this cycle has no

@@ -489,6 +489,7 @@ def run_pipeline(
     df: pd.DataFrame,
     *,
     lower_timeframes: tuple = (),
+    floor_seeds: Optional[Dict[str, pd.DataFrame]] = None,
 ) -> PipelineResult:
     """
     Orchestrator (Week 6 KL Zones ordering):
@@ -502,13 +503,19 @@ def run_pipeline(
         -> attach df.attrs["kl_zones"] for charting
 
     Zones remain event-driven and do not add rewinds/waits.
+
+    `floor_seeds` = {TF: the history fetched before that TF's frame} (`run_replay.fetch_floor_seed`): it fills the
+    first windows of the rolling pinbar body floor of the H1 classification and the M15 one (PLAN_U §3.2); no
+    network call here. None (every test) -> frame-only windows.
     """
     _validate_input(df)
+    floor_seeds = floor_seeds or {}
+    assert set(floor_seeds) <= {"H1", "M15"}, f"[orchestrator] floor_seeds for {sorted(floor_seeds)}: only H1 / M15 frames exist"
     timing: Dict[str, float] = {}
 
     # 1) Candle features
     _t0 = time.perf_counter()
-    c_res = apply_candle_classification(df)
+    c_res = apply_candle_classification(df, floor_seed=floor_seeds.get("H1"))
     timing["candle_features"] = time.perf_counter() - _t0
 
     # 2) Pattern engine (structure patterns used by market structure)
@@ -681,6 +688,7 @@ def run_pipeline(
             subsequent_confluence_triggers=subsequent_confluence_triggers,
             subsequent_counter_triggers=subsequent_counter_triggers,
             main_zone_proximity_triggers=zone_proximity_triggers,
+            m15_floor_seed=floor_seeds.get("M15"),
         )
         timing["multi_tf_dual"] = time.perf_counter() - _t0
 
@@ -953,6 +961,7 @@ def _run_multi_tf_dual(
     subsequent_confluence_triggers: Optional[list] = None,
     subsequent_counter_triggers: Optional[list] = None,
     main_zone_proximity_triggers: Optional[Dict[tuple, list]] = None,
+    m15_floor_seed: Optional[pd.DataFrame] = None,
 ) -> Tuple[list, list]:
     """Build the M15 sub-structure pool and the two lens dfs (PART4 §17,
     Plan C — replaces the Phase-1 two-entity cadence driver):
@@ -1041,7 +1050,7 @@ def _run_multi_tf_dual(
     h1_end = pd.to_datetime(h1_df["time"].iloc[-1], utc=True)
     # Raises on a failed or empty fetch — never a partial frame (data_bridge).
     m15_raw = fetch_lower_tf_data(pair, "M15", h1_start, h1_end)
-    m15 = prepare_lower_tf_data(m15_raw)
+    m15 = prepare_lower_tf_data(m15_raw, floor_seed=m15_floor_seed)
     m15.attrs["pair"] = pair
     lens_dfs = {
         LENS_CONFLUENCE: m15.copy(),

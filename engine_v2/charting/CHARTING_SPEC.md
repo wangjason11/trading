@@ -541,9 +541,11 @@ charts only) `Go`.
 The OHLC candle hover (`export_plotly.py` H1, `export_m15_chart.py` M15 — every candle trace, imbalance-highlighted
 or not) carries one line right after `candle_type=`, built per candle by `export_plotly._candle_floor_hover` from the
 frame's columns (`features/CANDLE_BODY_FLOOR_NOTES.md`):
-- `pinbar_body_floor=0.000220` — the floor the candle was judged against (price units, 6 decimals);
+- `pinbar_body_floor=0.000283` — the floor the candle was judged against (price units, 6 decimals — exact for the
+  rolling floor at 90 / p90, every value on a 0.01-pip grid; another window / percentile can need more, PLAN_U §8 B13);
 - a pinbar by the floor adds ` | candle_type_before_floor=normal` (its body-% type, `maru` / `normal`);
-- a candle without a floor: `pinbar_body_floor=NA (no floor)`.
+- a candle without a floor: `pinbar_body_floor=NA (no floor)` — since PLAN_U U2 never in a replay (the floor seed
+  gives every candle a window); a frame classified without its seed shows it before its 90th pinbar.
 
 The rest of the candle hover is not yet on the "Hover label conventions"; this line is.
 

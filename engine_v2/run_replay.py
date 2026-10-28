@@ -5,6 +5,7 @@ from pathlib import Path
 from datetime import timedelta
 from typing import Optional, Tuple
 
+import pandas as pd
 import requests
 
 from engine_v2.config import CONFIG
@@ -117,20 +118,25 @@ def _floor_to_day_start(ts):
     return ts.replace(hour=0, minute=0, second=0, microsecond=0)
 
 
-def _get_history_retrying(*, pair: str, timeframe: str, start, end):
+def _get_history_retrying(*, pair: str, timeframe: str, start, end, prefix: str = "[auto_extend]",
+                          allow_empty: bool = False):
     """One parent-TF request, retried like an M15 chunk (`data_bridge._fetch_chunk`, same policy constants).
 
     Retried: any non-200 status (`get_history` raises `RuntimeError`; a 4xx
     too) and any `requests.RequestException` (a network error, a non-JSON
-    body); each retry prints one ``[auto_extend] RETRY k/N …`` line. Every
+    body); each retry prints one ``<prefix> RETRY k/N …`` line. Every
     other exception is raised at once — `_load_creds` errors (FileNotFoundError
     / configparser errors / ValueError) and a malformed payload (KeyError /
     ValueError / TypeError). A request that still fails raises
-    ``[auto_extend] ERROR fetching …``; a response with no usable candle
+    ``<prefix> ERROR fetching …``; a response with no usable candle
     (`get_history` keeps only complete candles carrying the price key) raises
-    ``[auto_extend] ERROR: no H1 data …`` without a retry
-    (`identify_start_scenario_1` needs a candle). The exception text is
-    collapsed onto one line (a gateway error body is multi-line HTML).
+    ``<prefix> ERROR: no H1 data …`` without a retry
+    (`identify_start_scenario_1` needs a candle) unless `allow_empty` (the floor
+    seed's steps: an empty span holds no pinbar, the guard steps on). The
+    exception text is collapsed onto one line (a gateway error body is
+    multi-line HTML). `prefix`: `[auto_extend]` (the frame) or `[floor_seed]`
+    (`fetch_floor_seed`) — never `[data_bridge]` / `[multi_tf:dual]`, which the
+    fetch gate's N/A branches key on.
     """
     for attempt in range(_FETCH_RETRIES + 1):
         try:
@@ -139,19 +145,77 @@ def _get_history_retrying(*, pair: str, timeframe: str, start, end):
             why = " ".join(str(e).split())
             if attempt == _FETCH_RETRIES:
                 raise RuntimeError(
-                    f"[auto_extend] ERROR fetching {timeframe} {start}-{end} "
+                    f"{prefix} ERROR fetching {timeframe} {start}-{end} "
                     f"after {_FETCH_RETRIES} retries: {why}"
                 ) from e
             print(
-                f"[auto_extend] RETRY {attempt + 1}/{_FETCH_RETRIES} {timeframe} fetch "
+                f"{prefix} RETRY {attempt + 1}/{_FETCH_RETRIES} {timeframe} fetch "
                 f"{start}-{end} in {_FETCH_RETRY_WAIT_S:g} s: {why}"
             )
             time.sleep(_FETCH_RETRY_WAIT_S)
             continue
-        if df.empty:
-            raise RuntimeError(f"[auto_extend] ERROR: no {timeframe} data for {pair} {start} - {end}")
+        if df.empty and not allow_empty:
+            raise RuntimeError(f"{prefix} ERROR: no {timeframe} data for {pair} {start} - {end}")
         return df
     raise AssertionError("unreachable")
+
+
+def fetch_floor_seed(pair: str, timeframe: str, first_time, *, min_pinbars: int, step_candles: int = 400,
+                     max_steps: int = 8):
+    """The history before a frame that fills the first windows of the rolling pinbar body floor (PLAN_U §3.2).
+
+    Step k fetches `[first_time - k * step_candles candles of the TF's time, first_time)` (the whole span
+    re-fetched per step, like the auto-extend) until it holds >= `min_pinbars` body-% pinbars
+    (`pinbar_floor_seed_windows` x `pinbar_floor_window`). Every request retries under the `[floor_seed]`
+    prefix (`_get_history_retrying`). Rows at or after `first_time` are dropped (OANDA's `to` is exclusive —
+    asserted after the filter). One line on success:
+    ``[floor_seed] <TF>: <n> candles <first> -> <last>, <k> steps, <p> body-% pinbars (need <min>)``;
+    after `max_steps` with fewer -> ``RuntimeError: [floor_seed] ERROR: …`` (the replay stops before its
+    timing block, so the fetch gate FAILs). The M15 seed is fetched even when the run has no H1 trigger.
+    """
+    from engine_v2.features.candle_params import CandleParams
+    from engine_v2.features.candles_v2 import classify_candles, compute_candle_metrics
+
+    # one OANDA request per step, the whole span: stay under its 5000-candle limit
+    assert step_candles * max_steps <= 5000, f"[floor_seed] {step_candles} x {max_steps} candles > OANDA's 5000"
+    first = pd.to_datetime(first_time, utc=True)
+    span = _timeframe_to_timedelta(timeframe)
+    seed, n_pins = None, 0
+    for k in range(1, int(max_steps) + 1):
+        start = (first - k * int(step_candles) * span).to_pydatetime()
+        raw = _get_history_retrying(pair=pair, timeframe=timeframe, start=start, end=first.to_pydatetime(),
+                                    prefix="[floor_seed]", allow_empty=True)
+        if not raw.empty:
+            raw = raw[pd.to_datetime(raw["time"], utc=True) < first].reset_index(drop=True)
+        if raw.empty:
+            continue
+        assert pd.to_datetime(raw["time"].iloc[-1], utc=True) < first
+        typed = classify_candles(compute_candle_metrics(raw), CandleParams())
+        seed, n_pins = raw, int((typed["candle_type"] == "pinbar").sum())
+        if n_pins >= int(min_pinbars):
+            seed.attrs["pair"] = pair
+            print(f"[floor_seed] {timeframe}: {len(seed)} candles {seed['time'].iloc[0]} -> {seed['time'].iloc[-1]}, "
+                  f"{k} steps, {n_pins} body-% pinbars (need {int(min_pinbars)})")
+            return seed
+    got = 0 if seed is None else len(seed)
+    raise RuntimeError(
+        f"[floor_seed] ERROR: {timeframe} {pair}: {n_pins} body-% pinbars in {got} candles before {first} after "
+        f"{max_steps} steps of {step_candles} candles (need {int(min_pinbars)})"
+    )
+
+
+def fetch_floor_seeds(pair: str, timeframe: str, first_time, lower_timeframes) -> dict:
+    """The replay's floor seeds (PLAN_U §3.2): {timeframe: the parent TF's seed} and, when "M15" is in
+    `lower_timeframes`, {"M15": the M15 seed} — both before `first_time` (the parent frame's first candle; the M15
+    frame starts there), each holding `pinbar_floor_seed_windows` x `pinbar_floor_window` body-% pinbars."""
+    from engine_v2.features.candle_params import CandleParams
+
+    p = CandleParams()
+    min_pinbars = int(p.pinbar_floor_seed_windows) * int(p.pinbar_floor_window)
+    seeds = {timeframe: fetch_floor_seed(pair, timeframe, first_time, min_pinbars=min_pinbars)}
+    if "M15" in lower_timeframes:
+        seeds["M15"] = fetch_floor_seed(pair, "M15", first_time, min_pinbars=min_pinbars)
+    return seeds
 
 
 def fetch_history_with_auto_extend(
@@ -230,8 +294,12 @@ def main() -> None:
         extend_days=4,
         max_extend_iters=8,
     )
-    _t_data_fetch = time.perf_counter() - _t0
     df.attrs["pair"] = CONFIG.pair
+
+    # The history before the frame that fills the rolling pinbar body floor's first windows (PLAN_U §3.2): the
+    # H1 seed and, with M15 on, the M15 seed — both before the H1 frame's first candle (the M15 frame starts there).
+    floor_seeds = fetch_floor_seeds(CONFIG.pair, CONFIG.timeframe, df["time"].iloc[0], CONFIG.lower_timeframes)
+    _t_data_fetch = time.perf_counter() - _t0
 
     raw_path = (
         f"artifacts/debug/"
@@ -239,7 +307,7 @@ def main() -> None:
     )
     export_csv(df.copy(), raw_path)
 
-    res = run_pipeline(df, lower_timeframes=CONFIG.lower_timeframes)
+    res = run_pipeline(df, lower_timeframes=CONFIG.lower_timeframes, floor_seeds=floor_seeds)
     registry = res.meta["registry"]
     timing: dict = dict(res.meta.get("timing", {}))
 

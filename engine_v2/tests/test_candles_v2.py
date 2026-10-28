@@ -6,7 +6,7 @@ from engine_v2.features.candles_v2 import (
     compute_candle_metrics,
     classify_candles,
     compute_candle_features,
-    fixed_body_floor,
+    floor_demotes,
 )
 
 def _df(rows):
@@ -321,13 +321,12 @@ def test_big_flags_multiple_shifts_exist(params):
 
 # ---------------------------------------------------------------------------
 # The body floor -> pinbar (classify_candles step 4, applied LAST): a per-row
-# floor in price units (`body_floor`); `fixed_body_floor` builds it from
-# pinbar_body_pip_floor (PLAN_U U1). Real-engine prices, so pip_size matters
-# (non-JPY = 0.0001, JPY = 0.01).
+# floor in price units (`body_floor`; the rolling floor builds it in a replay,
+# `features/pinbar_body_floor.py` — PLAN_U U2). Real-engine prices.
 # ---------------------------------------------------------------------------
 
-def _floor_params(floor, **over):
-    # Real-ish defaults (maru=0.65, pinbar=0.40, special_maru=0.5) + the floor.
+def _floor_params(**over):
+    # Real-ish defaults (maru=0.65, pinbar=0.40, special_maru=0.5).
     base = dict(
         maru=0.65,
         pinbar=0.40,
@@ -337,7 +336,6 @@ def _floor_params(floor, **over):
         lookback=5,
         special_maru=0.5,
         special_maru_distance=0.1,
-        pinbar_body_pip_floor=floor,
     )
     base.update(over)
     return CandleParams(**base)
@@ -349,32 +347,32 @@ def _with_pair(rows, pair="EUR_USD"):
     return df
 
 
-def _classify_floor(df, params):
-    """classify_candles with the fixed floor of `params` (the way compute_candle_features builds it)."""
+def _classify_floor(df, floor):
+    """classify_candles with the same floor (price units; None = no floor) on every row."""
     m = compute_candle_metrics(df)
-    return classify_candles(m, params, body_floor=fixed_body_floor(m, params))
+    return classify_candles(m, _floor_params(), body_floor=None if floor is None else [floor] * len(m))
 
 
 def test_pinbar_floor_demotes_tiny_maru():
     """A would-be maru with body < floor is reclassified pinbar."""
-    # body = 0.00021 (2.1 pips) < 3-pip floor; body_pct ~0.84 => maru pre-floor.
+    # body = 0.00021 (2.1 pips) < a 3-pip floor; body_pct ~0.84 => maru pre-floor.
     df = _with_pair([{"time": "t", "o": 1.00000, "h": 1.00024, "l": 0.99999, "c": 1.00021}])
-    out = _classify_floor(df, _floor_params(3.0))
+    out = _classify_floor(df, 0.0003)
     assert out.loc[0, "candle_type"] == "pinbar"
 
 
 def test_pinbar_floor_disabled_keeps_tiny_maru():
-    """floor=0.0 -> rule dormant -> the same tiny candle stays maru."""
+    """No floor -> rule dormant -> the same tiny candle stays maru."""
     df = _with_pair([{"time": "t", "o": 1.00000, "h": 1.00024, "l": 0.99999, "c": 1.00021}])
-    out = _classify_floor(df, _floor_params(0.0))
+    out = _classify_floor(df, None)
     assert out.loc[0, "candle_type"] == "maru"
 
 
 def test_pinbar_floor_boundary_eps_keeps_type():
     """Body sitting exactly at the floor (3.0 pips) is NOT demoted (strict <, EPS guard)."""
-    # body = 1.00030 - 1.00000 = 0.0003 exactly; body_pct ~0.91 => maru.
+    # body = 1.00030 - 1.00000 = 0.0003 (a float a hair under 0.0003); body_pct ~0.91 => maru.
     df = _with_pair([{"time": "t", "o": 1.00000, "h": 1.00032, "l": 0.99999, "c": 1.00030}])
-    out = _classify_floor(df, _floor_params(3.0))
+    out = _classify_floor(df, 0.0003)
     assert out.loc[0, "candle_type"] == "maru"
 
 
@@ -384,7 +382,7 @@ def test_pinbar_floor_new_pinbar_gets_direction():
     # large lower wick (> dist) -> up-pinbar after demotion.
     # o=1.00001 c=1.00019 h=1.00020 l=0.99980 => len=0.0004, upper=0.00001, lower=0.00021.
     df = _with_pair([{"time": "t", "o": 1.00001, "h": 1.00020, "l": 0.99980, "c": 1.00019}])
-    out = _classify_floor(df, _floor_params(3.0))
+    out = _classify_floor(df, 0.0003)
     assert out.loc[0, "candle_type"] == "pinbar"
     assert int(out.loc[0, "pinbar_dir"]) == 1
 
@@ -395,35 +393,17 @@ def test_pinbar_floor_resets_special_maru():
     # promotion to maru, then floor demotes to pinbar and clears the flag.
     # o=1.00003 c=1.00019 h=1.00020 l=0.99991 => len=0.00029, upper=0.00001, lower=0.00012.
     df = _with_pair([{"time": "t", "o": 1.00003, "h": 1.00020, "l": 0.99991, "c": 1.00019}])
-    out = _classify_floor(df, _floor_params(3.0))
+    out = _classify_floor(df, 0.0003)
     assert out.loc[0, "candle_type"] == "pinbar"
     assert bool(out.loc[0, "is_special_maru"]) is False
     # the body-% type is the one AFTER the special-maru promotion (step 3), not the band's normal
     assert out.loc[0, "candle_type_before_floor"] == "maru"
 
 
-def test_pinbar_floor_jpy_pip_size():
-    """JPY pair resolves pip_size=0.01, so the floor is in 0.01 units."""
-    # body = 100.020 - 100.000 = 0.02 (2 pips JPY) < 3-pip floor (0.03); body_pct~0.87 => maru.
-    df = _with_pair(
-        [{"time": "t", "o": 100.000, "h": 100.022, "l": 99.999, "c": 100.020}],
-        pair="USD_JPY",
-    )
-    out = _classify_floor(df, _floor_params(3.0))
-    assert out.loc[0, "candle_type"] == "pinbar"
-    # Sanity: as a non-JPY pair the same body (0.02 = 200 pips) would stay maru.
-    df2 = _with_pair(
-        [{"time": "t", "o": 100.000, "h": 100.022, "l": 99.999, "c": 100.020}],
-        pair="EUR_USD",
-    )
-    out2 = _classify_floor(df2, _floor_params(3.0))
-    assert out2.loc[0, "candle_type"] == "maru"
-
-
 def test_pinbar_floor_columns_on_a_demoted_maru():
     """A floor pinbar records its floor, its body-% type and the flag (PLAN_U §3.4)."""
     df = _with_pair([{"time": "t", "o": 1.00000, "h": 1.00024, "l": 0.99999, "c": 1.00021}])
-    out = _classify_floor(df, _floor_params(3.0))
+    out = _classify_floor(df, 0.0003)
     assert out.loc[0, "candle_type"] == "pinbar"
     assert out.loc[0, "candle_type_before_floor"] == "maru"
     assert out.loc[0, "pinbar_body_floor"] == pytest.approx(0.0003)
@@ -434,7 +414,7 @@ def test_pinbar_floor_flag_is_off_on_a_body_pct_pinbar():
     """A body-% pinbar under the floor is a pinbar, not a pinbar BY the floor."""
     # body = 0.00004 (0.4 pips), len = 0.0002 => body_pct 0.2 => pinbar before the floor.
     df = _with_pair([{"time": "t", "o": 1.00000, "h": 1.00010, "l": 0.99990, "c": 1.00004}])
-    out = _classify_floor(df, _floor_params(3.0))
+    out = _classify_floor(df, 0.0003)
     assert out.loc[0, "candle_type"] == "pinbar"
     assert out.loc[0, "candle_type_before_floor"] == "pinbar"
     assert bool(out.loc[0, "is_floor_pinbar"]) is False
@@ -443,26 +423,18 @@ def test_pinbar_floor_flag_is_off_on_a_body_pct_pinbar():
 def test_no_body_floor_writes_nan_and_the_same_type():
     """body_floor=None: no floor anywhere — NaN floor, the type before = the type, no flag."""
     df = _with_pair([{"time": "t", "o": 1.00000, "h": 1.00024, "l": 0.99999, "c": 1.00021}])
-    out = classify_candles(compute_candle_metrics(df), _floor_params(0.0))
+    out = classify_candles(compute_candle_metrics(df), _floor_params())
     assert out.loc[0, "candle_type"] == "maru"
     assert pd.isna(out.loc[0, "pinbar_body_floor"])
     assert out.loc[0, "candle_type_before_floor"] == "maru"
     assert bool(out.loc[0, "is_floor_pinbar"]) is False
 
 
-def test_a_params_floor_without_body_floor_raises():
-    """The floor reaches step 4 only as `body_floor`: a params floor with none given fails loudly, never silently
-    classifies without it (PLAN_U review A3)."""
-    df = _with_pair([{"time": "t", "o": 1.00000, "h": 1.00024, "l": 0.99999, "c": 1.00021}])
-    with pytest.raises(ValueError, match="pinbar_body_pip_floor is set but no body_floor"):
-        classify_candles(compute_candle_metrics(df), _floor_params(3.0))
-
-
 def test_body_floor_is_per_row():
     """Each row is judged against its own floor; NaN = no floor on that row."""
     row = {"time": "t", "o": 1.00000, "h": 1.00024, "l": 0.99999, "c": 1.00021}   # a 2.1-pip maru
     df = _with_pair([row, dict(row), dict(row)])
-    out = classify_candles(compute_candle_metrics(df), _floor_params(0.0),
+    out = classify_candles(compute_candle_metrics(df), _floor_params(),
                            body_floor=[0.0003, float("nan"), 0.0002])
     assert list(out["candle_type"]) == ["pinbar", "maru", "maru"]
     assert list(out["is_floor_pinbar"]) == [True, False, False]
@@ -471,14 +443,23 @@ def test_body_floor_is_per_row():
 def test_body_floor_length_must_match():
     df = _with_pair([{"time": "t", "o": 1.00000, "h": 1.00024, "l": 0.99999, "c": 1.00021}])
     with pytest.raises(ValueError, match="body_floor has 2 values for 1 candles"):
-        classify_candles(compute_candle_metrics(df), _floor_params(0.0), body_floor=[0.0003, 0.0003])
+        classify_candles(compute_candle_metrics(df), _floor_params(), body_floor=[0.0003, 0.0003])
 
 
-def test_compute_candle_features_applies_the_fixed_floor():
-    """compute_candle_features classifies with fixed_body_floor(params) — the same floor on every row."""
+def test_floor_demotes_is_the_step4_predicate():
+    """The ONE demotion predicate (PLAN_U §8 A1): a body-% maru / normal strictly below its floor minus EPS; never a
+    body-% pinbar, never without a floor."""
+    got = floor_demotes([0.0002, 0.0003 - 2e-15, 0.0002, 0.0002, 0.0002],
+                        ["maru", "normal", "pinbar", "normal", "maru"],
+                        [0.0003, 0.0003, 0.0003, float("nan"), 0.0002])
+    assert list(got) == [True, False, False, False, False]
+
+
+def test_compute_candle_features_takes_an_explicit_body_floor():
+    """The `body_floor` seam overrides the rolling floor (PLAN_U §8 A5); without it a short frame has no floor."""
     df = _with_pair([{"time": "t", "o": 1.00000, "h": 1.00024, "l": 0.99999, "c": 1.00021, "volume": 10}] * 2)
-    out = compute_candle_features(df, _floor_params(3.0), anchor_shifts=(0,))
+    out = compute_candle_features(df, _floor_params(), anchor_shifts=(0,), body_floor=[0.0003, 0.0003])
     assert list(out["candle_type"]) == ["pinbar", "pinbar"]
     assert list(out["pinbar_body_floor"]) == pytest.approx([0.0003, 0.0003])
-    off = compute_candle_features(df, _floor_params(0.0), anchor_shifts=(0,))
+    off = compute_candle_features(df, _floor_params(), anchor_shifts=(0,))
     assert list(off["candle_type"]) == ["maru", "maru"] and off["pinbar_body_floor"].isna().all()

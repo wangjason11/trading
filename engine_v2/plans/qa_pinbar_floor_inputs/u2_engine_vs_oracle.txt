@@ -1,0 +1,15 @@
+## H1: 1058 candles; seed 559 candles 2025-10-14 14:00:00+00:00 -> 2025-11-14 21:00:00+00:00
+   floor NaN on 0 candles; floor min 2.3000 pips
+   today types maru/normal/pinbar 289/233/536 -> U2 274/174/610
+   today -> U2: 74 change (74 become, 0 stop); from maru 15, normal 59; with a pin direction 6
+   is_floor_pinbar 114 (maru 22, normal 92)
+   vs the prediction's per-candle U2 list (75 listed): 0 mismatches
+
+## M15: 4228 candles; seed 480 candles 2025-11-09 22:00:00+00:00 -> 2025-11-14 21:45:00+00:00
+   floor NaN on 0 candles; floor min 1.0200 pips
+   today types maru/normal/pinbar 1358/920/1950 -> U2 1267/717/2244
+   today -> U2: 294 change (294 become, 0 stop); from maru 91, normal 203; with a pin direction 31
+   is_floor_pinbar 436 (maru 125, normal 311)
+   vs the prediction's per-candle U2 list (313 listed): 0 mismatches
+
+ALL MATCH

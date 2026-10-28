@@ -614,7 +614,7 @@ def _driver(monkeypatch, *, sweep, render=None, stamp=None, var3=(), var4=()):
     monkeypatch.setattr("engine_v2.multitf.data_bridge.fetch_lower_tf_data",
                         lambda *a, **k: pd.DataFrame({"time": pd.date_range("2025-11-17", periods=4 * len(df),
                                                                             freq="15min", tz="UTC")}))
-    monkeypatch.setattr("engine_v2.multitf.data_bridge.prepare_lower_tf_data", lambda d: d)
+    monkeypatch.setattr("engine_v2.multitf.data_bridge.prepare_lower_tf_data", lambda d, **_k: d)
     monkeypatch.setattr("engine_v2.multitf.parent_tables.build_parent_tables", lambda *a, **k: tables)
     monkeypatch.setattr("engine_v2.multitf.entity_df_mutation._map_parent_idx_to_m15_hour_end",
                         lambda p, _h1, _m15: 4 * int(p) + 3)

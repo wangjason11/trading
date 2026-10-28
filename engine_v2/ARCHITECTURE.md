@@ -24,6 +24,12 @@ This doc explains the “shape” of the system so a new engineer can extend it 
   - Computing features/patterns on the full df
   - Emitting structure events at the candle index where they would have become known
   - Back-filling the candles before a decision candle offline when thresholds are known only after a lookahead window
+- The data fetch (`run_replay.main`, the `data_fetch` timing): the H1 frame (`fetch_history_with_auto_extend`), then
+  the FLOOR SEEDS — the H1 history before the frame's first candle and, with M15 on, the M15 history before the same
+  time (`fetch_floor_seeds`, 400-candle steps until each holds 2 windows = 180 body-% pinbars; PLAN_U U2). They only
+  fill the first windows of the rolling pinbar body floor (`features/pinbar_body_floor.py`) and are dropped: the frame
+  and every candle index are unchanged. `run_pipeline(df, floor_seeds=…)` makes no network call; the M15 frame itself
+  is fetched inside the pipeline (`_run_multi_tf_dual`), only when the H1 has triggers.
 
 The MarketStructure engine is explicitly sequential: look-ahead windows (pattern confirmation, range evaluation) are back-filled offline inside one forward pass. It never rewinds — the reversal-watch expiry's rewind, the last one, was removed 2026-09-29 (F3b; MARKET_STRUCTURE_SPEC "Look-ahead windows without rewinds").【fileciteturn1file0】
 

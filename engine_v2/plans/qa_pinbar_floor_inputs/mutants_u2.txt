@@ -1,0 +1,30 @@
+KILLED    u2_window_includes_candle          2 failing: test_the_window_is_strictly_before_the_candle, test_the_window_rolls_to_the_most_recent_pinbars
+KILLED    u2_window_skips_prev               8 failing: test_a_seed_fills_the_first_windows_and_only_the_windows, test_apply_candle_classification_and_prepare_lower_tf_data_p, test_natural_and_final_membership, test_the_function_uses_the_shared_predicate_with_eps
+KILLED    u2_final_as_natural                2 failing: test_natural_and_final_membership, test_the_seeds_demotions_count_in_the_final_window
+KILLED    u2_nearest_rank                    2 failing: test_the_function_uses_the_shared_predicate_with_eps, test_the_percentile_is_numpy_linear
+KILLED    u2_window_hardcoded_90             8 failing: test_a_seed_fills_the_first_windows_and_only_the_windows, test_natural_and_final_membership, test_natural_seeded_equals_frame_only_where_both_have_a_wind, test_the_function_uses_the_shared_predicate_with_eps
+KILLED    u2_percentile_hardcoded_90         6 failing: test_natural_and_final_membership, test_the_function_uses_the_shared_predicate_with_eps, test_the_percentile_is_numpy_linear, test_the_seeds_demotions_count_in_the_final_window
+SURVIVED  u2_function_no_eps                 2141 passed, 3 skipped, 1 deselected, 453 warnings in 235.76s (0:03:55)
+KILLED    u2_seed_demotions_dropped          1 failing: test_the_seeds_demotions_count_in_the_final_window
+KILLED    u2_no_seed_assert                  1 failing: test_a_seed_not_strictly_before_the_frame_fails_loudly
+KILLED    u2_source_not_checked              1 failing: test_an_unknown_window_source_raises
+KILLED    u2_demotes_no_eps                  2 failing: test_floor_demotes_is_the_step4_predicate, test_pinbar_floor_boundary_eps_keeps_type
+KILLED    u2_demotes_eps_sign                3 failing: test_floor_demotes_is_the_step4_predicate, test_pinbar_floor_boundary_eps_keeps_type, test_the_function_uses_the_shared_predicate_with_eps
+KILLED    u2_demotes_any_pinbar              2 failing: test_floor_demotes_is_the_step4_predicate, test_pinbar_floor_flag_is_off_on_a_body_pct_pinbar
+KILLED    u2_seam_ignored                    7 failing: test_compute_candle_features_takes_an_explicit_body_floor, test_first_failing_variant_is_reported, test_jpy_stack_uses_the_frame_pair_pip, test_select_uses_the_frame_body_floor
+KILLED    u2_seed_into_maru_pool             1 failing: test_a_seed_fills_the_first_windows_and_only_the_windows
+KILLED    u2_classifier_drops_seed           1 failing: test_apply_candle_classification_and_prepare_lower_tf_data_p
+KILLED    u2_bridge_drops_seed               1 failing: test_apply_candle_classification_and_prepare_lower_tf_data_p
+KILLED    u2_pipeline_no_h1_seed             1 failing: test_run_pipeline_passes_the_h1_seed
+KILLED    u2_pipeline_no_m15_seed            1 failing: test_run_pipeline_passes_the_m15_seed_to_the_m15_build
+KILLED    u2_dual_no_m15_seed                1 failing: test_the_m15_build_passes_the_m15_seed
+KILLED    u2_seed_one_window                 1 failing: test_the_replay_fetches_both_seeds_for_two_windows
+KILLED    u2_m15_seed_always                 1 failing: test_the_replay_fetches_both_seeds_for_two_windows
+KILLED    u2_guard_strict_gt                 1 failing: test_the_guard_stops_at_exactly_enough
+KILLED    u2_step_not_cumulative             4 failing: test_an_empty_step_is_not_an_error, test_the_guard_raises_after_max_steps, test_the_guard_steps_back_until_the_seed_holds_enough_pinbar, test_the_replay_fetches_both_seeds_for_two_windows
+KILLED    u2_seed_no_time_filter             7 failing: test_a_failed_seed_request_retries_under_its_own_prefix, test_an_empty_step_is_not_an_error, test_the_guard_raises_after_max_steps, test_the_guard_steps_back_until_the_seed_holds_enough_pinbar
+KILLED    u2_seed_no_filter_no_assert        4 failing: test_an_empty_step_is_not_an_error, test_the_guard_raises_after_max_steps, test_the_guard_steps_back_until_the_seed_holds_enough_pinbar, test_the_seed_drops_the_candle_at_the_frames_first_time
+KILLED    u2_seed_prefix                     2 failing: test_a_failed_seed_request_retries_under_its_own_prefix, test_a_seed_request_that_keeps_failing_raises
+KILLED    u2_seed_empty_raises               1 failing: test_an_empty_step_is_not_an_error
+KILLED    u2_no_5000_assert                  1 failing: test_the_steps_stay_under_oandas_candle_limit
+28/29 KILLED  (results: C:\Users\wangj\AppData\Local\Temp/mtU2\results.json)

@@ -112,10 +112,16 @@ which also catches a window change or a short response that raised nothing.
 ```bash
 RAW=$(ls -t artifacts/debug/*_raw.csv | head -1); \
 EXPECTED_FETCH="[data_bridge] Fetched 4228 M15 candles for NZD_USD in 5 chunks"; \
+EXPECTED_SEED_H1="[floor_seed] H1: 559 candles 2025-10-14 14:00:00+00:00 -> 2025-11-14 21:00:00+00:00, 2 steps, 232 body-% pinbars (need 180)"; \
+EXPECTED_SEED_M15="[floor_seed] M15: 480 candles 2025-11-09 22:00:00+00:00 -> 2025-11-14 21:45:00+00:00, 2 steps, 189 body-% pinbars (need 180)"; \
 if ! { [ run.log -nt "$RAW" ] && grep -aqF "=== Replay Timing ===" run.log; }; then \
-    echo "FETCH GATE: FAIL (stale log or crashed run: not newer than *_raw.csv, or no timing block)"; grep -aF "[data_bridge]" run.log; grep -aE "^([A-Za-z_][A-Za-z0-9_]*\.)*([A-Za-z0-9_]*(Error|Exception|Timeout)|KeyboardInterrupt|SystemExit)(: |[[:space:]]*$)" run.log; tail -n 3 run.log; \
+    echo "FETCH GATE: FAIL (stale log or crashed run: not newer than *_raw.csv, or no timing block)"; grep -aF "[data_bridge]" run.log; grep -aF "[floor_seed]" run.log; grep -aE "^([A-Za-z_][A-Za-z0-9_]*\.)*([A-Za-z0-9_]*(Error|Exception|Timeout)|KeyboardInterrupt|SystemExit)(: |[[:space:]]*$)" run.log; tail -n 3 run.log; \
+elif ! grep -aqF "$EXPECTED_SEED_H1" run.log || grep -aqF "[floor_seed] ERROR" run.log; then \
+    echo "FETCH GATE: FAIL (floor seed)"; grep -aF "[floor_seed]" run.log; \
 elif ! grep -aqF "[data_bridge]" run.log && ! grep -aqF "[multi_tf:dual]" run.log; then \
     echo "FETCH GATE: N/A (no lower timeframe)"; \
+elif ! grep -aqF "$EXPECTED_SEED_M15" run.log; then \
+    echo "FETCH GATE: FAIL (floor seed)"; grep -aF "[floor_seed]" run.log; \
 elif ! grep -aqF "[data_bridge]" run.log && grep -aqF "[multi_tf:dual] no triggers" run.log; then \
     echo "FETCH GATE: N/A (no H1 triggers - no M15 fetch)"; \
 elif grep -aqF "$EXPECTED_FETCH" run.log && ! grep -aqF "[data_bridge] ERROR" run.log; then \
@@ -147,12 +153,30 @@ fi
   (`[data_bridge] RETRY` M15 or `[auto_extend] RETRY` H1) is benign (the retry
   succeeded and the count is exact) — the silent-skip grep below prints it;
   mention it in the report. `/commit-save` Step 4b runs this same snippet.
+- **The floor-seed lines (since PLAN_U U2, 2026-10-28).** Before the pipeline,
+  `run_replay.main` fetches the history before the H1 frame that fills the
+  rolling pinbar body floor's first windows (`fetch_floor_seeds`): the H1 seed
+  always, the M15 seed whenever M15 is configured — even in a no-trigger run.
+  One line each, `[floor_seed] <TF>: <n> candles <first> -> <last>, <k> steps,
+  <p> body-% pinbars (need 180)`; a seed request retries like the H1 fetch
+  (`[floor_seed] RETRY k/2 …`, benign), a seed that still fails or cannot reach
+  its 180 pinbars raises `RuntimeError: [floor_seed] ERROR …` (a crashed run).
+  The snippet checks the exact lines in every branch where the run completed:
+  `EXPECTED_SEED_H1` before both N/A branches, `EXPECTED_SEED_M15` before the
+  no-trigger N/A and the PASS; a missing or different line = `FAIL (floor
+  seed)`. Without the seed a frame's first ~200 candles get other candle types
+  (GOTCHAS "A Frame Classified Without Its Floor Seed Gets Other Candle Types"),
+  exactly like an engine change. The branches are simulated by
+  `engine_v2/plans/qa_pinbar_floor_inputs/gate_floor_seed_sim.py` (10 cases).
 - **On FAIL, STOP.** `FAIL (stale log or crashed run …)` = the same-run check
   failed: either the log belongs to an earlier replay (a later replay run
   without `> run.log 2>&1` wrote newer outputs), or this replay crashed — the
   printed exception lines name it; a failed fetch raises `RuntimeError:
-  [data_bridge] ERROR …` (M15) or `RuntimeError: [auto_extend] ERROR …` (H1)
+  [data_bridge] ERROR …` (M15), `RuntimeError: [auto_extend] ERROR …` (H1) or
+  `RuntimeError: [floor_seed] ERROR …` (a floor seed)
   (report a **data-fetch failure**), anything else is a crash to debug.
+  `FAIL (floor seed)` = a seed line is missing or differs from
+  `EXPECTED_SEED_H1` / `_M15` — report it like a fetch-count failure.
   Plain `FAIL` = the fetch check failed: a `Fetched` count
   other than `EXPECTED_FETCH` — report a data-fetch failure (or a window
   change, see below) and quote the `[data_bridge]` lines. Either way,
@@ -190,7 +214,11 @@ fi
   `config.py`'s window changes**, using a replay whose log has no
   `[data_bridge] ERROR` line. This skill holds the canonical value, and
   `/commit-save` Step 4b and `engine_v2/WORKFLOWS.md` repeat it, so update all
-  three in the same commit.
+  three in the same commit. The same holds for `EXPECTED_SEED_H1` / `_M15`:
+  both seeds end before the H1 frame's FIRST candle (the auto-extended start,
+  2025-11-16 22:00 on the reference window), so a window change moves them —
+  measured on the PLAN_U U2 replay (2026-10-28): H1 559 candles / 232 body-%
+  pinbars, M15 480 / 189, 2 steps each (= `qa_pinbar_floor_inputs/seed_guard_steps.txt`).
 
 **Silent-skip grep.** Once the gate passes, grep the same log for
 silently-skipped work BEFORE the CSV comparison. `error` is in the pattern

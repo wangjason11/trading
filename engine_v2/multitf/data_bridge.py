@@ -100,18 +100,20 @@ def prepare_lower_tf_data(
     df_raw: pd.DataFrame,
     *,
     timeframe: str = "M15",
+    floor_seed: Optional[pd.DataFrame] = None,
 ) -> pd.DataFrame:
     """Apply candle classification, patterns, and imbalance to raw lower-TF data.
 
     Called once per replay. Returns the prepared df ready for structure analysis.
 
-    `timeframe` selects the per-TF pinbar body floor (`classify_candles` step 4;
-    see `apply_candle_classification`) and is stamped on the frame
-    (`attrs["timeframe"]`). Defaults to "M15" since that's the only configured
-    lower TF today.
+    `timeframe` is stamped on the frame (`attrs["timeframe"]`; the leg cap reads
+    it). Defaults to "M15" since that's the only configured lower TF today.
+    `floor_seed` = this TF's history before the frame (`run_replay.fetch_floor_seed`),
+    which fills the first windows of the rolling pinbar body floor (PLAN_U §3.2;
+    None -> frame-only windows).
     """
     # 1) Candle features
-    c_res = apply_candle_classification(df_raw, timeframe=timeframe)
+    c_res = apply_candle_classification(df_raw, timeframe=timeframe, floor_seed=floor_seed)
 
     # 2) Pattern engine
     p_res = detect_patterns(c_res.df)

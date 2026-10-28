@@ -79,9 +79,13 @@ def _make_raw_df(ohlc_rows: list[dict], pair: str = "NZD_USD") -> pd.DataFrame:
     return df
 
 
-def _prepare_df(ohlc_rows: list[dict], pair: str = "NZD_USD") -> pd.DataFrame:
+def _prepare_df(ohlc_rows: list[dict], pair: str = "NZD_USD", body_floor_pips=None) -> pd.DataFrame:
+    """`body_floor_pips`: an explicit floor on every candle (the `body_floor` seam, PLAN_U U2); None = the rolling
+    floor, frame-only (no floor before the frame's 90th pinbar)."""
     raw = _make_raw_df(ohlc_rows, pair=pair)
-    c_res = apply_candle_classification(raw)
+    pip = 0.01 if "JPY" in pair.upper() else 0.0001
+    c_res = apply_candle_classification(
+        raw, body_floor=None if body_floor_pips is None else np.full(len(raw), body_floor_pips * pip))
     p_res = detect_patterns(c_res.df)
     df = compute_imbalance(p_res.df)
     df.attrs["pair"] = pair

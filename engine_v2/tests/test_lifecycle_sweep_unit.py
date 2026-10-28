@@ -1933,7 +1933,7 @@ def test_orchestrator_sweep_triggers_carry_each_types_h1_parent_input(monkeypatc
     monkeypatch.setattr("engine_v2.multitf.uc1_trigger.detect_uc1_triggers", lambda *a, **k: [v2])
     monkeypatch.setattr("engine_v2.multitf.data_bridge.fetch_lower_tf_data",
                         lambda *a, **k: pd.DataFrame({"time": [0]}))
-    monkeypatch.setattr("engine_v2.multitf.data_bridge.prepare_lower_tf_data", lambda df: df)
+    monkeypatch.setattr("engine_v2.multitf.data_bridge.prepare_lower_tf_data", lambda df, **_k: df)
     monkeypatch.setattr("engine_v2.multitf.parent_tables.build_parent_tables", lambda *a, **k: None)
     monkeypatch.setattr("engine_v2.multitf.entity_df_mutation._map_parent_idx_to_m15_hour_end",
                         lambda p, _h1, _m15: 4 * int(p) + 3)
@@ -1991,7 +1991,7 @@ def test_orchestrator_resolve_start_passes_the_parent_cycles_cts_established_mom
     monkeypatch.setattr("engine_v2.multitf.uc1_trigger.detect_uc1_triggers", lambda *a, **k: [])
     monkeypatch.setattr("engine_v2.multitf.data_bridge.fetch_lower_tf_data",
                         lambda *a, **k: pd.DataFrame({"time": [0]}))
-    monkeypatch.setattr("engine_v2.multitf.data_bridge.prepare_lower_tf_data", lambda df: df)
+    monkeypatch.setattr("engine_v2.multitf.data_bridge.prepare_lower_tf_data", lambda df, **_k: df)
     monkeypatch.setattr("engine_v2.multitf.parent_tables.build_parent_tables",
                         lambda *a, **k: SimpleNamespace(cts_moment=cts_moment, floor=lambda s, c: 9999))
     monkeypatch.setattr("engine_v2.multitf.entity_df_mutation._map_parent_idx_to_m15_hour_end",

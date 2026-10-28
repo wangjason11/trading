@@ -376,7 +376,7 @@ def test_the_driver_feeds_each_lens_its_stream_and_counts_each_unique_sub_once(m
     monkeypatch.setattr("engine_v2.multitf.data_bridge.fetch_lower_tf_data",
                         lambda *a, **k: pd.DataFrame({"time": pd.date_range("2025-11-17", periods=200, freq="15min",
                                                                             tz="UTC")}))
-    monkeypatch.setattr("engine_v2.multitf.data_bridge.prepare_lower_tf_data", lambda df: df)
+    monkeypatch.setattr("engine_v2.multitf.data_bridge.prepare_lower_tf_data", lambda df, **_k: df)
     monkeypatch.setattr("engine_v2.multitf.parent_tables.build_parent_tables",
                         lambda *a, **k: SimpleNamespace(cycles=lambda: [(0, 1), (0, 2)]))
 
@@ -452,7 +452,7 @@ def test_the_driver_attributes_the_sub_wvmi_with_the_final_lists_a_sweep_generat
     monkeypatch.setattr("engine_v2.multitf.data_bridge.fetch_lower_tf_data",
                         lambda *a, **k: pd.DataFrame({"time": pd.date_range("2025-11-17", periods=200, freq="15min",
                                                                             tz="UTC")}))
-    monkeypatch.setattr("engine_v2.multitf.data_bridge.prepare_lower_tf_data", lambda df: df)
+    monkeypatch.setattr("engine_v2.multitf.data_bridge.prepare_lower_tf_data", lambda df, **_k: df)
     monkeypatch.setattr("engine_v2.multitf.parent_tables.build_parent_tables",
                         lambda *a, **k: SimpleNamespace(cycles=lambda: [(0, 1), (0, 2)]))
 
@@ -520,7 +520,7 @@ def test_the_driver_hands_each_replaced_sub_its_replacers_anchor(monkeypatch):
     monkeypatch.setattr("engine_v2.multitf.data_bridge.fetch_lower_tf_data",
                         lambda *a, **k: pd.DataFrame({"time": pd.date_range("2025-11-17", periods=200, freq="15min",
                                                                             tz="UTC")}))
-    monkeypatch.setattr("engine_v2.multitf.data_bridge.prepare_lower_tf_data", lambda df: df)
+    monkeypatch.setattr("engine_v2.multitf.data_bridge.prepare_lower_tf_data", lambda df, **_k: df)
     monkeypatch.setattr("engine_v2.multitf.parent_tables.build_parent_tables",
                         lambda *a, **k: SimpleNamespace(cycles=lambda: [(0, 1)]))
     subs = {}

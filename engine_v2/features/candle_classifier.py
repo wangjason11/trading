@@ -8,49 +8,13 @@ import pandas as pd
 from engine_v2.common.types import REQUIRED_CANDLE_COLS
 
 
-# PROVISIONAL (2026-06-16) — both these values AND the reclassify-to-pinbar
-# approach are a working iteration, not settled logic; expected to be tuned /
-# split per pair / possibly reworked. Full design record (current logic, the
-# previous `big_body_pip_floor` logic it replaced, and the open questions) lives
-# in `engine_v2/features/CANDLE_BODY_FLOOR_NOTES.md`.
-#
-# Per-TF absolute body-pip floor for the `pinbar` reclassification: any candle
-# whose real body is shorter than this floor is classified `pinbar` (strict `<`),
-# regardless of its body_pct (a body that small carries no directional
-# conviction). Applied LAST in `classify_candles`, so it trumps maru/normal/pinbar.
-# `compute_candle_features` turns it into a per-candle floor in price units
-# (`candles_v2.fixed_body_floor`; pip size per-pair, JPY=0.01 else 0.0001), which
-# every classified frame carries as `pinbar_body_floor` (PLAN_U U1).
-#
-# Calibrated 2026-06-09 (NZD_USD) via `debug/candle_size_distribution.py`, which
-# prints per-TF body distributions + the demotion impact of each candidate floor.
-# Body medians are roughly H1 2.8 / M15 1.5 / M5 0.9 pips and halve per TF step
-# down, so the floors scale similarly rather than staying flat. These values give
-# a balanced, gentle proportional bite (~4-5% of all candles, ~3% of marus,
-# ~13-15% of normals at each TF). They REPLACE the original 3/2/1 trial, which was
-# too aggressive at the lower TFs (M15=2 demoted ~23% of marus, M5=1 ~20% of all
-# candles) and pushed an H1 sid=0 reversal ~190 candles late. NOT the same as the
-# old `is_big_maru` `big_body_pip_floor` (that gate was removed). Down the line
-# these may be tuned and/or split per currency pair as the strategy is optimized.
-DEFAULT_PINBAR_BODY_PIP_FLOOR_BY_TF: dict[str, float] = {
-    "H1": 2.20,
-    "M15": 1.0,
-    "M5": 0.5,
-}
-
-
-def candle_params_for_timeframe(timeframe: str):
-    """The candle params a frame of `timeframe` is classified with — the ONE
-    reader of `DEFAULT_PINBAR_BODY_PIP_FLOOR_BY_TF`. Unknown TFs degrade to no
-    floor (candle_type purely body_pct-driven). `apply_candle_classification`
-    classifies with it and stamps `df.attrs["timeframe"]`, so a later reader
-    (the institutional pattern's stacked legs, PLAN_H §8.1) re-derives exactly
-    the params of that frame's single candles. The floor itself reaches a
-    stacked leg per candle — the frame's `pinbar_body_floor` at the leg's last
-    candle (PLAN_U §3.3), not these params."""
-    from engine_v2.features.candle_params import CandleParams
-
-    return CandleParams(pinbar_body_pip_floor=DEFAULT_PINBAR_BODY_PIP_FLOOR_BY_TF.get(str(timeframe), 0.0))
+# The pinbar body floor of `classify_candles` step 4 is the ROLLING floor (PLAN_U U2,
+# the user 2026-10-27 / 28): each candle's floor = the p90 of the bodies of the 90
+# most recent pinbars strictly before it (`CandleParams.pinbar_floor_*`,
+# `features/pinbar_body_floor.py`). It replaced the fixed per-TF table
+# (H1 2.2 / M15 1.0 / M5 0.5 pips, calibrated 2026-06-09) and its reader
+# `candle_params_for_timeframe` — the table's history: CANDLE_BODY_FLOOR_NOTES
+# "Previous logic". Every frame is classified with `CandleParams()`.
 
 
 @dataclass
@@ -63,30 +27,33 @@ def apply_candle_classification(
     df: pd.DataFrame,
     *,
     timeframe: str = "H1",
+    floor_seed: Optional[pd.DataFrame] = None,
+    body_floor=None,
 ) -> CandleClassifierResult:
     """
     Adapter boundary: canonical df -> legacy candle classification.
     Expected behavior:
       - returns df with additional candle-type columns (whatever legacy produces)
 
-    `timeframe` selects the per-TF absolute body-pip floor for the `pinbar`
-    reclassification (see `DEFAULT_PINBAR_BODY_PIP_FLOOR_BY_TF`). Unknown TFs
-    degrade to no floor (candle_type purely body_pct-driven). Default "H1"
-    matches the H1-main call site which doesn't pass it.
+    Classifies with `CandleParams()`; the pinbar body floor is the rolling one
+    over `floor_seed` (the history fetched before the frame —
+    `run_replay.fetch_floor_seed`; None -> frame-only windows: the candles before
+    the frame's 90th pinbar get no floor) + this frame. `body_floor` (one floor
+    per row, price units) overrides it — a test seam (PLAN_U §8 A5).
 
-    Stamps `df.attrs["timeframe"]` (a str — never the params object: attrs are
-    deep-copied on every pandas `__finalize__`); readers get the params via
-    `candle_params_for_timeframe(df.attrs["timeframe"])`.
+    Stamps `df.attrs["timeframe"]` (a str; default "H1" = the H1-main call site,
+    which doesn't pass it) — the institutional pattern's leg cap reads it
+    (`config.ip_leg_cap_by_tf`).
     """
     _validate_input(df)
 
     # --- LEGACY HOOK (edit this block only) -----------------------
     #
+    from engine_v2.features.candle_params import CandleParams
     from engine_v2.features.candles_v2 import compute_candle_features
 
-    params = candle_params_for_timeframe(timeframe)
-
-    df = compute_candle_features(df, params, anchor_shifts=(0,1,2))
+    df = compute_candle_features(df, CandleParams(), anchor_shifts=(0,1,2),
+                                 floor_seed=floor_seed, body_floor=body_floor)
     df.attrs["timeframe"] = str(timeframe)
     notes = "Candle features computed via features.candles_v2"
     # --------------------------------------------------------------

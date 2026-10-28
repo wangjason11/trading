@@ -43,7 +43,11 @@ fake a CSV delta. `multitf/data_bridge.fetch_lower_tf_data` fails loudly since
 RETRY k/2 …` — then the fetch raises `[data_bridge] ERROR …` and the replay
 crashes; before, it printed the error and exited 0 on a truncated frame); the
 H1 fetch retries the same way since 2026-09-28 (`[auto_extend] RETRY k/2 …`,
-then `[auto_extend] ERROR …` — a crashed run to the gate, no H1 branch). The
+then `[auto_extend] ERROR …` — a crashed run to the gate, no H1 branch). Since
+PLAN_U U2 (2026-10-28) the replay also fetches the floor seeds (the history
+before the H1 frame for the rolling pinbar body floor): the gate checks their
+exact `[floor_seed] H1: …` / `M15: …` lines in every completed branch
+(`FAIL (floor seed)` otherwise; a seed error is `[floor_seed] ERROR …`). The
 gate ties the log to the outputs on disk and checks the exact candle count. The
 full rationale, the same-run check, the N/A cases and the canonical
 `EXPECTED_FETCH` value live in the `/compare` skill §2b; `/commit-save` Step 4b
@@ -52,10 +56,16 @@ runs the same snippet:
 ```bash
 RAW=$(ls -t artifacts/debug/*_raw.csv | head -1); \
 EXPECTED_FETCH="[data_bridge] Fetched 4228 M15 candles for NZD_USD in 5 chunks"; \
+EXPECTED_SEED_H1="[floor_seed] H1: 559 candles 2025-10-14 14:00:00+00:00 -> 2025-11-14 21:00:00+00:00, 2 steps, 232 body-% pinbars (need 180)"; \
+EXPECTED_SEED_M15="[floor_seed] M15: 480 candles 2025-11-09 22:00:00+00:00 -> 2025-11-14 21:45:00+00:00, 2 steps, 189 body-% pinbars (need 180)"; \
 if ! { [ run.log -nt "$RAW" ] && grep -aqF "=== Replay Timing ===" run.log; }; then \
-    echo "FETCH GATE: FAIL (stale log or crashed run: not newer than *_raw.csv, or no timing block)"; grep -aF "[data_bridge]" run.log; grep -aE "^([A-Za-z_][A-Za-z0-9_]*\.)*([A-Za-z0-9_]*(Error|Exception|Timeout)|KeyboardInterrupt|SystemExit)(: |[[:space:]]*$)" run.log; tail -n 3 run.log; \
+    echo "FETCH GATE: FAIL (stale log or crashed run: not newer than *_raw.csv, or no timing block)"; grep -aF "[data_bridge]" run.log; grep -aF "[floor_seed]" run.log; grep -aE "^([A-Za-z_][A-Za-z0-9_]*\.)*([A-Za-z0-9_]*(Error|Exception|Timeout)|KeyboardInterrupt|SystemExit)(: |[[:space:]]*$)" run.log; tail -n 3 run.log; \
+elif ! grep -aqF "$EXPECTED_SEED_H1" run.log || grep -aqF "[floor_seed] ERROR" run.log; then \
+    echo "FETCH GATE: FAIL (floor seed)"; grep -aF "[floor_seed]" run.log; \
 elif ! grep -aqF "[data_bridge]" run.log && ! grep -aqF "[multi_tf:dual]" run.log; then \
     echo "FETCH GATE: N/A (no lower timeframe)"; \
+elif ! grep -aqF "$EXPECTED_SEED_M15" run.log; then \
+    echo "FETCH GATE: FAIL (floor seed)"; grep -aF "[floor_seed]" run.log; \
 elif ! grep -aqF "[data_bridge]" run.log && grep -aqF "[multi_tf:dual] no triggers" run.log; then \
     echo "FETCH GATE: N/A (no H1 triggers - no M15 fetch)"; \
 elif grep -aqF "$EXPECTED_FETCH" run.log && ! grep -aqF "[data_bridge] ERROR" run.log; then \
@@ -69,8 +79,9 @@ fi
 interpret that run's diff. N/A is decided by the snippet, only when no M15
 fetch ran: no lower timeframe (`config.py` `lower_timeframes=()`), or no H1
 trigger (the `[multi_tf:dual] no triggers` line) — that run writes no M15 CSVs.
-The expected line depends on the window (reference window
-2025-11-15→2026-01-20: 4228 in 5 chunks); re-baseline it in `/compare`,
+The expected lines depend on the window (reference window
+2025-11-15→2026-01-20: 4228 in 5 chunks; the seeds H1 559 / 232 pinbars, M15
+480 / 189); re-baseline them in `/compare`,
 `/commit-save` and here in one commit whenever `config.py`'s window changes.
 
 **2. Silent-skip grep.** `error` is in the pattern (case-insensitive) as a
