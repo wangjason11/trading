@@ -1,0 +1,4 @@
+commit_hash=aff21f8
+timestamp=20261028_165600
+branch=week9-entries-decisions
+commit_message=PLAN_W 9a (35e827e, the fill checks require a 0..n-1 frame) + 9b (aff21f8, a cycle that ends before its fib locks gets its POI record) - both zero change on the reference window
