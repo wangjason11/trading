@@ -283,7 +283,8 @@ SYLLABUS Week 9 Part 2 "Zone size at entry and stop-loss".
    derived CTS KL zone. IC Step 4: KEEP DEFERRED. Moved to D.3 (Parts 2 / 3): the candle-direction / rejection
    confirmation, zone strength scoring, the M5 layer. Then Part 1 is complete.
    **Progress 2026-10-28 (PLAN_V, `engine_v2/plans/PLAN_V_part1_minor_items.md`):** 8a DONE (`955489b`, zero change)
-   and 8b DONE (`01f5282`, zero change) — the user: "Two commits, one save"; 8c MEASURED (PLAN_V §3.1: 0 of 53 wave
+   and 8b DONE (`01f5282`, zero change) — the user: "Two commits, one save" (S_V8b `20261028_141322_245620c` = S_U3b
+   byte for byte); 8c MEASURED (PLAN_V §3.1: 0 of 53 wave
    candles move, sub 3's temporary-LP history gains three volume-only dojis) and DECIDED: "Apply it" + a
    direction-0 wave candle drawn in its `vol_dir` colour ("Draw it in its vol_dir colour"). NEXT: 8c's landing.
 

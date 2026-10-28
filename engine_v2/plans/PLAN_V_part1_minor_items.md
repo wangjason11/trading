@@ -1,7 +1,9 @@
 # PLAN_V — the last Part 1 items: 8a the §A hygiene trio, 8b the same-candle replacement chain's `ended_by`, 8c the agreed direction for wave candles + WVMI (SESSION ORDER item 8, the user's scope 2026-10-28)
 
-**Status: 2026-10-28 — 8a BUILT = its prediction (§1.5), 8b BUILT = its prediction (§2.4), both awaiting the user's
-look + `/commit-save`; 8c being measured (§3).** Baseline **S_U3b**
+**Status: 2026-10-28 — 8a LANDED (`955489b`, = its prediction, §1.5), 8b LANDED (`01f5282`, = its prediction, §2.4);
+one save after both (the user: "Two commits, one save"): S_V8b `20261028_141322_245620c` (source `245620c`, save
+`67c4d05`, trunk `29276a0`; = S_U3b byte for byte; the new `/compare` baseline). 8c MEASURED + DECIDED (§3.1–3.2);
+NEXT: 8c's landing.** Baseline **S_U3b**
 `artifacts/commits/week9-entries-decisions/20261028_130713_9c3949d` (source `9c3949d`; HEAD at drafting `409c8ac`, code
 = `9c3949d`); suite 2154. The scope is the user's (register `IDEA_PARKING_LOT.md` §D "SESSION ORDER" item 8, 2026-10-28):
 three landings in the order 8a → 8b → 8c, one cause per `/compare` (the two zero-change landings first, so 8c's

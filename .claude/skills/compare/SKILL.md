@@ -897,7 +897,17 @@ JSON equal (`cmp_fig_full.py`), the PNGs byte-equal, chart counts unchanged (79 
 `qa_pinbar_floor_inputs/u3b_compare.txt`); `data_fetch` 2.6 → 4.2 s. Skip grep 33 (the same lines). Not a
 save-format boundary. Suite 2154; mutants 15 / 15. A `[floor_seed] ERROR: … the final window has not converged …`
 = a crashed run (§2b). S_U3b `20261028_130713_9c3949d` (source `9c3949d`, save `2fcfcb3`, trunk `ef65a65`; =
-`LATEST_<branch>` from 2026-10-28; run mode, the save = S_U3 byte for byte again). PLAN_U is complete.
+`LATEST_<branch>` until S_V8b, below; run mode, the save = S_U3 byte for byte again). PLAN_U is complete.
+**PLAN_V 8a + 8b (2026-10-28, SESSION ORDER item 8; `plans/PLAN_V_part1_minor_items.md` §1–2) — two zero-change
+landings, one save:** 8a the §A hygiene trio (`955489b`: the chart styles read the registry, dead keys / locals gone,
+`run_replay` asserts an H1 main), 8b the same-candle replacement chain's `ended_by` = the surviving replacer
+(`01f5282`; 0 on the window). Each = its prediction vs S_U3b: 30 / 30 CSVs md5-equal, the three figures' full JSON
+equal (`cmp_fig_full.py`), the PNGs byte-equal, chart counts unchanged (79 / 232, 154 / 134, 302 / 305), the
+`[floor_seed]` lines + skip grep 33 unchanged (`plan_v_inputs/v8a_compare.txt`, `v8b_compare.txt`). Not a save-format
+boundary. Suite 2166; mutants 15 / 15 + 4 / 4. S_V8b `20261028_141322_245620c` (source `245620c`, save `67c4d05`,
+trunk `29276a0`; = `LATEST_<branch>` from 2026-10-28; run mode, the save = S_U3b byte for byte). 8c (the agreed
+direction for wave candles + WVMI) is next — measured (PLAN_V §3.1): it adds sub 3's three volume-only-doji
+temporary LPs (+3 rows per lens `*_wvmi_lps.csv`, +3 'M15 WVMI LP sell' dots per M15 chart), nothing else.
 
 **M15.counter** and **M15.confluence** (9 files each — 7 per-lens debug CSVs
 with the same filename suffixes prefixed `*_M15_counter_` /
