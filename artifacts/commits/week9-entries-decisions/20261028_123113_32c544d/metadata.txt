@@ -1,0 +1,4 @@
+commit_hash=32c544d
+timestamp=20261028_123113
+branch=week9-entries-decisions
+commit_message=PLAN_U U3 (SESSION ORDER item 7): the pinbar body floor's window = the final pinbars (body-% + floor-demoted)
