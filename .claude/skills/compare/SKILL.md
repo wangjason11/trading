@@ -926,8 +926,25 @@ w9b_window_replay.py` + `w9b_window_compare.py`). Each = its prediction vs S_V8c
 figures' full JSON equal (`cmp_fig_full.py`), the PNGs equal, chart counts 79 / 232, 154 / 134, 302 / 305, the
 `[floor_seed]` lines + skip grep 33 unchanged (`plan_w_inputs/w9a_compare.txt`, `w9b_compare.txt`). Not a
 save-format boundary. Suite 2165; mutants 5 / 5 + 5 / 5 (PLAN_S step 2's re-anchored) + 4 / 4. S_W9b
-`20261028_165600_aff21f8` (source `aff21f8`, save `1ac3e12`, trunk `f798f9e`; = `LATEST_<branch>` from 2026-10-28;
-run mode, the save = S_V8c byte for byte). 9c (the sub CTS KL zones) is next.
+`20261028_165600_aff21f8` (source `aff21f8`, save `1ac3e12`, trunk `f798f9e`; = `LATEST_<branch>` until S_W9c,
+below; run mode, the save = S_V8c byte for byte).
+**PLAN_W 9c-2 + 9c-1 (2026-10-28, SESSION ORDER item 9c; `plans/PLAN_W_part1_last_items.md` §3) — two landings, one
+save (the user: "Commit now, save after 9c-1"):** 9c-2 `321667a` — a sub probe's reference reads the WINNER's own
+sub's derived CTS KL zone as of the read when the winning CTS event is a CTS_CONFIRMED (`entity_df_mutation.
+_cts_kl_zones_as_of`; was ad hoc, `kl_zones=[]`) — ZERO change (30 / 30 CSVs + figures + PNGs = S_W9b; the one
+differing read, 3819, +2.1 pips outer, keeps its start; `plan_w_inputs/w9c2_compare.txt`); 9c-1 `538cd2f` — a
+sub's lens projection returns its CTS KL zones too and the M15 charts draw them HIDDEN in the legend group
+`sub_cts_zones` behind the control bar's `Sub CTS zones` button. **A save-format boundary (rows + figure):** vs
+S_W9b exactly the two lens `*_kl_zones.csv` differ, rows ADDED only (confluence 22 → 42 lines, counter 9 → 16 —
+`source_kind` CTS); the H1 chart identical; each M15 chart's elements outside the group = S_W9b's, the group all
+`visible=False` (confluence 302 / 305 → 424 / 372 traces / shapes, counter 154 / 134 → 192 / 154); the PNGs equal
+(hidden). Positional `cmp_fig_full.py` breaks across it (inserted traces shift every later index) — check it with
+`plans/plan_w_inputs/w9c1_landing_check.py BASE CUR_DEBUG CUR_CHARTS VARIANT_TREE` (multisets; the variant tree from
+`w9c_variant_replay.py`) or `qa_chart_edits_inputs/fig_named_diff.py`; the button: `w9c1_headless_check.py`. Skip
+grep 33; the gate lines unchanged. Suite 2172; mutants 7 / 7 + 6 / 6 + 8 / 8 (the control bar's re-anchored).
+S_W9c `20261028_180228_538cd2f` (source `538cd2f`, save `bfe9f93`, trunk `58e5cb5`; = `LATEST_<branch>` from
+2026-10-28; run mode, the save = `w9c1_landing_check.py` ALL AS PREDICTED). SESSION ORDER item 9 DONE — **Week 9
+Part 1 COMPLETE.**
 
 **M15.counter** and **M15.confluence** (9 files each — 7 per-lens debug CSVs
 with the same filename suffixes prefixed `*_M15_counter_` /
@@ -1085,6 +1102,8 @@ older values in **History** below):
 - `M15.counter` chart: traces=154, shapes=136
 - `M15.confluence` chart: traces=302, shapes=307
 
+(Since S_W9c `20261028_180228_538cd2f` (PLAN_W 9c-1, 2026-10-28): H1 79 / 232, counter 192 / 154, confluence
+424 / 372 — the M15 charts' + the subs' hidden CTS KL zones (counter +38 / +20, confluence +122 / +67).)
 (Re-measured 2026-10-28 on S_U2 `20261028_113834_84fbbc6`: H1 79 / 232, counter 154 / 134, confluence 302 / 305 —
 the WVMI LP marks (step 5) had moved the block's values to 83 / 234, 158 / 136, 306 / 307 by S_U1; PLAN_U U2 then
 removed the H1 (0,0) CTS zone's 2 bounds steps, −4 traces / −2 shapes on each chart. Each `/compare` checks its

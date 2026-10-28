@@ -341,8 +341,8 @@ SYLLABUS Week 9 Part 2 "Zone size at entry and stop-loss".
    "Derived, as of the read" (9c-2); 9c-2 BUILT = its prediction (zero change — the one sub reference that differs,
    +2.1 pips outer at 3819, moves no start; PLAN_W §3.5); 9c-1 BUILT = its prediction (the lens KL CSVs + their CTS
    rows, the M15 charts + the hidden `sub_cts_zones` group and its `Sub CTS zones` button; PLAN_W §3.7; the user's
-   look: "thank you this look good. please proceed"). **Item 9 DONE — Week 9 Part 1 COMPLETE 2026-10-28.** NEXT:
-   the push (when the user says) → Part 2.
+   look: "thank you this look good. please proceed"); one save after both: S_W9c `20261028_180228_538cd2f`. **Item 9
+   DONE — Week 9 Part 1 COMPLETE 2026-10-28.** NEXT: the push (when the user says) → Part 2.
 
 **D.1 — Ordered (the heavy items):**
 1. **One POI per cycle** (redefine the IC & POI zone logic) — B landed; its chart debugging PAUSED for item 2 (user
