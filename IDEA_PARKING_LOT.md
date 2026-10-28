@@ -33,18 +33,20 @@ The open lines below carry over (fold in when their files are next touched); D a
 - **Charting audit 2026-09-21 — the style / code items** — #7 sub-native zone outline hardcoded (no `zone.m15.poi.*`
   key), #8 hover-label colours hardcoded, #9 the M15 zone-hover hitbox lines hardcoded (H1 reads the registry), #11 the
   unused `structure.reversal_watch_line` key + the never-plotted `watch_y` series; plus the audit's still-unverified
-  list. Also: 8 unused locals in `charting/export_m15_chart.py` (ruff F841, pre-existing). OPEN (fold in when those
-  files are next touched). Detail: memory `project_charting_audit_20260921.md`.
+  list. Also: 8 unused locals in `charting/export_m15_chart.py` (ruff F841, pre-existing). OPEN — **SESSION ORDER
+  item 8a (the user 2026-10-28)**. Detail: memory `project_charting_audit_20260921.md`.
 - **Two dead reads found by the Week 9 /prepare + item-1 talk** — `_run_multi_tf_dual(poi_zones=...)` is never read
   (`pipeline/orchestrator.py` ~:837; fold into item 1's landing B, which touches the orchestrator's `POIConfig`);
   `wvmi._find_temporary_lp` computes `fp_vol_dir` and never reads it (fold into "The agreed direction for wave candles
-  + WVMI", D.2) — GONE 2026-10-26 with the function ("WVMI back on the chart" step 3, §D item 5). The first: OPEN.
+  + WVMI", D.2) — GONE 2026-10-26 with the function ("WVMI back on the chart" step 3, §D item 5). The first: OPEN —
+  **SESSION ORDER item 8a (the user 2026-10-28)**.
 - **The H1-main frame is classified and stamped "H1" whatever the config timeframe** — `orchestrator.run_pipeline`
   calls `apply_candle_classification(df)` with its default (`timeframe="H1"`), so a re-enabled M15-main window
   (`config.py` keeps them commented out) would get the institutional pattern's H1 cap through the frame's
   `attrs["timeframe"]` (PLAN_H landing review, 2026-10-06; the H1 pinbar floor and params went with PLAN_U U2 —
   the rolling floor is TF-agnostic, `CandleParams()` on every frame; `run_pipeline` keys its floor seed "H1"). Pass `CONFIG.timeframe` (or assert H1)
-  when such a window comes back. OPEN; not reachable on the current config.
+  when such a window comes back. OPEN; not reachable on the current config — **SESSION ORDER item 8a (the user
+  2026-10-28)**: assert H1 or pass `CONFIG.timeframe`.
 
 ## B. Week 8 scope — decided 2026-09-30 (the M5 layer moved to D; the syllabus extras dropped — "Recently closed")
 
@@ -266,8 +268,18 @@ SYLLABUS Week 9 Part 2 "Zone size at entry and stop-loss".
    NEXT: item 8.
 8. **The remaining minor items before Part 2** — after item 7, in the next session(s) (the user 2026-10-27: "any
    remaining minor tasks & items in the next session(s) that we previously documented as pre-reqs to starting part 2
-   of week 9"). Candidates on file: D.2 below (the backlog "decided after D.1 is complete", the user 2026-10-01) and
-   §A's carry-overs; the user names which. Then Part 1 is complete.
+   of week 9"). **SCOPE DECIDED by the user 2026-10-28** (after item 7 closed; shown all 13 candidates of §A + D.2
+   with a size / expected change / recommendation each, the user picked — AskUserQuestion — every recommended
+   option): **(8a)** the §A hygiene trio — the charting audit's style / code items (#7, #8, #9, #11 + the 8 unused
+   locals in `export_m15_chart.py`), the dead `_run_multi_tf_dual(poi_zones=…)` read, the H1 frame's "H1" stamp
+   (assert / pass `CONFIG.timeframe`) — expected zero output change; **(8b)** the same-candle replacement chain's
+   `ended_by` = the replacer that survives (D.2) — 0 on the window, expected zero change; **(8c)** the agreed direction
+   for wave candles + WVMI (D.2, PLAN_H Q-W) — a behaviour change: its own plan, prediction, `/compare`, chart look.
+   Order (proposed by Claude — the zero-change landings first, so the behaviour change's `/compare` carries one
+   cause; the user may reorder): 8a → 8b → 8c. Not picked, stay in D.2: the missing-label fill paths, B5, the
+   "sub 3 cyc 3 has no POI record" note (item 1's debugging log, status unverified), the sub probe reference = the
+   derived CTS KL zone. IC Step 4: KEEP DEFERRED. Moved to D.3 (Parts 2 / 3): the candle-direction / rejection
+   confirmation, zone strength scoring, the M5 layer. Then Part 1 is complete.
 
 **D.1 — Ordered (the heavy items):**
 1. **One POI per cycle** (redefine the IC & POI zone logic) — B landed; its chart debugging PAUSED for item 2 (user
@@ -433,16 +445,19 @@ SYLLABUS Week 9 Part 2 "Zone size at entry and stop-loss".
 **D.2 — Backlog: decided after D.1 is complete (user 2026-10-01).**
 - ~~**Entry confirmation candle patterns**~~ — **MOVED 2026-10-27 to D.3** (Part 2 — the user: "We will also move
   entry candle patterns to part 2 of Week 9, thus allowing us to complete part 1").
-- **The M5 layer** (`H1.main >> M5.counter` — a third lens directly under H1.main, the Part 4 vision's 4th chart;
+- ~~**The M5 layer**~~ — **MOVED 2026-10-28 to D.3** (the user, item 8's scoping: built when Part 2 needs M5). Was:
+  (`H1.main >> M5.counter` — a third lens directly under H1.main, the Part 4 vision's 4th chart;
   memory `project_part4_vision.md`) — DECIDED 2026-09-30: its own Heavy block (plan + cold review), before any Entries
   work that reads M5; not a Week 8 blocker. Footprint seen so far: `debug/export_sub_tables.py` hard-codes `_M15_`, and
   `pipeline/orchestrator.py` (~:646) runs the whole multi-TF path only when `"M15"` is in `lower_timeframes`. Related
   (only if M5 ever nests under an M15 sub): the canonical encoding of a deeper path, e.g. `H1.main >> M15.counter >>
   M5.confluence` (PART4 ~:176 "Open (deferred)"; PART4 §13.6, §17.12). BACKLOG.
-- **Zone strength scoring** — syllabus Week 7 (`strength_score` / `strength_flags`, "strong zones look strong", click a
+- ~~**Zone strength scoring**~~ — **MOVED 2026-10-28 to D.3** (the user, item 8's scoping: with zone size at entry and
+  stop loss). Was: syllabus Week 7 (`strength_score` / `strength_flags`, "strong zones look strong", click a
   zone → strength + flags); `KLZone.strength` is always `0.0` (`zones/kl_zones_v1.py`). DECIDE (scope). Idea attached:
   scale strength thresholds by ATR percentile (volatility regimes).
-- **Candle-direction / rejection confirmation at a zone touch — as an ENTRY condition** (user 2026-09-30: not a trigger
+- ~~**Candle-direction / rejection confirmation at a zone touch — as an ENTRY condition**~~ — **MOVED 2026-10-28 to
+  D.3** (the user, item 8's scoping: Part 2, next to the entry candle patterns). Was: (user 2026-09-30: not a trigger
   filter; triggers stay structural). The May trigger filter (`47e7532`, reverted `2afd3b2`) is the reference form:
   trigger candle body opposing the zone side. DECIDE when Entries are designed. Detail: this register's "Recently
   closed" (the 2026-09-30 measurement).
@@ -452,7 +467,8 @@ SYLLABUS Week 9 Part 2 "Zone size at entry and stop-loss".
   `ended_by` names the co-starter that was itself replaced — a sub that never starts. Before S1 the triggers CSV
   carried that sub's creation id (a sub no chart draws); since S1 the cell is empty and the sweep logs `WARNING
   [sweep] record … ended by pool#k, which never started`. Candidate fix: `ended_by` = the replacer that survives.
-  Pinned: `test_lifecycle_sweep_unit.py::test_a_replacer_that_never_starts_leaves_ended_by_empty_and_warns`. DECIDE.
+  Pinned: `test_lifecycle_sweep_unit.py::test_a_replacer_that_never_starts_leaves_ended_by_empty_and_warns`. **DECIDED
+  2026-10-28 — SESSION ORDER item 8b** (the user): the candidate fix, its own landing (0 on the window).
 - **The fill check's label-based paths disagree on a frame with a missing label** (PLAN_S step 2's landing review,
   2026-10-21; unreachable — every engine frame is a contiguous 0..n−1 index, 0 on the window): `is_filled`'s fallback
   loop skips a missing label (`continue`; a `break` mutant there survives the suite), while
@@ -475,7 +491,9 @@ SYLLABUS Week 9 Part 2 "Zone size at entry and stop-loss".
   On S_TBU: 1 record would reach Step 4 (sub 1 cyc 2, `no_ic_candidate`). Since PLAN_P (IC condition 3 = the
   immediate gap + Step 1A): 7 of the window's 26 drawn records — all-pinbar in 61.8–80 (H1 sid 0 c0, sid 1 c0, sid 1
   cross 0→1; sub 3 c0 — Step 1A does not run after Step 3), all-pinbar in 80–100 (sub 2 c0), none in either zone
-  (sub 1 c0, c3); the user (2026-10-13): "For now it is" (no POI). DECIDE (whether to build it at all).
+  (sub 1 c0, c3); the user (2026-10-13): "For now it is" (no POI). **KEEP DEFERRED (the user 2026-10-28, item 8's
+  scoping):** decide once Part 2's entries show whether the records without a POI matter (the 7-of-26 count is from
+  PLAN_P, 2026-10-13 — re-measure first). DECIDE (whether to build it at all).
 - **Test the POI_ZONES_SPEC §3.2 scenario IC filters — COMPLETE 2026-10-09 (RX1 = PLAN_K landings A + B; the final save S_K_B `20261009_140048_97795bd`, `LATEST_<branch>` until S_TBU `20261009_171255_5b5c307`)** — never implemented; kept in the spec, unapplied (PLAN_H D4:
   "I still want to keep these and test into them in the future"). Any IC filter stays OUTSIDE the institutional pattern
   and is applied first. **TAKEN UP 2026-10-09 as item 1's first rule experiment, RE-SPECIFIED by the user for today's
@@ -498,7 +516,8 @@ SYLLABUS Week 9 Part 2 "Zone size at entry and stop-loss".
   for wave candles & WVMI, but we'll come back to that later". "Qualified" was implemented twice
   (`wave_candles._is_qualified`, inline in `wvmi._find_temporary_lp`) — ONE helper since 2026-10-26 (the WVMI temp
   LP calls `_is_qualified`, "WVMI back on the chart" step 3; no output change from the helper); the rule change
-  itself → its own `/compare`. DECIDE (when).
+  itself → its own `/compare`. **DECIDED 2026-10-28 — SESSION ORDER item 8c** (the user, item 8's scoping): its own
+  plan + prediction, `/compare`, chart look.
 
 **D.3 — Moved out of Part 1 into Parts 2 / 3 (the user 2026-10-27, after item 5; SYLLABUS Week 9).**
 - **Zone size at entry and stop loss** (was D.1 item 3 / SESSION ORDER item 6, "zone size adjustments") — the zones
@@ -517,6 +536,17 @@ SYLLABUS Week 9 Part 2 "Zone size at entry and stop-loss".
   first in Part 2." Related: D.2 "Candle-direction / rejection confirmation at a zone touch"; D.1 item 4 (the pinbar
   floor — the patterns read candle types); the pattern engine (`patterns/structure_patterns.py`,
   `features/candles_v2.py`). OPEN (Part 2).
+- **Candle-direction / rejection confirmation at a zone touch — as an ENTRY condition** (was D.2; MOVED 2026-10-28,
+  the user at item 8's scoping) — Part 2, next to the entry candle patterns. User 2026-09-30: not a trigger filter;
+  triggers stay structural. The reference form: the May trigger filter (`47e7532`, reverted `2afd3b2`) — the trigger
+  candle body opposing the zone side; the 2026-09-30 measurement: "Recently closed". OPEN (Part 2).
+- **Zone strength scoring** (was D.2; MOVED 2026-10-28) — with "Zone size at entry and stop loss" above. Syllabus
+  Week 7 (`strength_score` / `strength_flags`, "strong zones look strong", click a zone → strength + flags);
+  `KLZone.strength` is always `0.0` (`zones/kl_zones_v1.py`); idea attached: scale the thresholds by ATR percentile.
+  DECIDE (scope). OPEN (Part 2 / 3).
+- **The M5 layer** (was D.2; MOVED 2026-10-28) — built when Part 2 needs M5: its own heavy block (plan + cold
+  review), before any Entries work that reads M5 (decided 2026-09-30). The footprint and the deeper-path encoding: the
+  struck D.2 entry. OPEN.
 
 ## E. Trigger-based (only when the trigger fires)
 

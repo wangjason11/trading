@@ -57,7 +57,9 @@ pinbar body-pip floor calibration (the last major Part 1 item) DONE 2026-10-28 �
 per-candle plumbing + columns + hover, U2 the rolling floor (natural window), U3 the final window — the user's pick
 after seeing both, natural kept as a switch — and U3b, the floor seed guard steps back until final mode converges,
 all landed 2026-10-28; NOW the remaining minor
-pre-Part-2 items (register §D SESSION ORDER item 8; the user names which), which complete Part 1),
+pre-Part-2 items (register §D SESSION ORDER item 8, scoped by the user 2026-10-28: 8a the §A hygiene trio, 8b the
+replacement-chain `ended_by` fix, 8c the agreed direction for wave candles + WVMI; the candle-direction confirmation,
+zone strength scoring and the M5 layer moved to Parts 2 / 3), which complete Part 1),
 Part 2 entry decisions, Part 3 other decisions.
 
 **Pre-Week 8 fix:** Exception 2 probe relaxed from CTS_CONFIRMED to CTS_ESTABLISHED (`bbb6d32`).

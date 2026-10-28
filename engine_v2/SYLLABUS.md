@@ -377,9 +377,15 @@ You can debug **confluence vs non-confluence** trades visually.
 >   **Updated by the user 2026-10-27** (after the chart updates, SESSION ORDER item 5, were complete): (3) zone size
 >   adjustments MOVED to Parts 2 / 3 (below) and the entry confirmation candle patterns MOVED to Part 2; the pinbar
 >   floor (4) is the last major Part 1 item, then the remaining minor pre-Part-2 items close Part 1 (register §D
->   SESSION ORDER items 7–8, §D.3).
+>   SESSION ORDER items 7–8, §D.3). **2026-10-28:** item 7 (the pinbar floor, PLAN_U) DONE; the user scoped item 8
+>   (the §A hygiene trio, the replacement-chain `ended_by` fix, the agreed direction for wave candles + WVMI) and
+>   moved the candle-direction / rejection confirmation at a zone touch, zone strength scoring and the M5 layer to
+>   Parts 2 / 3 (register §D SESSION ORDER item 8, §D.3).
 > - **Part 2 — Entry decision build & logic** — the original Week 9 plan below, + the entry confirmation candle
->   patterns (moved here from Part 1 by the user 2026-10-27) and the zone size at entry and stop-loss (below).
+>   patterns (moved here from Part 1 by the user 2026-10-27) and the zone size at entry and stop-loss (below); + since
+>   2026-10-28 the candle-direction / rejection confirmation at a zone touch (an entry condition, next to the
+>   candle patterns), zone strength scoring (with the zone size) and the M5 layer when an entry needs M5 (register
+>   §D.3).
 > - **Part 3 — Other decisions build & logic** — to be defined by the user.
 
 ### **Part 2 / 3 — Zone size at entry and stop-loss (moved from Part 1 by the user 2026-10-27)**
