@@ -1,0 +1,4 @@
+commit_hash=7c9477e
+timestamp=20261028_182318
+branch=week9-entries-decisions
+commit_message=PLAN_W sec. 4 (7c9477e): the KL zone hover names the zone's kind - kind=BOS / kind=CTS, main + subs (figure-only)
