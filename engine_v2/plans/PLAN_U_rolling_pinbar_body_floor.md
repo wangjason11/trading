@@ -3,7 +3,8 @@
 **Status: U1 LANDED 2026-10-28 (= §4.2; source `b64b10a`, save **S_U1** `20261028_090632_b64b10a`, U2's `/compare`
 baseline; §9); the cold review DONE (§8 — no blocker; its U2 amendments carried, §9 "U2"); U2 LANDED 2026-10-28 (= §5.2
 exactly; source `84fbbc6`, save **S_U2** `20261028_113834_84fbbc6`, U3's `/compare` baseline; §9 "U2"); U3 the final
-window LANDED 2026-10-28 (= §6 exactly — the user's pick after seeing both, natural kept as a switch; §9 "U3"); U3b
+window LANDED 2026-10-28 (= §6 exactly — the user's pick after seeing both, natural kept as a switch; source
+`32c544d`, save **S_U3** `20261028_123113_32c544d` = the new `LATEST_<branch>`, U3b's `/compare` baseline; §9 "U3"); U3b
 NEXT — the floor seed guard steps back until final mode converges (the user's "Guard extends", §9 "U3").** U1's
 baseline **S_controls**
 `artifacts/commits/week9-entries-decisions/20261027_164527_5dfb5b3` (`LATEST_week9-entries-decisions` until S_U1; source
@@ -453,7 +454,11 @@ each lands:
   the default, its start-dependence), `test_plan_u_rolling_floor.py::test_the_settings_are_the_users` pins "final"
   (the unit tests keep passing each mode explicitly). The landing replay (run mode): FETCH GATE PASS, the seed lines
   unchanged, skip grep 33 (= S_U2's lines), timing total 65.14 s; **= the variant: 30 / 30 CSVs byte-equal, the
-  figures equal (`fig_named_diff.py`: no trace changed, layouts equal), the 3 PNGs byte-equal.**
+  figures equal (`fig_named_diff.py`: no trace changed, layouts equal), the 3 PNGs byte-equal.** Suite 2146.
+- **Landed** (the user's look: "charts look good, go ahead and commit-save"): source `32c544d`, save `704785e`, trunk
+  `839c9f2` = **S_U3** `20261028_123113_32c544d` (run mode on the committed code: FETCH GATE PASS + both seed lines,
+  skip grep 33, timing total 65.17 s; its 30 CSVs = the variant's; `u3_compare.py` on the save = `u3_compare.txt`).
+  S_U3 is U3b's `/compare` baseline.
 - **Variant** (`qa_pinbar_floor_inputs/make_variant_u3.py`: a `git archive` of `e5c3b07` in `%TEMP%\u3v`, the
   `CandleParams.pinbar_floor_window_source` default "natural" -> "final", nothing else — the setting's one read site is
   `rolling_pinbar_body_floor`): FETCH GATE PASS, both `[floor_seed]` lines = S_U2's (the guard counts body-% pinbars);

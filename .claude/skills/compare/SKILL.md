@@ -879,7 +879,9 @@ Charts (`fig_named_diff.py`): counts unchanged (79 / 232, 154 / 134, 302 / 305);
 breakout-pattern markers, the H1 FP wave candle + its vertical line, the confluence sub 0 c1 KL zone + its FB wave
 candle, the WVMI LP hovers. The landing replay = the U3 variant (`make_variant_u3.py`): 30 / 30 CSVs byte-equal, the
 figures and PNGs equal. The `[floor_seed]` lines unchanged (the guard counts body-% pinbars). Skip grep 33 (the same
-lines). U3b (the seed guard extends until final mode converges) is next — it changes the two `[floor_seed]` lines.
+lines). Suite 2146. S_U3 `20261028_123113_32c544d` (source `32c544d`, save `704785e`, trunk `839c9f2`; =
+`LATEST_<branch>` from 2026-10-28; run mode, `u3_compare.py` on the save = the compared replay's output). U3b (the
+seed guard extends until final mode converges) is next — it changes the two `[floor_seed]` lines.
 
 **M15.counter** and **M15.confluence** (9 files each — 7 per-lens debug CSVs
 with the same filename suffixes prefixed `*_M15_counter_` /

@@ -259,7 +259,8 @@ SYLLABUS Week 9 Part 2 "Zone size at entry and stop-loss".
    to tackle in the next session"; 2026-10-28 the approach chosen — a rolling floor, the p90 of the 90 most recent
    pinbars; U1 the per-candle plumbing + columns + hover LANDED 2026-10-28, format only; U2 the rolling floor, natural
    window, LANDED 2026-10-28 = its prediction (S_U2 `20261028_113834_84fbbc6`); U3 the final window — the user's pick
-   after seeing both ("Final + convergence check"; natural kept as a switch) — LANDED 2026-10-28 = its prediction;
+   after seeing both ("Final + convergence check"; natural kept as a switch) — LANDED 2026-10-28 = its prediction
+   (S_U3 `20261028_123113_32c544d`);
    NEXT U3b, the floor seed guard steps back until final mode converges — the user: "Guard extends") — D.1 item 4
    below.
 8. **The remaining minor items before Part 2** — after item 7, in the next session(s) (the user 2026-10-27: "any
