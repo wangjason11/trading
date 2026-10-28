@@ -550,7 +550,8 @@ Around an IC candidate, read with the agreed direction (PLAN_H §1 items 2–9):
   to: between opp and continuation → the continuation; between initial and opp → tried in each leg (J1); never the
   pattern's first or last candle (E1);
 - a leg is **stacked** (first open, max high, min low, last close) and classified by the SAME classifier and per-TF
-  params as a single candle; big flags = the single-candle ratio vs the 5 marus before the pattern's first candle
+  params as a single candle, against the body floor of its LAST candle (the frame's `pinbar_body_floor`, the moment
+  the leg is complete — PLAN_U §3.3); big flags = the single-candle ratio vs the 5 marus before the pattern's first candle
   (`pattern_anchor_idx`): big_maru = maru + ratio ≥ 0.65, big_normal = normal + ratio ≥ 0.5;
 - **requirement:** the continuation is big_maru with a stacked body strictly greater than the opp leg's;
 - **ranks** (best first) 1A big_maru·maru·big_maru, 1B maru·maru, 2A maru·normal (or big_maru·normal), 2B

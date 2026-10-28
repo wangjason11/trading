@@ -105,9 +105,10 @@ def prepare_lower_tf_data(
 
     Called once per replay. Returns the prepared df ready for structure analysis.
 
-    `timeframe` selects the per-TF body-pip floor for big_maru/big_normal flags
-    (see `apply_candle_classification`). Defaults to "M15" since that's the
-    only configured lower TF today.
+    `timeframe` selects the per-TF pinbar body floor (`classify_candles` step 4;
+    see `apply_candle_classification`) and is stamped on the frame
+    (`attrs["timeframe"]`). Defaults to "M15" since that's the only configured
+    lower TF today.
     """
     # 1) Candle features
     c_res = apply_candle_classification(df_raw, timeframe=timeframe)

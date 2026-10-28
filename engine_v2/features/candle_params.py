@@ -20,8 +20,10 @@ class CandleParams:
     # promotion). 0.0 = disabled (legacy: candle_type purely body_pct-driven).
     # Per-TF defaults are wired by `apply_candle_classification(timeframe=...)`
     # via the `DEFAULT_PINBAR_BODY_PIP_FLOOR_BY_TF` table in
-    # `candle_classifier.py`. Pip size is resolved per-pair (JPY=0.01 else
-    # 0.0001) inside `classify_candles`. See features/candles_v2.py.
+    # `candle_classifier.py`. `compute_candle_features` turns it into the
+    # per-candle floor `classify_candles` reads (`candles_v2.fixed_body_floor`,
+    # price units; pip size per-pair, JPY=0.01 else 0.0001 — PLAN_U U1); a
+    # direct `classify_candles` call without `body_floor` has no floor.
     #
     # NOTE: this replaced the former `big_body_pip_floor`, which gated the
     # `is_big_maru` flag only. That gate is now redundant — small-bodied

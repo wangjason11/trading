@@ -27,7 +27,8 @@ Around an IC (an agreed −sd candle), in struct direction `sd`:
 - D3c: next to the cap-`cap` initial, the single candle right before the opp leg is evaluated as a 3D initial (cap 1,
   accepting 3D only); a true doji is never a 3D initial.
 - Stacked legs are classified with the SAME classifier and params as single candles (P2): one `classify_candles` call
-  for every stack of every candidate (`classify_ics`); big flags via `candles_v2.big_ratio_flags` against
+  for every stack of every candidate (`classify_ics`), each stack against the body floor of its LAST candle (the
+  frame's `pinbar_body_floor` column — PLAN_U §3.3); big flags via `candles_v2.big_ratio_flags` against
   `prior_maru_max_len_as0` at the variant's `pattern_anchor_idx` (P3), gated by type (big_maru needs a maru,
   big_normal a normal — N2).
 - Ranks 1A–3D (`SINGLE_OPP_RANK` / `MULTI_OPP_RANK`, then the shape i–iv); the continuation must be big_maru with a
@@ -215,6 +216,7 @@ class _Frame:
         self.c = df["c"].to_numpy(dtype=float)
         self.ctype = df["candle_type"].to_numpy()
         self.ref = df["prior_maru_max_len_as0"].to_numpy(dtype=float)
+        self.floor = df["pinbar_body_floor"].to_numpy(dtype=float)   # each candle's body floor (a KeyError when absent)
         self.pair = df.attrs["pair"]            # the frame's own pip size (a KeyError when unstamped — P2)
         self.pip = 0.01 if "JPY" in str(self.pair).upper() else 0.0001
         self.params = params
@@ -225,14 +227,16 @@ class _Frame:
 
 
 def _stack_types(fr: _Frame, ranges: Sequence[Tuple[int, int]]) -> Dict[Tuple[int, int], str]:
-    """Every multi-candle stack's candle type in ONE classifier call (the frame's params and pair — P2)."""
+    """Every multi-candle stack's candle type in ONE classifier call (the frame's params and pair — P2); a stack's
+    body floor = the floor of its LAST candle, the moment the leg is complete (PLAN_U §3.3)."""
     multi = sorted({r for r in ranges if r[1] > r[0]})
     if not multi:
         return {}
     rows = [fr.ohlc(a, b) for a, b in multi]
     stacks = pd.DataFrame(rows, columns=["o", "h", "l", "c"])
     stacks.attrs["pair"] = fr.pair
-    types = classify_candles(compute_candle_metrics(stacks), fr.params)["candle_type"].to_numpy()
+    floors = np.array([fr.floor[b] for _, b in multi], dtype=float)
+    types = classify_candles(compute_candle_metrics(stacks), fr.params, body_floor=floors)["candle_type"].to_numpy()
     return {r: str(t) for r, t in zip(multi, types)}
 
 

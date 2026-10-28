@@ -254,8 +254,10 @@ SYLLABUS Week 9 Part 2 "Zone size at entry and stop-loss".
 6. ~~**Zone size adjustments**~~ — **MOVED 2026-10-27 to Parts 2 / 3** (the user, after item 5: "We will incorporate
    this directly into entry & decisions (Part 2 & 3) rather than as a separate item that adjusts existing zones") —
    D.3 below; the zones keep their base form. Was D.1 item 3.
-7. **Pinbar body-pip floor calibration** — **NEXT, the next session** (the user 2026-10-27: "the last major item I want
-   to tackle in the next session") — D.1 item 4 below.
+7. **Pinbar body-pip floor calibration** — **IN PROGRESS: PLAN_U** (the user 2026-10-27: "the last major item I want
+   to tackle in the next session"; 2026-10-28 the approach chosen — a rolling floor, the p90 of the 90 most recent
+   pinbars; U1 the per-candle plumbing + columns + hover LANDED 2026-10-28, format only; NEXT U2 the rolling floor,
+   then U3 the final-window flip) — D.1 item 4 below.
 8. **The remaining minor items before Part 2** — after item 7, in the next session(s) (the user 2026-10-27: "any
    remaining minor tasks & items in the next session(s) that we previously documented as pre-reqs to starting part 2
    of week 9"). Candidates on file: D.2 below (the backlog "decided after D.1 is complete", the user 2026-10-01) and
@@ -405,8 +407,14 @@ SYLLABUS Week 9 Part 2 "Zone size at entry and stop-loss".
    want to tackle in the next session")**. Scheduled here by the user 2026-10-01 (was TRIGGER: strategy optimization):
    the provisional values (H1 2.2 / M15 1.0 / M5 0.5 pips, NZD_USD only) and the reclassify-to-pinbar approach itself.
    Iterative: parameter flips + chart review; a candle-type change cascades (patterns → structure → zones), so every
-   flip gets a full `/compare`. Detail: memory `project_pinbar_body_pip_floor.md`,
-   `engine_v2/features/CANDLE_BODY_FLOOR_NOTES.md`.
+   flip gets a full `/compare`. **2026-10-28 — IN PROGRESS, PLAN_U** (`engine_v2/plans/PLAN_U_rolling_pinbar_body_floor.md`,
+   the canonical build spec): the user chose a ROLLING floor (the p90 of the bodies of the 90 most recent pinbars
+   strictly before the candle, the history fetched before the frame; both windows tried — body-% pinbars only vs + the
+   floor-demoted ones; the fixed per-TF table removed). Three landings: U1 the per-candle floor plumbing + the three
+   columns + the candle hover on today's fixed floor — LANDED 2026-10-28, format only; U2 the rolling floor, natural
+   window (NEXT); U3 the final-window flip, the user picks one. The decisions verbatim:
+   `engine_v2/features/CANDLE_BODY_FLOOR_NOTES.md` "Direction — the rolling floor". Detail: memory
+   `project_pinbar_body_pip_floor.md`.
 
 **D.2 — Backlog: decided after D.1 is complete (user 2026-10-01).**
 - ~~**Entry confirmation candle patterns**~~ — **MOVED 2026-10-27 to D.3** (Part 2 — the user: "We will also move

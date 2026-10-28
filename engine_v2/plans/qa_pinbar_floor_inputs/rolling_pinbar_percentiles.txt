@@ -1,0 +1,29 @@
+window = the 90 most recent natural pinbars strictly before each candle; body pips
+
+## H1 candles=1058 pinbars=496 series from idx 212 (2025-11-27 18:00:00+00:00) = 846 candles; floor now=2.2
+  series   min   p10   p20   p30   p40   p50   p60   p70   p80   p90   max  mean
+  p80     1.92  2.10  2.10  2.12  2.20  2.20  2.22  2.30  2.40  2.44  2.60  2.24
+         candles where it is below today's floor: 297 (35.1%), exactly at it: 163 (19.3%)
+  p85     2.10  2.20  2.26  2.36  2.40  2.40  2.59  2.60  2.60  2.76  2.96  2.48
+         candles where it is below today's floor: 23 (2.7%), exactly at it: 79 (9.3%)
+  p90     2.30  2.40  2.40  2.61  2.82  3.00  3.01  3.13  3.30  3.33  3.40  2.89
+         candles where it is below today's floor: 0 (0.0%), exactly at it: 0 (0.0%)
+
+## M15 candles=4228 pinbars=1808 series from idx 221 (2025-11-19 05:15:00+00:00) = 4007 candles; floor now=1.0
+  series   min   p10   p20   p30   p40   p50   p60   p70   p80   p90   max  mean
+  p80     0.80  1.00  1.00  1.00  1.10  1.10  1.12  1.20  1.20  1.32  1.62  1.13
+         candles where it is below today's floor: 133 (3.3%), exactly at it: 1131 (28.2%)
+  p85     1.00  1.10  1.16  1.20  1.20  1.20  1.26  1.30  1.36  1.46  1.80  1.26
+         candles where it is below today's floor: 0 (0.0%), exactly at it: 260 (6.5%)
+  p90     1.02  1.20  1.22  1.30  1.31  1.40  1.50  1.51  1.60  1.71  2.51  1.44
+         candles where it is below today's floor: 0 (0.0%), exactly at it: 0 (0.0%)
+
+## M5 candles=12679 pinbars=4930 series from idx 223 (2025-11-17 16:35:00+00:00) = 12456 candles; floor now=0.5
+  series   min   p10   p20   p30   p40   p50   p60   p70   p80   p90   max  mean
+  p80     0.40  0.50  0.60  0.60  0.60  0.60  0.60  0.60  0.70  0.72  1.00  0.61
+         candles where it is below today's floor: 232 (1.9%), exactly at it: 1545 (12.4%)
+  p85     0.46  0.60  0.60  0.60  0.66  0.70  0.70  0.70  0.80  0.80  1.13  0.69
+         candles where it is below today's floor: 8 (0.1%), exactly at it: 355 (2.9%)
+  p90     0.50  0.70  0.70  0.71  0.80  0.80  0.80  0.81  0.90  1.00  1.40  0.81
+         candles where it is below today's floor: 0 (0.0%), exactly at it: 4 (0.0%)
+

@@ -1,0 +1,21 @@
+## H1: candles 1058; with a full window 846 (from idx 212); warm-up without one 212
+   natural in the span: maru 229, normal 211
+   fixed 2.2    : demoted    39 ( 4.6% of the span)  maru     7 ( 3.1%)  normal    32 (15.2%)  with a pin direction 6
+   rolling p80  : demoted    42 ( 5.0% of the span)  maru     8 ( 3.5%)  normal    34 (16.1%)  with a pin direction 6
+   rolling p85  : demoted    66 ( 7.8% of the span)  maru    10 ( 4.4%)  normal    56 (26.5%)  with a pin direction 9
+   rolling p90  : demoted    98 (11.6% of the span)  maru    20 ( 8.7%)  normal    78 (37.0%)  with a pin direction 10
+
+## M15: candles 4228; with a full window 4007 (from idx 221); warm-up without one 221
+   natural in the span: maru 1306, normal 983
+   fixed 1.0    : demoted   132 ( 3.3% of the span)  maru    28 ( 2.1%)  normal   104 (10.6%)  with a pin direction 22
+   rolling p80  : demoted   208 ( 5.2% of the span)  maru    44 ( 3.4%)  normal   164 (16.7%)  with a pin direction 32
+   rolling p85  : demoted   276 ( 6.9% of the span)  maru    64 ( 4.9%)  normal   212 (21.6%)  with a pin direction 38
+   rolling p90  : demoted   419 (10.5% of the span)  maru   118 ( 9.0%)  normal   301 (30.6%)  with a pin direction 50
+
+## M5: candles 12679; with a full window 12456 (from idx 223); warm-up without one 223
+   natural in the span: maru 4733, normal 2883
+   fixed 0.5    : demoted   373 ( 3.0% of the span)  maru   120 ( 2.5%)  normal   253 ( 8.8%)  with a pin direction 71
+   rolling p80  : demoted   679 ( 5.5% of the span)  maru   221 ( 4.7%)  normal   458 (15.9%)  with a pin direction 104
+   rolling p85  : demoted   914 ( 7.3% of the span)  maru   298 ( 6.3%)  normal   616 (21.4%)  with a pin direction 126
+   rolling p90  : demoted  1412 (11.3% of the span)  maru   485 (10.2%)  normal   927 (32.2%)  with a pin direction 171
+

@@ -184,6 +184,26 @@ def _opacity_tier(tier: str) -> float:
     return float(tiers.get(tier, defaults.get(tier, 1.0)))
 
 
+def _candle_floor_hover(dfx: pd.DataFrame) -> list:
+    """The candle hover's body-floor line, one per candle (PLAN_U §3.4; H1 + M15): `pinbar_body_floor=<price>`, +
+    ` | candle_type_before_floor=<type>` on a pinbar by the floor; no floor → `pinbar_body_floor=NA (no floor)`."""
+    def col(name, default):
+        return dfx[name] if name in dfx.columns else pd.Series([default] * len(dfx), index=dfx.index)
+
+    floor = col("pinbar_body_floor", float("nan")).astype(float)
+    by_floor = col("is_floor_pinbar", False).astype(bool)
+    before = col("candle_type_before_floor", "").astype(str)
+    lines = []
+    for f, b, t in zip(floor, by_floor, before):
+        if pd.isna(f):
+            lines.append("pinbar_body_floor=NA (no floor)")
+        elif b:
+            lines.append(f"pinbar_body_floor={f:.6f} | candle_type_before_floor={t}")
+        else:
+            lines.append(f"pinbar_body_floor={f:.6f}")
+    return lines
+
+
 def _volume_axis_range(volume: pd.Series) -> Optional[list]:
     """The volume axis range `[0, max x volume.headroom]` — the zoom JS applies the same factor to the visible bars,
     so the WVMI LP rows always sit above the tallest one ("WVMI back on the chart" step 5). None without a volume."""
@@ -423,6 +443,7 @@ def export_chart_plotly(
         big_ratio_as0,                    # 9
         vol_spike_ratio,                  # 10
         dfx[COL_TIME].astype(str),        # 11
+        _candle_floor_hover(dfx),         # 12
     ))
 
 
@@ -436,6 +457,7 @@ def export_chart_plotly(
         "L=%{low}<br>"
         "C=%{close}<br>"
         "candle_type=%{customdata[3]}<br>"
+        "%{customdata[12]}<br>"
         "body_len=%{customdata[4]:.5f}<br>"
         "candle_len=%{customdata[5]:.5f}<br>"
         "body_pct=%{customdata[2]:.2%}<br>"

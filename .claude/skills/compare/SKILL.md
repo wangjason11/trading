@@ -273,7 +273,7 @@ For each key column, identify rows where values differ:
 
 | Column Category | Columns to Compare |
 |-----------------|-------------------|
-| **Candle Classification** | `candle_type`, `is_special_maru`, `pinbar_dir`, `direction`, `body_pct` |
+| **Candle Classification** | `candle_type`, `is_special_maru`, `pinbar_dir`, `direction`, `body_pct`; since PLAN_U U1 (2026-10-28) the body floor `pinbar_body_floor`, `candle_type_before_floor`, `is_floor_pinbar` |
 | **Pattern Detection** | `pat` (pattern name at each row) |
 | **Market Structure** | `market_state`, `structure_id`, `is_cts`, `is_bos` |
 | **Zones** | `in_kl_zone`, `in_poi_zone` (if present) |
@@ -442,7 +442,7 @@ Per-entity CSV outputs cover **H1.main**, **M15.counter**, and
 
 | File pattern |
 |--|
-| `*_final.csv` |
+| `*_final.csv` — + the 3 body-floor columns `candle_type_before_floor`, `pinbar_body_floor`, `is_floor_pinbar` right after `is_special_maru` since PLAN_U U1 (2026-10-28; a save-format boundary: every later column shifts, so `cmp_save.py`'s positional compare shows all 1058 rows changed across it — compare by name, `plans/qa_pinbar_floor_inputs/u1_landing_check.py SAVE`) |
 | `*_raw.csv` |
 | `*_structure_levels.csv` |
 | `*_kl_zones.csv` |

@@ -1,0 +1,112 @@
+## H1: frame candles 1058 (idx 0 = 2025-11-16 22:00:00+00:00); seed 480 candles (30 days) before it
+   natural in the frame: maru 296, normal 266, pinbar 496
+   check: the seeded natural p90 floor = the frame-only one on all 846 candles where both exist
+
+   1. demoted in the frame (all 1058 candles):
+      fixed 2.2   : demoted   40 ( 3.8% of the frame)  maru    7 ( 2.4%)  normal   33 (12.4%)  with a pin direction 6
+      natural p80 : demoted   45 ( 4.3% of the frame)  maru    8 ( 2.7%)  normal   37 (13.9%)  with a pin direction 7
+      final   p80 : demoted   40 ( 3.8% of the frame)  maru    7 ( 2.4%)  normal   33 (12.4%)  with a pin direction 5
+      natural p85 : demoted   73 ( 6.9% of the frame)  maru   11 ( 3.7%)  normal   62 (23.3%)  with a pin direction 10
+      final   p85 : demoted   75 ( 7.1% of the frame)  maru   11 ( 3.7%)  normal   64 (24.1%)  with a pin direction 11
+      natural p90 : demoted  114 (10.8% of the frame)  maru   22 ( 7.4%)  normal   92 (34.6%)  with a pin direction 12
+      final   p90 : demoted  101 ( 9.5% of the frame)  maru   17 ( 5.7%)  normal   84 (31.6%)  with a pin direction 11
+
+   2. p90 overlap: demoted by both 100, natural only 14, final only 1
+
+   3. p90 floor over the frame's candles (pips):  p10 / p25 / median / p75 / p90 / min / max
+      natural : 2.40 / 2.62 / 3.03 / 3.30 / 3.40   min 2.30  max 3.50
+      final   : 2.40 / 2.64 / 3.00 / 3.01 / 3.30   min 2.31  max 3.50
+      natural minus final: median +0.01, p10 -0.12, p90 +0.38; final lower on 536, equal on 264, higher on 258 of 1058 candles
+
+   4. the window's reach back (from the candle to its window's oldest pinbar), in H1 candles (hours):
+      natural : p10 178 (178 h)  median 191 (191 h)  p90 245 (245 h)
+      final   : p10 146 (146 h)  median 159 (159 h)  p90 209 (209 h)
+
+   5. Spearman correlation of the floor with the previous day's (24 candles) median range, 1058 candles:
+      natural : 0.285
+      final   : 0.219
+
+   6. week by week (p90): candles | median body / median range of the week's candles | median floor natural / final | demoted natural / final (% of the week's marus + normals)
+      2025-11-17:  120 |  3.8 /   8.1 |  3.20 /  3.00 |   9 (11.8%) /   3 ( 3.9%)
+      2025-11-24:  120 |  2.8 /   7.5 |  3.40 /  3.13 |  16 (25.4%) /  15 (23.8%)
+      2025-12-01:  120 |  2.5 /   6.5 |  3.13 /  3.01 |  17 (25.0%) /  17 (25.0%)
+      2025-12-08:  120 |  2.8 /   7.8 |  2.73 /  2.82 |  11 (18.3%) /   8 (13.3%)
+      2025-12-15:  120 |  3.0 /   7.8 |  3.30 /  3.30 |  11 (17.5%) /   9 (14.3%)
+      2025-12-22:   96 |  2.1 /   5.9 |  2.81 /  3.00 |  11 (22.4%) /  10 (20.4%)
+      2025-12-29:   96 |  2.5 /   6.5 |  2.40 /  2.41 |   5 ( 9.4%) /   6 (11.3%)
+      2026-01-05:  120 |  2.5 /   7.0 |  2.40 /  2.40 |  11 (19.0%) /  10 (17.2%)
+      2026-01-12:  120 |  2.5 /   6.4 |  3.00 /  2.82 |  19 (31.7%) /  19 (31.7%)
+      2026-01-19:   26 |  2.0 /   6.8 |  3.00 /  2.80 |   4 (33.3%) /   4 (33.3%)
+
+   7. seed 30 days (480 candles) vs 60 days (1007 candles), the frame's candles:
+      natural : floors differ on 0 candles; candle types differ on 0
+      final   : floors differ on 0 candles; candle types differ on 0
+
+   8. a seed cut to its last D days vs the 60-day one (frame candles whose type differs; 'no floor' = frame candles without a full window):
+      D= 2: seed    0 candles,   0 natural pinbars | natural differ  16, no floor  212 | final differ  12, no floor  212
+      D= 3: seed   24 candles,   8 natural pinbars | natural differ  15, no floor  193 | final differ  11, no floor  193
+      D= 4: seed   48 candles,  13 natural pinbars | natural differ  13, no floor  183 | final differ   8, no floor  183
+      D= 6: seed   96 candles,  32 natural pinbars | natural differ  11, no floor  148 | final differ   6, no floor  148
+      D= 8: seed  120 candles,  40 natural pinbars | natural differ   9, no floor  130 | final differ   4, no floor  130
+      D=10: seed  144 candles,  50 natural pinbars | natural differ   9, no floor  114 | final differ   4, no floor  114
+      D=12: seed  192 candles,  71 natural pinbars | natural differ   5, no floor   50 | final differ   4, no floor   50
+      D=15: seed  240 candles,  93 natural pinbars | natural differ   0, no floor    0 | final differ   4, no floor    0
+      D=20: seed  335 candles, 130 natural pinbars | natural differ   0, no floor    0 | final differ   1, no floor    0
+      D=25: seed  407 candles, 161 natural pinbars | natural differ   0, no floor    0 | final differ   0, no floor    0
+
+## M15: frame candles 4228 (idx 0 = 2025-11-16 22:00:00+00:00); seed 1920 candles (30 days) before it
+   natural in the frame: maru 1392, normal 1028, pinbar 1808
+   check: the seeded natural p90 floor = the frame-only one on all 4007 candles where both exist
+
+   1. demoted in the frame (all 4228 candles):
+      fixed 1.0   : demoted  142 ( 3.4% of the frame)  maru   34 ( 2.4%)  normal  108 (10.5%)  with a pin direction 24
+      natural p80 : demoted  221 ( 5.2% of the frame)  maru   50 ( 3.6%)  normal  171 (16.6%)  with a pin direction 35
+      final   p80 : demoted  193 ( 4.6% of the frame)  maru   45 ( 3.2%)  normal  148 (14.4%)  with a pin direction 30
+      natural p85 : demoted  293 ( 6.9% of the frame)  maru   71 ( 5.1%)  normal  222 (21.6%)  with a pin direction 43
+      final   p85 : demoted  255 ( 6.0% of the frame)  maru   64 ( 4.6%)  normal  191 (18.6%)  with a pin direction 38
+      natural p90 : demoted  436 (10.3% of the frame)  maru  125 ( 9.0%)  normal  311 (30.3%)  with a pin direction 55
+      final   p90 : demoted  410 ( 9.7% of the frame)  maru  112 ( 8.0%)  normal  298 (29.0%)  with a pin direction 50
+
+   2. p90 overlap: demoted by both 391, natural only 45, final only 19
+
+   3. p90 floor over the frame's candles (pips):  p10 / p25 / median / p75 / p90 / min / max
+      natural : 1.20 / 1.30 / 1.40 / 1.60 / 1.71   min 1.02  max 2.51
+      final   : 1.20 / 1.22 / 1.40 / 1.51 / 1.62   min 1.00  max 2.51
+      natural minus final: median +0.01, p10 -0.09, p90 +0.19; final lower on 2234, equal on 1451, higher on 543 of 4228 candles
+
+   4. the window's reach back (from the candle to its window's oldest pinbar), in M15 candles (hours):
+      natural : p10 188 (47 h)  median 211 (53 h)  p90 232 (58 h)
+      final   : p10 154 (38 h)  median 172 (43 h)  p90 192 (48 h)
+
+   5. Spearman correlation of the floor with the previous day's (96 candles) median range, 4228 candles:
+      natural : 0.560
+      final   : 0.661
+
+   6. week by week (p90): candles | median body / median range of the week's candles | median floor natural / final | demoted natural / final (% of the week's marus + normals)
+      2025-11-17:  480 |  1.8 /   3.8 |  1.40 /  1.40 |  33 (11.6%) /  32 (11.2%)
+      2025-11-24:  480 |  1.6 /   3.7 |  1.81 /  1.80 |  87 (31.6%) /  87 (31.6%)
+      2025-12-01:  480 |  1.4 /   3.2 |  1.20 /  1.20 |  53 (17.8%) /  54 (18.2%)
+      2025-12-08:  480 |  1.5 /   3.8 |  1.50 /  1.50 |  52 (18.9%) /  47 (17.1%)
+      2025-12-15:  480 |  1.6 /   3.8 |  1.50 /  1.50 |  31 (11.8%) /  30 (11.4%)
+      2025-12-22:  384 |  1.2 /   3.0 |  1.22 /  1.22 |  44 (20.4%) /  42 (19.4%)
+      2025-12-29:  384 |  1.5 /   3.5 |  1.42 /  1.40 |  40 (18.6%) /  38 (17.7%)
+      2026-01-05:  480 |  1.5 /   3.5 |  1.50 /  1.31 |  56 (20.3%) /  45 (16.3%)
+      2026-01-12:  480 |  1.3 /   3.2 |  1.30 /  1.30 |  31 (11.8%) /  29 (11.1%)
+      2026-01-19:  100 |  1.2 /   3.3 |  1.21 /  1.20 |   9 (16.1%) /   6 (10.7%)
+
+   7. seed 30 days (1920 candles) vs 60 days (4028 candles), the frame's candles:
+      natural : floors differ on 0 candles; candle types differ on 0
+      final   : floors differ on 0 candles; candle types differ on 0
+
+   8. a seed cut to its last D days vs the 60-day one (frame candles whose type differs; 'no floor' = frame candles without a full window):
+      D= 2: seed    0 candles,   0 natural pinbars | natural differ  17, no floor  221 | final differ  17, no floor  221
+      D= 3: seed   96 candles,  45 natural pinbars | natural differ  15, no floor  126 | final differ  15, no floor  126
+      D= 4: seed  192 candles,  78 natural pinbars | natural differ   4, no floor   23 | final differ   4, no floor   23
+      D= 6: seed  384 candles, 159 natural pinbars | natural differ   0, no floor    0 | final differ   0, no floor    0
+      D= 8: seed  480 candles, 189 natural pinbars | natural differ   0, no floor    0 | final differ   0, no floor    0
+      D=10: seed  576 candles, 219 natural pinbars | natural differ   0, no floor    0 | final differ   0, no floor    0
+      D=12: seed  768 candles, 289 natural pinbars | natural differ   0, no floor    0 | final differ   0, no floor    0
+      D=15: seed  960 candles, 372 natural pinbars | natural differ   0, no floor    0 | final differ   0, no floor    0
+      D=20: seed 1340 candles, 508 natural pinbars | natural differ   0, no floor    0 | final differ   0, no floor    0
+      D=25: seed 1628 candles, 626 natural pinbars | natural differ   0, no floor    0 | final differ   0, no floor    0
+

@@ -18,7 +18,9 @@ from engine_v2.common.types import REQUIRED_CANDLE_COLS
 # whose real body is shorter than this floor is classified `pinbar` (strict `<`),
 # regardless of its body_pct (a body that small carries no directional
 # conviction). Applied LAST in `classify_candles`, so it trumps maru/normal/pinbar.
-# Pip size is resolved per-pair (JPY=0.01 else 0.0001) inside `classify_candles`.
+# `compute_candle_features` turns it into a per-candle floor in price units
+# (`candles_v2.fixed_body_floor`; pip size per-pair, JPY=0.01 else 0.0001), which
+# every classified frame carries as `pinbar_body_floor` (PLAN_U U1).
 #
 # Calibrated 2026-06-09 (NZD_USD) via `debug/candle_size_distribution.py`, which
 # prints per-TF body distributions + the demotion impact of each candidate floor.
@@ -43,7 +45,9 @@ def candle_params_for_timeframe(timeframe: str):
     floor (candle_type purely body_pct-driven). `apply_candle_classification`
     classifies with it and stamps `df.attrs["timeframe"]`, so a later reader
     (the institutional pattern's stacked legs, PLAN_H §8.1) re-derives exactly
-    the params of that frame's single candles."""
+    the params of that frame's single candles. The floor itself reaches a
+    stacked leg per candle — the frame's `pinbar_body_floor` at the leg's last
+    candle (PLAN_U §3.3), not these params."""
     from engine_v2.features.candle_params import CandleParams
 
     return CandleParams(pinbar_body_pip_floor=DEFAULT_PINBAR_BODY_PIP_FLOOR_BY_TF.get(str(timeframe), 0.0))

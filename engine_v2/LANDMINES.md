@@ -703,7 +703,8 @@ review traced all 4 call paths to `select_ic` — the drawn POIs, the main MS, t
 A new broad handler fails the test: check it against those paths before adding it to the allowlist.
 
 **Why it matters:** the IP reads the frame's stamp (`df.attrs["timeframe"]` — the candle params + the leg cap) and
-`attrs["pair"]`, plus the classifier columns (`candle_type`, `prior_maru_max_len_as0`, `vol_dir`); an unstamped frame
+`attrs["pair"]`, plus the classifier columns (`candle_type`, `prior_maru_max_len_as0`, `vol_dir`, and since PLAN_U U1
+`pinbar_body_floor` — a stacked leg's floor = its last candle's); an unstamped frame
 (a hand-built test frame, a future frame builder) raises. Swallowed, that would look exactly like "this cycle has no
 pattern" — every sd-proximity confirmation on the BOS inner, invisible to a `/compare` against a save made the same
 way (PLAN_H §8.8 PR1, found by all three review lenses).

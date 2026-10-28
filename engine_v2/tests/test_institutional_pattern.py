@@ -437,15 +437,34 @@ def test_continuation_body_must_be_strictly_greater_float_exact():
     assert more.ip_rank == "1A.i"
 
 
+_SMALL = tuple(("M", U if k % 2 == 0 else D, 2.5) for k in range(6))
+_TINY_CONT = [("M", U, 2.5), ("P", D, 1), ("M", U, 1.2), ("M", U, 1.2)]   # 6 initial, 7 IC, 8..9 the continuation
+
+
+def _ip_with_floor(floor_at):
+    """The IC 7 of `_TINY_CONT` with the frame's `pinbar_body_floor` overridden at {idx: floor} (NaN = no floor)."""
+    df = _frame(_TINY_CONT, prefix=_SMALL)
+    for i, f in floor_at.items():
+        df.loc[i, "pinbar_body_floor"] = f
+    agreed = agreed_direction(df["direction"].to_numpy(), df["vol_dir"].to_numpy())
+    return classify_ip(df, 7, 1, bos_anchor_idx=6, cts_anchor_idx=9, agreed=agreed, cap=3, params=H1)
+
+
 def test_stacks_use_the_frame_pip_floor():
     """Two tiny up marus stack to a 90 % body of 2.16 pips — under H1's 2.2-pip floor → a pinbar (not big_maru).
     Without the floor the same stack is a big maru and the pattern passes (the floor is what fails it)."""
-    small = tuple(("M", U if k % 2 == 0 else D, 2.5) for k in range(6))
-    specs = [("M", U, 2.5), ("P", D, 1), ("M", U, 1.2), ("M", U, 1.2)]
-    res, _ = _ip(specs, 1, prefix=small)
+    res, _ = _ip(_TINY_CONT, 1, prefix=_SMALL)
     assert res.reason == "continuation_not_big_maru" and res.detail["continuation_type"] == "pinbar"
-    no_floor, _ = _ip(specs, 1, prefix=small, params=CandleParams())
+    no_floor = _ip_with_floor({8: np.nan, 9: np.nan})
     assert no_floor.ip_rank == "3A.iii"
+
+
+def test_a_stack_takes_the_floor_of_its_last_candle():
+    """PLAN_U §3.3: the continuation stack 8..9 is judged against candle 9's floor (the moment the leg is
+    complete), never candle 8's."""
+    assert _ip_with_floor({8: 0.00022, 9: np.nan}).ip_rank == "3A.iii"                 # the last has none → maru
+    late = _ip_with_floor({8: np.nan, 9: 0.00022})                                    # the last has 2.2 → pinbar
+    assert late.reason == "continuation_not_big_maru" and late.detail["continuation_type"] == "pinbar"
 
 
 def test_big_ratio_reference_is_at_the_pattern_anchor():
@@ -1096,7 +1115,7 @@ def test_mirror_extends_across_subs_of_one_lens():
     assert [(r.meta["sub_id"], r.ic_idx) for r in lens.attrs["ic_candidates"]] == [(7, 103), (8, 153), (9, 203)]
 
 
-# N32 — select_ic classifies stacks with the FRAME's timeframe params (M15 floor 1.0, not H1's 2.2)
+# N32 — select_ic classifies stacks against the FRAME's floor (an M15 frame: 1.0, not H1's 2.2)
 def test_select_uses_the_frame_timeframe_params():
     small = tuple(("M", U if k % 2 == 0 else D, 2.5) for k in range(6))
     df = _frame([("M", U, 2.5), ("P", D, 1), ("M", U, 1.2), ("M", U, 1.2)], prefix=small, timeframe="M15")

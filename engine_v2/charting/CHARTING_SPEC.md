@@ -33,7 +33,7 @@ verbatim reasons: memory `feedback_naming_discussions.md`. A new or edited hover
   zone's lifecycle start = its `confirmed_idx`), and shows its OWN element's fields — unless the owning element is
   absent (a fib with no IC keeps `ic_idx=NA (<reason>)`).
 - Not yet on these conventions (the pass did not touch them — `plans/qa_chart_edits_inputs/hover_inventory.py`):
-  the OHLC / imbalance candle, volume / Vol EMA (`Volume:` / `EMA(20):`), the range top / bottom lines, the reversal
+  the OHLC / imbalance candle (except its body-floor line, §15), volume / Vol EMA (`Volume:` / `EMA(20):`), the range top / bottom lines, the reversal
   candidate, the state / `bo` labels (`sid` and `struct_direction` on separate lines, no `cycle_id`), the
   structure-pattern markers (no `TF=` on H1); the Prev BOS line kept as is (the user, 2026-10-24: "no changes needed
   for Prev BOS line hover").
@@ -535,6 +535,17 @@ charts only) `Go`.
 - Checked headless (choreographer, kaleido's driver): `plans/qa_chart_edits_inputs/proto_headless_check.py CHART_HTML
   SHOTS STEPS` drives the bar and prints the visible idx span, the axes, the parent counts, the highlight and the note
   per step; `controls_landing_check.py` = the landing's figure / CSV check.
+
+### 15) The candle hover's body-floor line (H1 + the M15 charts; PLAN_U U1, 2026-10-28)
+
+The OHLC candle hover (`export_plotly.py` H1, `export_m15_chart.py` M15 — every candle trace, imbalance-highlighted
+or not) carries one line right after `candle_type=`, built per candle by `export_plotly._candle_floor_hover` from the
+frame's columns (`features/CANDLE_BODY_FLOOR_NOTES.md`):
+- `pinbar_body_floor=0.000220` — the floor the candle was judged against (price units, 6 decimals);
+- a pinbar by the floor adds ` | candle_type_before_floor=normal` (its body-% type, `maru` / `normal`);
+- a candle without a floor: `pinbar_body_floor=NA (no floor)`.
+
+The rest of the candle hover is not yet on the "Hover label conventions"; this line is.
 
 ---
 

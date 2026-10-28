@@ -106,6 +106,7 @@ from engine_v2.zones.structure_lifecycle import (
 )
 from engine_v2.charting.export_plotly import (
     _add_fib_box,
+    _candle_floor_hover,
     _add_wvmi_lp_traces,
     _chart_controls_cfg,
     _inject_chart_controls_js,
@@ -915,6 +916,7 @@ def export_m15_chart_plotly(
         dfx[COL_TIME].astype(str),        # 11
         idx_1h_col,                       # 12
         time_1h_col,                      # 13
+        _candle_floor_hover(dfx),         # 14
     ))
 
     candle_hover = (
@@ -928,6 +930,7 @@ def export_m15_chart_plotly(
         "L=%{low}<br>"
         "C=%{close}<br>"
         "candle_type=%{customdata[3]}<br>"
+        "%{customdata[14]}<br>"
         "body_len=%{customdata[4]:.5f}<br>"
         "candle_len=%{customdata[5]:.5f}<br>"
         "body_pct=%{customdata[2]:.2%}<br>"
