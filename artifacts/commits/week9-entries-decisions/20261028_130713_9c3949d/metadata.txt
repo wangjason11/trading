@@ -1,0 +1,4 @@
+commit_hash=9c3949d
+timestamp=20261028_130713
+branch=week9-entries-decisions
+commit_message=PLAN_U U3b (SESSION ORDER item 7): the floor seed guard steps back until final mode converges; the user's look: "go ahead and commit-save"
