@@ -258,8 +258,10 @@ SYLLABUS Week 9 Part 2 "Zone size at entry and stop-loss".
 7. **Pinbar body-pip floor calibration** — **IN PROGRESS: PLAN_U** (the user 2026-10-27: "the last major item I want
    to tackle in the next session"; 2026-10-28 the approach chosen — a rolling floor, the p90 of the 90 most recent
    pinbars; U1 the per-candle plumbing + columns + hover LANDED 2026-10-28, format only; U2 the rolling floor, natural
-   window, LANDED 2026-10-28 = its prediction (S_U2 `20261028_113834_84fbbc6`); NEXT U3 the final-window flip) —
-   D.1 item 4 below.
+   window, LANDED 2026-10-28 = its prediction (S_U2 `20261028_113834_84fbbc6`); U3 the final window — the user's pick
+   after seeing both ("Final + convergence check"; natural kept as a switch) — LANDED 2026-10-28 = its prediction;
+   NEXT U3b, the floor seed guard steps back until final mode converges — the user: "Guard extends") — D.1 item 4
+   below.
 8. **The remaining minor items before Part 2** — after item 7, in the next session(s) (the user 2026-10-27: "any
    remaining minor tasks & items in the next session(s) that we previously documented as pre-reqs to starting part 2
    of week 9"). Candidates on file: D.2 below (the backlog "decided after D.1 is complete", the user 2026-10-01) and
@@ -415,7 +417,11 @@ SYLLABUS Week 9 Part 2 "Zone size at entry and stop-loss".
    floor-demoted ones; the fixed per-TF table removed). Three landings: U1 the per-candle floor plumbing + the three
    columns + the candle hover on today's fixed floor — LANDED 2026-10-28, format only; U2 the rolling floor, natural
    window — LANDED 2026-10-28, S_U2 `20261028_113834_84fbbc6` (the fixed table removed; = the prediction: H1 74 / M15 294 candles become pinbars; no
-   sub, trigger or POI pick moves — PLAN_U §9 "U2"); U3 the final-window flip, the user picks one (NEXT). The decisions verbatim:
+   sub, trigger or POI pick moves — PLAN_U §9 "U2"); U3 the final window (the floor-demoted pinbars fill the window
+   too) — the user's pick after seeing both, natural kept as a switch — LANDED 2026-10-28 (= the prediction: vs U2 H1
+   15 / M15 64 candles change type, four downstream records, no sub / trigger / POI / IC pick — PLAN_U §9 "U3"); U3b
+   NEXT: the seed guard steps back until the full and the drop-one-window final runs agree by the seed's end (the
+   check as first worded fails on the 2-window seed — measured). The decisions verbatim:
    `engine_v2/features/CANDLE_BODY_FLOOR_NOTES.md` "Direction — the rolling floor". Detail: memory
    `project_pinbar_body_pip_floor.md`.
 

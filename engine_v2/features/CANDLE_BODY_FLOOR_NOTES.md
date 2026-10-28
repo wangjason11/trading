@@ -1,6 +1,6 @@
 # Candle body-pip floor — design notes
 
-> **STATUS: PROVISIONAL (2026-06-16; the rolling floor since 2026-10-28 — PLAN_U U2).** The candle-classification body floor
+> **STATUS: PROVISIONAL (2026-06-16; the rolling floor since 2026-10-28 — PLAN_U U2; its window = the final pinbars since U3, the same day).** The candle-classification body floor
 > below is **not finalized**. Both the floor *values* and the *approach itself*
 > (reclassify-to-pinbar) are expected to be revisited and possibly re-edited or
 > reverted as the strategy is optimized. Treat this as a working iteration, not
@@ -34,17 +34,20 @@ The settings (`CandleParams`; the user, 2026-10-27 / 28; read by `features/pinba
 |---|---|---|
 | `pinbar_floor_window` | 90 | the pinbars in the window |
 | `pinbar_floor_percentile` | 90.0 | the percentile of their bodies (numpy linear) |
-| `pinbar_floor_window_source` | `"natural"` | `"natural"` = the body-% pinbars fill the window; `"final"` = + the ones the floor demoted (PLAN_U U3 tries it; the user picks one) |
+| `pinbar_floor_window_source` | `"final"` | `"final"` = the body-% pinbars + the ones the floor demoted fill the window, candle by candle (the user's pick at PLAN_U U3, 2026-10-28, after seeing both); `"natural"` = the body-% pinbars only (U2; kept as a switch) |
 | `pinbar_floor_seed_windows` | 2 | the history fetched before a replay's frame holds 2 × 90 = 180 body-% pinbars |
 
-## Current logic — the rolling floor (PLAN_U U2, 2026-10-28)
+## Current logic — the rolling floor, final window (PLAN_U U2 + U3, 2026-10-28)
 
 **The floor of candle i** = `numpy.percentile(body_len of the window, 90)` (linear interpolation), the window = the
 90 most recent pinbars STRICTLY before i; no full window → no floor (NaN). **Step 4:** a candle whose body-% type
 (after the special-maru promotion) is maru or normal and whose `body_len < floor − EPS` becomes a pinbar
 (`is_special_maru = False`); `pinbar_dir` / `normal_dir` are computed after it, so a floor pinbar is directioned by the
-same wick rule. Natural window: a candle's floor depends only on the candles before it, never on where the history
-starts.
+same wick rule. **The window = the final pinbars** (U3): computed candle by candle in index order, a candle the floor
+demotes enters the next windows. A demoted body is below the floor that demoted it, so each demotion pulls the next
+p90 down — on the reference window the final floors are lower than the natural ones on most candles (H1 536 lower /
+258 higher, mean −0.08 pips; PLAN_U §9 "U3"). So a candle's floor depends on where the history starts until two
+starts converge; the natural window (`"natural"`, U2, kept as a switch) depends only on the candles before it.
 
 **The history before the frame — the floor seed** (`run_replay.fetch_floor_seed` / `fetch_floor_seeds`, in
 `main()` right after the H1 fetch; counted in the `data_fetch` timing): step k fetches `[first − k × 400 candles of
@@ -58,16 +61,18 @@ are the frame's own. A frame without a seed (`floor_seeds=None`: every test, a s
 before its 90th pinbar — GOTCHAS "A Frame Classified Without Its Floor Seed Gets Other Candle Types". No M5 seed (the
 replay builds no M5 frame); the rule is TF-agnostic, so an M5 frame needs no table.
 
-**Measured on the reference window (the U2 replay, 2026-10-28):** every frame candle has a floor; H1 floors 2.30 –
-3.50 pips (median 3.03, 34 distinct values), M15 from 1.02 pips (30 distinct values, most 1.2 – 1.6); against the
-fixed floor 74 H1 candles become pinbars, 0 stop (15 marus / 59 normals, 6 with a pin direction), types 289 / 233 /
-536 → 274 / 174 / 610; M15 294 (91 / 203, 31), 1358 / 920 / 1950 → 1267 / 717 / 2244; `is_floor_pinbar` H1 114 (22
-/ 92), M15 436 (125 / 311). The downstream, per structure: PLAN_U §9 "U2" (`qa_pinbar_floor_inputs/u2_compare.txt`,
-`u2_causes.txt`).
+**Measured on the reference window (the U3 replay, 2026-10-28):** every frame candle has a floor; H1 floors 2.31 –
+3.50 pips (median 3.00), M15 1.00 – 2.51 (median 1.40); against the fixed floor 61 H1 candles become pinbars, 0 stop
+(10 marus / 51 normals, 5 with a pin direction), types 289 / 233 / 536 → 279 / 182 / 597; M15 268 (78 / 190, 26),
+1358 / 920 / 1950 → 1280 / 730 / 2218; `is_floor_pinbar` H1 101 (17 / 84), M15 410 (112 / 298). Against the natural
+window (U2): H1 15 candles change type (1 becomes a pinbar, 14 stop), M15 64 (19 / 45); four downstream records move —
+PLAN_U §9 "U3" (`qa_pinbar_floor_inputs/u3_compare.txt`, `u3_causes.txt`, `u3_changed_candles.txt`). The natural
+window's figures (U2): H1 2.30 – 3.50 (median 3.03), 274 / 174 / 610, `is_floor_pinbar` 114 (22 / 92); M15 from 1.02,
+1267 / 717 / 2244, 436 (125 / 311) — PLAN_U §9 "U2" (`u2_compare.txt`, `u2_causes.txt`).
 
 Strict `<` with an `EPS` guard (1e-12) so a body sitting exactly at the floor keeps its original type: a nominal
-N-pip body can float-round to N × pip − ~2e-15 (measured at U2: 1 H1 / 12 M15 bodies sit under their floor by float
-noise alone, PLAN_U §8 A1). The `is_big_maru` body-pip floor of the logic before 2026-06-09 stays removed —
+N-pip body can float-round to N × pip − ~2e-15 (measured: 1 H1 / 12 M15 bodies sit under their floor by float noise
+alone with the natural window, 2 / 17 with the final one — PLAN_U §8 A1). The `is_big_maru` body-pip floor of the logic before 2026-06-09 stays removed —
 `is_big_maru` / `is_big_normal` are ratio-only; a floor pinbar can never be a maru, so it never enters the
 prior-maru pool (a demoted maru leaves the pool, which moves the big flags of the candles after it — PLAN_U §9).
 
@@ -311,12 +316,18 @@ and the floor should be the most recent 90 pinbar's p90. We would also need to p
 historical data if necessary to fulfill this requirement." 2026-10-28, on the open questions: "I generally agree
 with all your recommendations. The one thing I'd like to try though is both using body-% pinbars only and also the
 ones the floor itself demoted. I'd like to see how much they would differ." Agreed (the canonical build spec:
-`engine_v2/plans/PLAN_U_rolling_pinbar_body_floor.md` — U1 landed 2026-10-28, U2 (the natural window, "Current logic"
-above) landed 2026-10-28, U3 the final window next; the user then picks one):
+`engine_v2/plans/PLAN_U_rolling_pinbar_body_floor.md` — U1 landed 2026-10-28, U2 (the natural window) landed
+2026-10-28, U3 (the final window, "Current logic" above) the same day; U3b, the seed guard's convergence rule, next):
 - the floor of a candle = the p90 (numpy linear interpolation) of the bodies of the 90 most recent pinbars strictly
   before it; a body strictly below it makes a pinbar (today's `<` rule; a body equal to the floor keeps its type);
   the window size and the percentile are config settings;
-- which pinbars fill the window: both are tried (natural, final), each a replay of its own;
+- which pinbars fill the window: both are tried (natural, final), each a replay of its own → **final**: shown the two
+  side by side (H1 15 / M15 64 candles differ, four downstream records), the user asked "sorry to clarify, final is
+  with demoted included?" (yes) and chose "Final + convergence check" (2026-10-28); natural is kept as a switch ("Keep
+  as a switch"). The convergence check, measured first: as worded (the seed's first window dropped, raise if a frame
+  floor differs) it fails on the 2-window seed (H1 57 floors differ) though that seed's floors equal the 3 / 4 /
+  5-window seeds' everywhere — so the user chose "Guard extends": the seed guard steps back until the full and the
+  drop-one-window runs agree by the seed's last candle (PLAN_U §9 "U3", `u3_convergence.txt`);
 - the history: a seed fetched before the frame's first candle, used only to fill the first windows and then dropped
   (the frame and its candle indices unchanged); a replay stops with an error when the seed can't supply the window,
   a frame without enough history (unit tests, short frames) gets no floor on those candles;

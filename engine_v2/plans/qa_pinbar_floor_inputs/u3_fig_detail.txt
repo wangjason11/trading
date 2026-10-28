@@ -1,0 +1,194 @@
+== rk2-5.html
+   ('None', 3) TF=1H points 12 -> 12
+      - x=2025-12-12T15:00:00+00:00
+      + x=2025-12-12T10:00:00+00:00
+      hovertemplate TF=1H | <b>Wave Candle</b> | idx=473 | CTS zone: sid=0 | cycle_id=0 | Role: FP (first pullback) | struct_window=[115, 902] | end_reason=reversal | volume=5806 | struct_direction=1<extra></extra>
+                 -> TF=1H | <b>Wave Candle</b> | idx=468 | CTS zone: sid=0 | cycle_id=0 | Role: FP (first pullback) | struct_window=[115, 902] | end_reason=reversal | volume=2131 | struct_direction=1<extra></extra>
+   ('WVMI LP buy', 0)  points 39 -> 39
+      ~ x=2025-12-15T03:00:00+00:00 y 0.91 -> [0.91]
+          customdata "TF=1H | <b>Main WVMI</b> | sid=0 | cycle_id=0 | lp_idx=485 | lp_status=temporary (replaced by a further close at 507) | zone_side=buy | breakout_momentum=0.513…
+                  -> "TF=1H | <b>Main WVMI</b> | sid=0 | cycle_id=0 | lp_idx=485 | lp_status=temporary (replaced by a further close at 507) | zone_side=buy | breakout_momentum=0.513…
+      ~ x=2025-12-16T01:00:00+00:00 y 0.91 -> [0.91]
+          customdata "TF=1H | <b>Main WVMI</b> | sid=0 | cycle_id=0 | lp_idx=507 | lp_status=temporary (replaced by a further close at 555) | zone_side=buy | breakout_momentum=0.513…
+                  -> "TF=1H | <b>Main WVMI</b> | sid=0 | cycle_id=0 | lp_idx=507 | lp_status=temporary (replaced by a further close at 555) | zone_side=buy | breakout_momentum=0.513…
+      ~ x=2025-12-18T01:00:00+00:00 y 0.91 -> [0.91]
+          customdata "TF=1H | <b>Main WVMI</b> | sid=0 | cycle_id=0 | lp_idx=555 | lp_status=temporary (replaced by a further close at 557) | zone_side=buy | breakout_momentum=0.513…
+                  -> "TF=1H | <b>Main WVMI</b> | sid=0 | cycle_id=0 | lp_idx=555 | lp_status=temporary (replaced by a further close at 557) | zone_side=buy | breakout_momentum=0.513…
+      ~ x=2025-12-18T03:00:00+00:00 y 0.91 -> [0.91]
+          customdata "TF=1H | <b>Main WVMI</b> | sid=0 | cycle_id=0 | lp_idx=557 | lp_status=temporary (replaced by a further close at 585) | zone_side=buy | breakout_momentum=0.513…
+                  -> "TF=1H | <b>Main WVMI</b> | sid=0 | cycle_id=0 | lp_idx=557 | lp_status=temporary (replaced by a further close at 585) | zone_side=buy | breakout_momentum=0.513…
+      … 3 more changed points, x 2025-12-19T07:00:00+00:00 .. 2025-12-19T12:00:00+00:00
+   ('struct:CONFIRMED:+1', 0)  points 24 -> 25
+      + x=2025-11-17T06:00:00.000000000
+      ~ x=2025-11-17T07:00:00.000000000 y 0.569039 -> [0.569039]
+          customdata ["one_maru_continuous", 1, "CONFIRMED", 6, 7, 9]
+                  -> ["double_maru", 1, "CONFIRMED", 7, 8, 9]
+   ('struct:CONFIRMED:-1', 0)  points 18 -> 21
+      + x=2025-11-19T15:00:00.000000000
+      + x=2025-12-15T20:00:00.000000000
+      + x=2026-01-09T09:00:00.000000000
+   ('struct:SUCCESS:-1', 0)  points 30 -> 32
+      + x=2025-12-29T18:00:00.000000000
+      + x=2026-01-09T06:00:00.000000000
+   layout keys that differ: ['shapes']
+      shapes[197] x0: 2025-12-12T15:00:00+00:00 -> 2025-12-12T10:00:00+00:00; x1: 2025-12-12T15:00:00+00:00 -> 2025-12-12T10:00:00+00:00
+== rk2-5_M15_counter.html
+   ('H1 WVMI LP buy', 0)  points 39 -> 39
+      ~ x=2025-12-15T03:45:00+00:00 y 0.91 -> [0.91]
+          customdata "TF=1H>>15M | <b>Main WVMI</b> | sid=0 | cycle_id=0 | lp_idx_1H=485 | lp_idx=1943 | lp_status=temporary (replaced by a further close at 507) | zone_side=buy | b…
+                  -> "TF=1H>>15M | <b>Main WVMI</b> | sid=0 | cycle_id=0 | lp_idx_1H=485 | lp_idx=1943 | lp_status=temporary (replaced by a further close at 507) | zone_side=buy | b…
+      ~ x=2025-12-16T01:45:00+00:00 y 0.91 -> [0.91]
+          customdata "TF=1H>>15M | <b>Main WVMI</b> | sid=0 | cycle_id=0 | lp_idx_1H=507 | lp_idx=2031 | lp_status=temporary (replaced by a further close at 555) | zone_side=buy | b…
+                  -> "TF=1H>>15M | <b>Main WVMI</b> | sid=0 | cycle_id=0 | lp_idx_1H=507 | lp_idx=2031 | lp_status=temporary (replaced by a further close at 555) | zone_side=buy | b…
+      ~ x=2025-12-18T01:45:00+00:00 y 0.91 -> [0.91]
+          customdata "TF=1H>>15M | <b>Main WVMI</b> | sid=0 | cycle_id=0 | lp_idx_1H=555 | lp_idx=2223 | lp_status=temporary (replaced by a further close at 557) | zone_side=buy | b…
+                  -> "TF=1H>>15M | <b>Main WVMI</b> | sid=0 | cycle_id=0 | lp_idx_1H=555 | lp_idx=2223 | lp_status=temporary (replaced by a further close at 557) | zone_side=buy | b…
+      ~ x=2025-12-18T03:45:00+00:00 y 0.91 -> [0.91]
+          customdata "TF=1H>>15M | <b>Main WVMI</b> | sid=0 | cycle_id=0 | lp_idx_1H=557 | lp_idx=2231 | lp_status=temporary (replaced by a further close at 585) | zone_side=buy | b…
+                  -> "TF=1H>>15M | <b>Main WVMI</b> | sid=0 | cycle_id=0 | lp_idx_1H=557 | lp_idx=2231 | lp_status=temporary (replaced by a further close at 585) | zone_side=buy | b…
+      … 3 more changed points, x 2025-12-19T07:45:00+00:00 .. 2025-12-19T12:45:00+00:00
+   ('None', 25) TF=1H points 12 -> 12
+      - x=2025-12-12T15:45:00+00:00
+      + x=2025-12-12T10:45:00+00:00
+      hovertemplate TF=1H | <b>Wave Candle</b> | idx=473 | CTS zone: sid=0 | cycle_id=0 | Role: FP (first pullback) | struct_window=[115, 902] | end_reason=reversal | volume=5806 | struct_direction=1<extra></extra>
+                 -> TF=1H | <b>Wave Candle</b> | idx=468 | CTS zone: sid=0 | cycle_id=0 | Role: FP (first pullback) | struct_window=[115, 902] | end_reason=reversal | volume=2131 | struct_direction=1<extra></extra>
+   ('struct:CONFIRMED:+1', 0)  points 123 -> 122
+      - x=2025-11-28T13:45:00.000000000
+      - x=2025-11-30T22:30:00.000000000
+      - x=2025-12-15T11:15:00.000000000
+      + x=2025-11-19T23:45:00.000000000
+      + x=2025-11-28T14:00:00.000000000
+      ~ x=2025-12-15T11:30:00.000000000 y 0.579403 -> [0.579403]
+          customdata ["one_maru_continuous", 1, "CONFIRMED", 1972, 1973, 1974]
+                  -> ["one_maru_continuous", 1, "CONFIRMED", 1971, 1972, 1974]
+   ('struct:CONFIRMED:-1', 0)  points 122 -> 122
+      - x=2025-12-02T00:15:00.000000000
+      - x=2025-12-02T01:00:00.000000000
+      - x=2025-12-08T05:15:00.000000000
+      - x=2025-12-15T17:15:00.000000000
+      + x=2025-11-24T03:45:00.000000000
+      + x=2025-12-04T22:30:00.000000000
+      + x=2025-12-08T05:00:00.000000000
+      + x=2026-01-09T09:45:00.000000000
+   ('struct:SUCCESS:+1', 0)  points 130 -> 132
+      - x=2025-11-28T14:00:00.000000000
+      + x=2025-11-28T13:30:00.000000000
+      + x=2025-11-28T13:45:00.000000000
+      + x=2025-12-23T22:45:00.000000000
+   ('struct:SUCCESS:-1', 0)  points 144 -> 145
+      - x=2025-12-08T11:45:00.000000000
+      + x=2025-12-08T05:15:00.000000000
+      + x=2026-01-06T23:15:00.000000000
+      ~ x=2025-12-19T13:00:00.000000000 y 0.5736380000000001 -> [0.5736380000000001]
+          customdata ["double_maru", -1, "SUCCESS", 2363, 2364, -1]
+                  -> ["one_maru_continuous", -1, "SUCCESS", 2363, 2364, -1]
+   layout keys that differ: ['shapes']
+      shapes[114] x0: 2025-12-12T15:45:00+00:00 -> 2025-12-12T10:45:00+00:00; x1: 2025-12-12T15:45:00+00:00 -> 2025-12-12T10:45:00+00:00
+== rk2-5_M15_confluence.html
+   ('H1 WVMI LP buy', 0)  points 39 -> 39
+      ~ x=2025-12-15T03:45:00+00:00 y 0.91 -> [0.91]
+          customdata "TF=1H>>15M | <b>Main WVMI</b> | sid=0 | cycle_id=0 | lp_idx_1H=485 | lp_idx=1943 | lp_status=temporary (replaced by a further close at 507) | zone_side=buy | b…
+                  -> "TF=1H>>15M | <b>Main WVMI</b> | sid=0 | cycle_id=0 | lp_idx_1H=485 | lp_idx=1943 | lp_status=temporary (replaced by a further close at 507) | zone_side=buy | b…
+      ~ x=2025-12-16T01:45:00+00:00 y 0.91 -> [0.91]
+          customdata "TF=1H>>15M | <b>Main WVMI</b> | sid=0 | cycle_id=0 | lp_idx_1H=507 | lp_idx=2031 | lp_status=temporary (replaced by a further close at 555) | zone_side=buy | b…
+                  -> "TF=1H>>15M | <b>Main WVMI</b> | sid=0 | cycle_id=0 | lp_idx_1H=507 | lp_idx=2031 | lp_status=temporary (replaced by a further close at 555) | zone_side=buy | b…
+      ~ x=2025-12-18T01:45:00+00:00 y 0.91 -> [0.91]
+          customdata "TF=1H>>15M | <b>Main WVMI</b> | sid=0 | cycle_id=0 | lp_idx_1H=555 | lp_idx=2223 | lp_status=temporary (replaced by a further close at 557) | zone_side=buy | b…
+                  -> "TF=1H>>15M | <b>Main WVMI</b> | sid=0 | cycle_id=0 | lp_idx_1H=555 | lp_idx=2223 | lp_status=temporary (replaced by a further close at 557) | zone_side=buy | b…
+      ~ x=2025-12-18T03:45:00+00:00 y 0.91 -> [0.91]
+          customdata "TF=1H>>15M | <b>Main WVMI</b> | sid=0 | cycle_id=0 | lp_idx_1H=557 | lp_idx=2231 | lp_status=temporary (replaced by a further close at 585) | zone_side=buy | b…
+                  -> "TF=1H>>15M | <b>Main WVMI</b> | sid=0 | cycle_id=0 | lp_idx_1H=557 | lp_idx=2231 | lp_status=temporary (replaced by a further close at 585) | zone_side=buy | b…
+      … 3 more changed points, x 2025-12-19T07:45:00+00:00 .. 2025-12-19T12:45:00+00:00
+   ('M15 KL outline sub0 c1', 0)  points 5 -> 5
+      - x=2025-11-28T11:00:00+00:00
+      + x=2025-11-28T11:15:00+00:00
+      ~ x=2025-12-03T16:00:00+00:00 y 0.57066 -> [0.57065, 0.57038]
+   ('M15 KL zone', 0)  points 309 -> 308
+      - x=2025-11-28T11:00:00.000000000
+      ~ x=2025-11-28T11:15:00.000000000 y 0.57066 -> [0.57065]
+          customdata ["buy", "sub_id=0 | cycle_id=1 | first record: lens=confluence | parent_sid=0 | parent_cycle_id=0", "no base star", 916, 1020, "lifecycle=[1020, 1224] | end_rea…
+                  -> ["buy", "sub_id=0 | cycle_id=1 | first record: lens=confluence | parent_sid=0 | parent_cycle_id=0", "base", 917, 1020, "lifecycle=[1020, 1224] | end_reason=next…
+      ~ x=2025-11-28T11:30:00.000000000 y 0.57066 -> [0.57065]
+          customdata ["buy", "sub_id=0 | cycle_id=1 | first record: lens=confluence | parent_sid=0 | parent_cycle_id=0", "no base star", 916, 1020, "lifecycle=[1020, 1224] | end_rea…
+                  -> ["buy", "sub_id=0 | cycle_id=1 | first record: lens=confluence | parent_sid=0 | parent_cycle_id=0", "base", 917, 1020, "lifecycle=[1020, 1224] | end_reason=next…
+      ~ x=2025-11-28T11:45:00.000000000 y 0.57066 -> [0.57065]
+          customdata ["buy", "sub_id=0 | cycle_id=1 | first record: lens=confluence | parent_sid=0 | parent_cycle_id=0", "no base star", 916, 1020, "lifecycle=[1020, 1224] | end_rea…
+                  -> ["buy", "sub_id=0 | cycle_id=1 | first record: lens=confluence | parent_sid=0 | parent_cycle_id=0", "base", 917, 1020, "lifecycle=[1020, 1224] | end_reason=next…
+      ~ x=2025-11-28T12:00:00.000000000 y 0.57066 -> [0.57065]
+          customdata ["buy", "sub_id=0 | cycle_id=1 | first record: lens=confluence | parent_sid=0 | parent_cycle_id=0", "no base star", 916, 1020, "lifecycle=[1020, 1224] | end_rea…
+                  -> ["buy", "sub_id=0 | cycle_id=1 | first record: lens=confluence | parent_sid=0 | parent_cycle_id=0", "base", 917, 1020, "lifecycle=[1020, 1224] | end_reason=next…
+      … 304 more changed points, x 2025-11-28T12:15:00.000000000 .. 2025-12-03T16:00:00.000000000
+   ('M15 KL zone', 1)  points 309 -> 308
+      - x=2025-11-28T11:00:00.000000000
+      ~ x=2025-11-28T11:15:00.000000000 y 0.57038 -> [0.57038]
+          customdata ["buy", "sub_id=0 | cycle_id=1 | first record: lens=confluence | parent_sid=0 | parent_cycle_id=0", "no base star", 916, 1020, "lifecycle=[1020, 1224] | end_rea…
+                  -> ["buy", "sub_id=0 | cycle_id=1 | first record: lens=confluence | parent_sid=0 | parent_cycle_id=0", "base", 917, 1020, "lifecycle=[1020, 1224] | end_reason=next…
+      ~ x=2025-11-28T11:30:00.000000000 y 0.57038 -> [0.57038]
+          customdata ["buy", "sub_id=0 | cycle_id=1 | first record: lens=confluence | parent_sid=0 | parent_cycle_id=0", "no base star", 916, 1020, "lifecycle=[1020, 1224] | end_rea…
+                  -> ["buy", "sub_id=0 | cycle_id=1 | first record: lens=confluence | parent_sid=0 | parent_cycle_id=0", "base", 917, 1020, "lifecycle=[1020, 1224] | end_reason=next…
+      ~ x=2025-11-28T11:45:00.000000000 y 0.57038 -> [0.57038]
+          customdata ["buy", "sub_id=0 | cycle_id=1 | first record: lens=confluence | parent_sid=0 | parent_cycle_id=0", "no base star", 916, 1020, "lifecycle=[1020, 1224] | end_rea…
+                  -> ["buy", "sub_id=0 | cycle_id=1 | first record: lens=confluence | parent_sid=0 | parent_cycle_id=0", "base", 917, 1020, "lifecycle=[1020, 1224] | end_reason=next…
+      ~ x=2025-11-28T12:00:00.000000000 y 0.57038 -> [0.57038]
+          customdata ["buy", "sub_id=0 | cycle_id=1 | first record: lens=confluence | parent_sid=0 | parent_cycle_id=0", "no base star", 916, 1020, "lifecycle=[1020, 1224] | end_rea…
+                  -> ["buy", "sub_id=0 | cycle_id=1 | first record: lens=confluence | parent_sid=0 | parent_cycle_id=0", "base", 917, 1020, "lifecycle=[1020, 1224] | end_reason=next…
+      … 304 more changed points, x 2025-11-28T12:15:00.000000000 .. 2025-12-03T16:00:00.000000000
+   ('M15 WVMI LP buy', 0)  points 102 -> 102
+      ~ x=2025-12-01T14:15:00+00:00 y 0.91 -> [0.91]
+          customdata "TF=15M | <b>Sub WVMI</b> | sub_id=0 | cycle_id=1 | relative_dir=confluence | lp_idx=1025 | lp_status=temporary (replaced by a further close at 1026) | zone_sid…
+                  -> "TF=15M | <b>Sub WVMI</b> | sub_id=0 | cycle_id=1 | relative_dir=confluence | lp_idx=1025 | lp_status=temporary (replaced by a further close at 1026) | zone_sid…
+      ~ x=2025-12-01T14:30:00+00:00 y 0.91 -> [0.91]
+          customdata "TF=15M | <b>Sub WVMI</b> | sub_id=0 | cycle_id=1 | relative_dir=confluence | lp_idx=1026 | lp_status=temporary (replaced by a further close at 1030) | zone_sid…
+                  -> "TF=15M | <b>Sub WVMI</b> | sub_id=0 | cycle_id=1 | relative_dir=confluence | lp_idx=1026 | lp_status=temporary (replaced by a further close at 1030) | zone_sid…
+      ~ x=2025-12-01T15:30:00+00:00 y 0.91 -> [0.91]
+          customdata "TF=15M | <b>Sub WVMI</b> | sub_id=0 | cycle_id=1 | relative_dir=confluence | lp_idx=1030 | lp_status=temporary (replaced by a further close at 1032) | zone_sid…
+                  -> "TF=15M | <b>Sub WVMI</b> | sub_id=0 | cycle_id=1 | relative_dir=confluence | lp_idx=1030 | lp_status=temporary (replaced by a further close at 1032) | zone_sid…
+      ~ x=2025-12-01T16:00:00+00:00 y 0.91 -> [0.91]
+          customdata "TF=15M | <b>Sub WVMI</b> | sub_id=0 | cycle_id=1 | relative_dir=confluence | lp_idx=1032 | lp_status=temporary (replaced by a further close at 1035) | zone_sid…
+                  -> "TF=15M | <b>Sub WVMI</b> | sub_id=0 | cycle_id=1 | relative_dir=confluence | lp_idx=1032 | lp_status=temporary (replaced by a further close at 1035) | zone_sid…
+      … 16 more changed points, x 2025-12-01T16:45:00+00:00 .. 2025-12-02T10:45:00+00:00
+   ('None', 0) TF=15M points 12 -> 12
+      - x=2025-11-28T11:30:00+00:00
+      + x=2025-11-28T12:00:00+00:00
+      hovertemplate TF=15M | <b>Wave Candle</b> | idx=918 | idx_1H=229 | BOS zone: sub_id=0 | cycle_id=1 | first record: lens=confluence | parent_sid=0 | parent_cycle_id=0 | Role: FB (first breakout) | sub_window=[1020, 1940] | end_reason=reversal | volume=8468 | struct_direction=1<extra></extra>
+                 -> TF=15M | <b>Wave Candle</b> | idx=920 | idx_1H=230 | BOS zone: sub_id=0 | cycle_id=1 | first record: lens=confluence | parent_sid=0 | parent_cycle_id=0 | Role: FB (first breakout) | sub_window=[1020, 1940] | end_reason=reversal | volume=4319 | struct_direction=1<extra></extra>
+   ('None', 60) TF=1H points 12 -> 12
+      - x=2025-12-12T15:45:00+00:00
+      + x=2025-12-12T10:45:00+00:00
+      hovertemplate TF=1H | <b>Wave Candle</b> | idx=473 | CTS zone: sid=0 | cycle_id=0 | Role: FP (first pullback) | struct_window=[115, 902] | end_reason=reversal | volume=5806 | struct_direction=1<extra></extra>
+                 -> TF=1H | <b>Wave Candle</b> | idx=468 | CTS zone: sid=0 | cycle_id=0 | Role: FP (first pullback) | struct_window=[115, 902] | end_reason=reversal | volume=2131 | struct_direction=1<extra></extra>
+   ('struct:CONFIRMED:+1', 0)  points 123 -> 122
+      - x=2025-11-28T13:45:00.000000000
+      - x=2025-11-30T22:30:00.000000000
+      - x=2025-12-15T11:15:00.000000000
+      + x=2025-11-19T23:45:00.000000000
+      + x=2025-11-28T14:00:00.000000000
+      ~ x=2025-12-15T11:30:00.000000000 y 0.579403 -> [0.579403]
+          customdata ["one_maru_continuous", 1, "CONFIRMED", 1972, 1973, 1974]
+                  -> ["one_maru_continuous", 1, "CONFIRMED", 1971, 1972, 1974]
+   ('struct:CONFIRMED:-1', 0)  points 122 -> 122
+      - x=2025-12-02T00:15:00.000000000
+      - x=2025-12-02T01:00:00.000000000
+      - x=2025-12-08T05:15:00.000000000
+      - x=2025-12-15T17:15:00.000000000
+      + x=2025-11-24T03:45:00.000000000
+      + x=2025-12-04T22:30:00.000000000
+      + x=2025-12-08T05:00:00.000000000
+      + x=2026-01-09T09:45:00.000000000
+   ('struct:SUCCESS:+1', 0)  points 130 -> 132
+      - x=2025-11-28T14:00:00.000000000
+      + x=2025-11-28T13:30:00.000000000
+      + x=2025-11-28T13:45:00.000000000
+      + x=2025-12-23T22:45:00.000000000
+   ('struct:SUCCESS:-1', 0)  points 144 -> 145
+      - x=2025-12-08T11:45:00.000000000
+      + x=2025-12-08T05:15:00.000000000
+      + x=2026-01-06T23:15:00.000000000
+      ~ x=2025-12-19T13:00:00.000000000 y 0.5736380000000001 -> [0.5736380000000001]
+          customdata ["double_maru", -1, "SUCCESS", 2363, 2364, -1]
+                  -> ["one_maru_continuous", -1, "SUCCESS", 2363, 2364, -1]
+   layout keys that differ: ['shapes']
+      shapes[0] y1: 0.57066 -> 0.57065
+      shapes[1] y1: 0.57066 -> 0.57065
+      shapes[9] x0: 2025-11-28T11:30:00+00:00 -> 2025-11-28T12:00:00+00:00; x1: 2025-11-28T11:30:00+00:00 -> 2025-11-28T12:00:00+00:00
+      shapes[285] x0: 2025-12-12T15:45:00+00:00 -> 2025-12-12T10:45:00+00:00; x1: 2025-12-12T15:45:00+00:00 -> 2025-12-12T10:45:00+00:00

@@ -1,0 +1,22 @@
+final mode, window 90, p90; the seed = the replay's (2 guard steps)
+
+## H1: seed 559 candles, 232 body-% pinbars; frame 1058 candles
+   drop 1 window(s): 142 body-% pinbars left in the seed -> frame floors differ on 57 candles (idx 0 .. 182), types on 1 (idx 8)
+      full vs drop-1: the windows hold the same rows from frame idx 200 on
+   drop 2 window(s): 52 body-% pinbars left in the seed -> frame floors differ on 228 candles (idx 0 .. 330), types on 4 (idx 35, 36, 56, 186)
+
+## M15: seed 480 candles, 189 body-% pinbars; frame 4228 candles
+   drop 1 window(s): 99 body-% pinbars left in the seed -> frame floors differ on 0 candles, types on 0
+      full vs drop-1: the windows hold the same rows from frame idx 15 on
+   drop 2 window(s): 9 body-% pinbars left in the seed -> frame floors differ on 254 candles (idx 0 .. 357), types on 17 (idx 0, 1, 2, 6, 24, 30, 31, 35, 50, 61, 77, 90)
+
+## Longer seeds (the engine's guard, 400-candle steps): the drop-1 check on each
+   H1 2 windows (180 pinbars): seed 559 candles, 232 body-% pinbars, from 2025-10-14 14:00 -> drop-1: frame floors differ on 57, types on 1; windows the same from frame idx 200; frame floors == the 2-window seed's: True
+   H1 3 windows (270 pinbars): seed 840 candles, 355 body-% pinbars, from 2025-09-28 21:00 -> drop-1: frame floors differ on 0, types on 0; windows the same from seed row 582 of 840; frame floors == the 2-window seed's: True
+   H1 4 windows (360 pinbars): seed 1119 candles, 478 body-% pinbars, from 2025-09-11 06:00 -> drop-1: frame floors differ on 0, types on 0; windows the same from seed row 567 of 1119; frame floors == the 2-window seed's: True
+   H1 5 windows (450 pinbars): seed 1119 candles, 478 body-% pinbars, from 2025-09-11 06:00 -> drop-1: frame floors differ on 0, types on 0; windows the same from seed row 567 of 1119; frame floors == the 2-window seed's: True
+   M15 2 windows (180 pinbars): seed 480 candles, 189 body-% pinbars, from 2025-11-09 22:00 -> drop-1: frame floors differ on 0, types on 0; windows the same from frame idx 15; frame floors == the 2-window seed's: True
+   M15 3 windows (270 pinbars): seed 816 candles, 310 body-% pinbars, from 2025-11-04 10:00 -> drop-1: frame floors differ on 0, types on 0; windows the same from seed row 721 of 816; frame floors == the 2-window seed's: True
+   M15 4 windows (360 pinbars): seed 1020 candles, 397 body-% pinbars, from 2025-10-31 06:00 -> drop-1: frame floors differ on 0, types on 0; windows the same from seed row 667 of 1020; frame floors == the 2-window seed's: True
+   M15 5 windows (450 pinbars): seed 1420 candles, 538 body-% pinbars, from 2025-10-27 02:00 -> drop-1: frame floors differ on 0, types on 0; windows the same from seed row 650 of 1420; frame floors == the 2-window seed's: True
+

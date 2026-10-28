@@ -1,0 +1,91 @@
+## H1 (the replays' *_final.csv): the floor (pips) differs on 794 of 1058 candles; U3 - U2 mean -0.080, min -0.70, max +0.40; U3 lower on 536, higher on 258; median floor U2 3.03 U3 3.00
+   of the type changes: 0 with a floor move of at most 0.01 pip (the body on the 0.01-pip grid, at the floor on one side), 15 with a larger one
+## H1 (the replays' *_final.csv): 15 candles change type U2 -> U3 (1 become pinbars, 14 stop); from maru 5, normal 10; with a pin direction 1
+   types maru/normal/pinbar U2 274/174/610 -> U3 279/182/597
+     idx  time (UTC)           body-%  body  floor U2  floor U3  U2      U3      pin_dir
+       8  2025-11-17 06:00  normal   3.0      3.20      3.00  pinbar  normal  +1
+      37  2025-11-18 11:00  normal   3.1      3.20      3.00  pinbar  normal  +0
+      47  2025-11-18 21:00  normal   3.3      3.41      3.01  pinbar  normal  +0
+      53  2025-11-19 03:00  normal   3.1      3.22      3.00  pinbar  normal  +0
+      62  2025-11-19 12:00  maru     3.1      3.22      3.00  pinbar  maru    +0
+     100  2025-11-21 02:00  normal   3.4      3.41      3.01  pinbar  normal  +0
+     186  2025-11-26 16:00  normal   3.3      3.50      3.13  pinbar  normal  +0
+     446  2025-12-11 12:00  normal   2.6      3.30      2.60  pinbar  normal  +0
+     457  2025-12-11 23:00  maru     3.2      3.30      3.03  pinbar  maru    +0
+     462  2025-12-12 04:00  maru     3.1      3.30      3.03  pinbar  maru    +0
+     502  2025-12-15 20:00  maru     3.0      3.30      2.91  pinbar  maru    +0
+     508  2025-12-16 02:00  normal   3.2      3.30      2.91  pinbar  normal  +0
+     605  2025-12-22 03:00  normal   3.2      3.33      3.11  pinbar  normal  +0
+     715  2025-12-29 17:00  normal   2.4      2.40      2.50  normal  pinbar  +0
+     896  2026-01-09 06:00  maru     2.6      2.82      2.60  pinbar  maru    +0
+
+## M15 (the engine's classification; is_floor_pinbar U2 436 / U3 410 = the lens hovers): the floor (pips) differs on 2777 of 4228 candles; U3 - U2 mean -0.031, min -0.51, max +0.49; U3 lower on 2234, higher on 543; median floor U2 1.40 U3 1.40
+   of the type changes: 8 with a floor move of at most 0.01 pip (the body on the 0.01-pip grid, at the floor on one side), 56 with a larger one
+## M15 (the engine's classification; is_floor_pinbar U2 436 / U3 410 = the lens hovers): 64 candles change type U2 -> U3 (19 become pinbars, 45 stop); from maru 27, normal 37; with a pin direction 5
+   types maru/normal/pinbar U2 1267/717/2244 -> U3 1280/730/2218
+     idx  time (UTC)           body-%  body  floor U2  floor U3  U2      U3      pin_dir
+     293  2025-11-19 23:15  maru     1.4      1.41      1.40  pinbar  maru    +0
+     500  2025-11-24 03:00  maru     1.9      1.91      1.81  pinbar  maru    +0
+     502  2025-11-24 03:30  maru     1.9      1.91      1.81  pinbar  maru    +0
+     572  2025-11-24 21:00  maru     1.6      1.72      1.51  pinbar  maru    +0
+     591  2025-11-25 01:45  normal   1.6      1.50      1.62  normal  pinbar  +0
+     603  2025-11-25 04:45  normal   1.6      1.50      1.62  normal  pinbar  +0
+     754  2025-11-26 18:30  normal   2.5      2.51      2.23  pinbar  normal  +0
+     766  2025-11-26 21:30  maru     2.4      2.51      2.20  pinbar  maru    +0
+     881  2025-11-28 02:15  maru     2.0      2.02      1.81  pinbar  maru    +0
+     890  2025-11-28 04:30  maru     1.8      1.91      1.80  pinbar  maru    +0
+     893  2025-11-28 05:15  normal   1.8      1.91      1.80  pinbar  normal  +0
+     916  2025-11-28 11:00  normal   1.7      1.60      1.71  normal  pinbar  +0
+     918  2025-11-28 11:30  normal   1.6      1.51      1.71  normal  pinbar  +0
+     925  2025-11-28 13:15  normal   1.4      1.32      1.70  normal  pinbar  +0
+     941  2025-11-28 17:15  maru     1.5      1.50      1.61  maru    pinbar  +0
+     942  2025-11-28 17:30  normal   1.6      1.50      1.61  normal  pinbar  +0
+     954  2025-11-28 20:30  maru     1.3      1.20      1.60  maru    pinbar  +0
+     995  2025-12-01 06:45  maru     1.3      1.20      1.60  maru    pinbar  +0
+    1008  2025-12-01 10:00  normal   1.3      1.22      1.60  normal  pinbar  +0
+    1047  2025-12-01 19:45  normal   1.4      1.22      1.50  normal  pinbar  +0
+    1054  2025-12-01 21:30  maru     1.4      1.22      1.50  maru    pinbar  +0
+    1060  2025-12-01 23:00  maru     1.4      1.22      1.50  maru    pinbar  +0
+    1106  2025-12-02 10:30  normal   1.2      1.20      1.40  normal  pinbar  +0
+    1330  2025-12-04 18:30  normal   1.2      1.22      1.20  pinbar  normal  +1
+    1346  2025-12-04 22:30  normal   1.2      1.22      1.20  pinbar  normal  +0
+    1424  2025-12-05 18:00  normal   1.2      1.40      1.20  pinbar  normal  +0
+    1427  2025-12-05 18:45  normal   1.3      1.40      1.20  pinbar  normal  +0
+    1435  2025-12-05 20:45  normal   1.2      1.40      1.20  pinbar  normal  +0
+    1468  2025-12-08 05:00  maru     1.3      1.31      1.21  pinbar  maru    +0
+    1494  2025-12-08 11:30  normal   1.2      1.21      1.20  pinbar  normal  +0
+    1538  2025-12-08 22:30  normal   1.4      1.41      1.40  pinbar  normal  +0
+    1767  2025-12-11 07:45  normal   1.6      1.61      1.51  pinbar  normal  +0
+    1918  2025-12-12 21:30  maru     1.4      1.41      1.40  pinbar  maru    +0
+    1929  2025-12-15 00:15  maru     1.4      1.50      1.40  pinbar  maru    +0
+    1933  2025-12-15 01:15  normal   1.4      1.41      1.40  pinbar  normal  +1
+    1973  2025-12-15 11:15  normal   1.4      1.40      1.41  normal  pinbar  +0
+    1997  2025-12-15 17:15  normal   1.4      1.30      1.41  normal  pinbar  +0
+    2163  2025-12-17 10:45  normal   1.5      1.51      1.41  pinbar  normal  +0
+    2353  2025-12-19 10:15  maru     1.4      1.50      1.40  pinbar  maru    +0
+    2398  2025-12-19 21:30  maru     1.2      1.20      1.30  maru    pinbar  +0
+    2498  2025-12-22 22:30  normal   1.2      1.20      1.30  normal  pinbar  +0
+    2502  2025-12-22 23:30  maru     1.2      1.20      1.30  maru    pinbar  +0
+    2590  2025-12-23 21:30  maru     1.4      1.42      1.22  pinbar  maru    +0
+    2596  2025-12-23 23:00  normal   1.3      1.42      1.22  pinbar  normal  +0
+    2597  2025-12-23 23:15  maru     1.4      1.42      1.22  pinbar  maru    +0
+    2656  2025-12-24 14:00  normal   1.3      1.40      1.22  pinbar  normal  +0
+    2873  2025-12-29 20:15  maru     1.4      1.42      1.22  pinbar  maru    +0
+    3037  2025-12-31 13:15  normal   1.5      1.51      1.40  pinbar  normal  +0
+    3364  2026-01-06 23:00  maru     1.5      1.52      1.40  pinbar  maru    +0
+    3365  2026-01-06 23:15  maru     1.4      1.52      1.40  pinbar  maru    +0
+    3380  2026-01-07 03:00  normal   1.5      1.72      1.40  pinbar  normal  +0
+    3382  2026-01-07 03:30  normal   1.6      1.72      1.40  pinbar  normal  +0
+    3391  2026-01-07 05:45  normal   1.6      1.72      1.40  pinbar  normal  +0
+    3412  2026-01-07 11:00  maru     1.4      1.50      1.21  pinbar  maru    +0
+    3551  2026-01-08 21:45  maru     1.3      1.31      1.21  pinbar  maru    +0
+    3573  2026-01-09 03:15  normal   1.4      1.41      1.31  pinbar  normal  +0
+    3599  2026-01-09 09:45  normal   1.3      1.31      1.21  pinbar  normal  +0
+    3603  2026-01-09 10:45  normal   1.2      1.31      1.20  pinbar  normal  -1
+    3611  2026-01-09 12:45  normal   1.2      1.31      1.20  pinbar  normal  +0
+    3725  2026-01-12 17:15  normal   1.3      1.31      1.21  pinbar  normal  +1
+    3749  2026-01-12 23:15  normal   1.3      1.31      1.20  pinbar  normal  +0
+    4148  2026-01-19 03:00  normal   1.2      1.30      1.20  pinbar  normal  -1
+    4159  2026-01-19 05:45  maru     1.2      1.21      1.20  pinbar  maru    +0
+    4211  2026-01-19 18:45  maru     1.2      1.21      1.20  pinbar  maru    +0
+

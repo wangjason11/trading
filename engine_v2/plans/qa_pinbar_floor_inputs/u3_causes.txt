@@ -1,0 +1,64 @@
+H1 U2 types re-derived here == BASE (S_U2) *_final.csv (all 1058)
+H1 U3 types re-derived here == CUR (U3) *_final.csv (all 1058)
+
+## H1 H1 WVMI (sid 0, cycle 0): FP 473 -> 468 (pullback momentum 0.237 -> 0.645); its LP rows' hovers
+   candles 447..474 whose classification differs (U2 -> U3):
+     457 2025-12-11 23:00:00+00:00 (maru, body 3.2, floor U2 3.30 U3 3.03): candle_type pinbar -> maru; is_special_maru False -> True
+     458 2025-12-12 00:00:00+00:00 (normal, body 5.8, floor U2 3.30 U3 3.03): is_big_normal_as0 False -> True; big_ratio_as0 0.3 -> 0.53; prior_maru_max_len_as0 0.0030000000000000027 -> 0.0017000000000000348
+     459 2025-12-12 01:00:00+00:00 (pinbar, body 2.8, floor U2 3.30 U3 3.03): is_big_normal_as0 False -> True; is_big_normal_as1 False -> True; big_ratio_as0 0.31 -> 0.54; prior_maru_max_len_as0 0.0030000000000000027 -> 0.0017000000000000348
+     460 2025-12-12 02:00:00+00:00 (pinbar, body 0.2, floor U2 3.30 U3 3.03): big_ratio_as0 0.22 -> 0.38; prior_maru_max_len_as0 0.0030000000000000027 -> 0.0017000000000000348
+     461 2025-12-12 03:00:00+00:00 (normal, body 1.5, floor U2 3.30 U3 3.03): big_ratio_as0 0.09 -> 0.16; prior_maru_max_len_as0 0.0030000000000000027 -> 0.0017000000000000348
+     462 2025-12-12 04:00:00+00:00 (maru, body 3.1, floor U2 3.30 U3 3.03): candle_type pinbar -> maru; is_special_maru False -> True; big_ratio_as0 0.12 -> 0.21; prior_maru_max_len_as0 0.0030000000000000027 -> 0.0017000000000000348
+     463 2025-12-12 05:00:00+00:00 (maru, body 6.1, floor U2 3.30 U3 3.03): is_big_normal_as0 False -> True; big_ratio_as0 0.23 -> 0.63; prior_maru_max_len_as0 0.0030000000000000027 -> 0.001080000000000081
+     464 2025-12-12 06:00:00+00:00 (pinbar, body 1.6, floor U2 3.30 U3 3.03): is_big_maru_as0 False -> True; is_big_normal_as0 False -> True; is_big_normal_as1 False -> True; big_ratio_as0 0.37 -> 0.75; prior_maru_max_len_as0 0.0017000000000000348 -> 0.0008399999999999519
+     465 2025-12-12 07:00:00+00:00 (pinbar, body 1.1, floor U2 3.30 U3 3.03): is_big_maru_as0 False -> True; is_big_normal_as0 False -> True; is_big_maru_as1 False -> True; is_big_normal_as1 False -> True; is_big_maru_as2 False -> True; is_big_normal_as2 False -> True; big_ratio_as0 0.48 -> 0.98; prior_maru_max_len_as0 0.0017000000000000348 -> 0.0008399999999999519
+     466 2025-12-12 08:00:00+00:00 (normal, body 3.4, floor U2 3.30 U3 3.03): is_big_maru_as0 False -> True; is_big_normal_as0 False -> True; is_big_maru_as1 False -> True; is_big_normal_as1 False -> True; is_big_maru_as2 False -> True; is_big_normal_as2 False -> True; big_ratio_as0 0.4 -> 0.81; prior_maru_max_len_as0 0.0017000000000000348 -> 0.0008399999999999519
+     467 2025-12-12 09:00:00+00:00 (pinbar, body 1.6, floor U2 3.30 U3 3.03): is_big_maru_as0 False -> True; is_big_normal_as0 False -> True; is_big_maru_as1 False -> True; is_big_normal_as1 False -> True; is_big_maru_as2 False -> True; is_big_normal_as2 False -> True; big_ratio_as0 0.46 -> 0.93; prior_maru_max_len_as0 0.0017000000000000348 -> 0.0008399999999999519
+     468 2025-12-12 10:00:00+00:00 (normal, body 3.4, floor U2 3.30 U3 3.03): is_big_maru_as0 False -> True; is_big_normal_as0 False -> True; is_big_maru_as1 False -> True; is_big_normal_as1 False -> True; is_big_maru_as2 False -> True; is_big_normal_as2 False -> True; big_ratio_as0 0.48 -> 0.98; prior_maru_max_len_as0 0.0017000000000000348 -> 0.0008399999999999519
+     469 2025-12-12 11:00:00+00:00 (pinbar, body 0.7, floor U2 3.30 U3 3.03): is_big_maru_as0 False -> True; is_big_normal_as0 False -> True; is_big_maru_as1 False -> True; is_big_normal_as1 False -> True; is_big_maru_as2 False -> True; is_big_normal_as2 False -> True; big_ratio_as0 0.38 -> 0.76; prior_maru_max_len_as0 0.0017000000000000348 -> 0.0008399999999999519
+     470 2025-12-12 12:00:00+00:00 (normal, body 4.6, floor U2 3.03 U3 3.03): is_big_maru_as0 False -> True; is_big_normal_as0 False -> True; is_big_maru_as1 False -> True; is_big_normal_as1 False -> True; is_big_maru_as2 False -> True; is_big_normal_as2 False -> True; big_ratio_as0 0.46 -> 0.93; prior_maru_max_len_as0 0.0017000000000000348 -> 0.0008399999999999519
+     471 2025-12-12 13:00:00+00:00 (pinbar, body 2.6, floor U2 3.03 U3 3.03): is_big_maru_as0 False -> True; is_big_normal_as0 False -> True; is_big_maru_as1 False -> True; is_big_normal_as1 False -> True; is_big_maru_as2 False -> True; is_big_normal_as2 False -> True; big_ratio_as0 0.42 -> 0.85; prior_maru_max_len_as0 0.0017000000000000348 -> 0.0008399999999999519
+     472 2025-12-12 14:00:00+00:00 (pinbar, body 2.9, floor U2 3.03 U3 3.03): is_big_maru_as0 False -> True; is_big_maru_as1 False -> True; is_big_maru_as2 False -> True; big_ratio_as0 0.53 -> 1.07; prior_maru_max_len_as0 0.0017000000000000348 -> 0.0008399999999999519
+     473 2025-12-12 15:00:00+00:00 (maru, body 15.3, floor U2 3.03 U3 3.03): big_ratio_as0 1.18 -> 2.38; prior_maru_max_len_as0 0.0017000000000000348 -> 0.0008399999999999519
+     474 2025-12-12 16:00:00+00:00 (pinbar, body 4.0, floor U2 3.03 U3 3.03): is_big_maru_as1 False -> True; is_big_maru_as2 False -> True
+   S_U2 WVMI fb_idx=110, lb_idx=447, fp_idx=473, lp_idx=590, breakout_momentum=0.5130226664789526, pullback_momentum=0.2369100930072339, status=locked
+   U3 WVMI fb_idx=110, lb_idx=447, fp_idx=468, lp_idx=590, breakout_momentum=0.5130226664789526, pullback_momentum=0.6454716095729705, status=locked
+
+## M15 confluence sub 0 cycle 1: the BOS KL zone base 916 'no base star' -> 917 'base' (top 0.57066 -> 0.57065); WVMI (0, 0, 1) FB 918 -> 920 (breakout momentum 0.113 -> 0.221)
+   candles 910..922 whose classification differs (U2 -> U3):
+     916 2025-11-28 11:00:00+00:00 (normal, body 1.7, floor U2 1.60 U3 1.71): candle_type normal -> pinbar; normal_dir 1 -> 0
+     918 2025-11-28 11:30:00+00:00 (normal, body 1.6, floor U2 1.51 U3 1.71): candle_type normal -> pinbar
+   S_U2 WVMI fb_idx=918, lb_idx=1019, fp_idx=1021, lp_idx=1107, breakout_momentum=0.11277751535191309, pullback_momentum=0.33543400713436383, status=locked
+   U3 WVMI fb_idx=920, lb_idx=1019, fp_idx=1021, lp_idx=1107, breakout_momentum=0.22111599907385968, pullback_momentum=0.33543400713436383, status=locked
+
+## M15 confluence sub 1 cycle 4: CTS_UPDATED 2364 double_maru -> one_maru_continuous
+   candles 2358..2365 whose classification differs (U2 -> U3):
+     2359 2025-12-19 11:45:00+00:00 (normal, body 1.6, floor U2 1.41 U3 1.40): big_ratio_as0 0.34 -> 0.45; prior_maru_max_len_as0 0.0008599999999999719 -> 0.0006400000000000849
+     2360 2025-12-19 12:00:00+00:00 (normal, body 1.7, floor U2 1.41 U3 1.40): is_big_normal_as0 False -> True; is_big_normal_as1 False -> True; big_ratio_as0 0.38 -> 0.52; prior_maru_max_len_as0 0.0008599999999999719 -> 0.0006400000000000849
+     2361 2025-12-19 12:15:00+00:00 (pinbar, body 0.6, floor U2 1.41 U3 1.40): big_ratio_as0 0.36 -> 0.48; prior_maru_max_len_as0 0.0008599999999999719 -> 0.0006400000000000849
+     2362 2025-12-19 12:30:00+00:00 (pinbar, body 0.0, floor U2 1.41 U3 1.40): big_ratio_as0 0.23 -> 0.31; prior_maru_max_len_as0 0.0008599999999999719 -> 0.0006400000000000849
+     2363 2025-12-19 12:45:00+00:00 (maru, body 3.4, floor U2 1.32 U3 1.31): is_big_maru_as0 False -> True; is_big_maru_as1 False -> True; is_big_maru_as2 False -> True; big_ratio_as0 0.58 -> 0.78; prior_maru_max_len_as0 0.0008599999999999719 -> 0.0006400000000000849
+     2364 2025-12-19 13:00:00+00:00 (maru, body 3.1, floor U2 1.32 U3 1.31): is_big_maru_as1 False -> True; is_big_maru_as2 False -> True; big_ratio_as0 0.75 -> 0.96; prior_maru_max_len_as0 0.0006400000000000849 -> 0.000500000000000056
+     2365 2025-12-19 13:15:00+00:00 (maru, body 2.8, floor U2 1.32 U3 1.31): is_big_maru_as2 False -> True
+   S_U2 CTS_UPDATED idx=2360 {'via': 'replay_raw'}
+   S_U2 CTS_UPDATED idx=2363 {'via': 'replay_raw'}
+   S_U2 CTS_UPDATED idx=2364 {'cts_anchor_idx': 2364, 'via': 'double_maru', 'confirmed_at': 2364}
+   S_U2 CTS_UPDATED idx=2365 {'via': 'replay_raw'}
+   U3 CTS_UPDATED idx=2360 {'via': 'replay_raw'}
+   U3 CTS_UPDATED idx=2363 {'via': 'replay_raw'}
+   U3 CTS_UPDATED idx=2364 {'cts_anchor_idx': 2364, 'via': 'one_maru_continuous', 'confirmed_at': 2364}
+   U3 CTS_UPDATED idx=2365 {'via': 'replay_raw'}
+
+## Every other differing CSV: its changed columns (positional, same row count)
+   _M15_confluence_ic_candidates.csv: 1426 rows; candle_type 23, ip_rank 5, reason 5, pattern_anchor_idx 5, opp_leg_first_idx 5, pattern_end_idx 5, pattern_confirmed_idx 5, ip_leg_candle_counts 1, legs 1, initial_type 11, initial_ratio 20, initial_body_pips 1, opp_type 8, opp_ratio 19, continuation_type 9, continuation_ratio 19
+   _M15_confluence_kl_zones.csv: 21 rows; start_time 1, top 1, meta 1
+   _M15_confluence_structure_events.csv: 1386 rows; meta 3
+      row 426 RANGE_RESET idx=2364 sub=1 cycle=None: {'pat': ('double_maru', 'one_maru_continuous')}
+      row 427 CTS_UPDATED idx=2364 sub=1 cycle=4: {'via': ('double_maru', 'one_maru_continuous')}
+      row 428 STATE_CHANGED idx=2364 sub=1 cycle=None: {'pat': ('double_maru', 'one_maru_continuous')}
+   _M15_confluence_wvmi.csv: 18 rows; fb_idx 1, breakout_momentum 1, buy_momentum 1
+   _M15_confluence_wvmi_lps.csv: 214 rows; breakout_momentum 20
+   _M15_counter_ic_candidates.csv: 593 rows; candle_type 10, ip_rank 1, initial_type 3, initial_ratio 2, opp_type 6, opp_ratio 2, continuation_type 3, continuation_ratio 2
+   _ic_candidates.csv: 248 rows; candle_type 2, initial_ratio 1, opp_type 2, opp_ratio 1, continuation_ratio 1
+   _wvmi.csv: 5 rows; fp_idx 1, pullback_momentum 1, sell_momentum 1
+   _wvmi_lps.csv: 54 rows; pullback_momentum 7

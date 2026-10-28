@@ -1,0 +1,11 @@
+H1 candle 446 (2025-12-11 12:00 UTC): body-% type normal, body 2.6 pips
+
+## natural: the 90 most recent body-% pinbars before 446
+   reaches back to 2025-12-01 13:00 (239 h); 0 of the 90 are floor-demoted
+   bodies: median 1.15, the 12 largest 6.7, 5.6, 4.5, 4.0, 3.7, 3.4, 3.3, 3.3, 3.3, 3.3, 3.0, 2.6 pips
+   p90 (linear, the 81st / 82nd of 90 sorted) = 3.30 pips = the floor of 446 -> pinbar
+
+## final: the 90 most recent pinbars (body-% + floor-demoted) before 446
+   reaches back to 2025-12-03 03:00 (201 h); 17 of the 90 are floor-demoted (their bodies 1.1 – 2.6 pips)
+   bodies: median 1.45, the 12 largest 5.6, 4.5, 4.0, 3.3, 3.3, 3.3, 3.3, 3.0, 2.6, 2.6, 2.6, 2.6 pips
+   p90 (linear, the 81st / 82nd of 90 sorted) = 2.60 pips = the floor of 446 -> normal

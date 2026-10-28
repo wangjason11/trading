@@ -1,0 +1,3 @@
+     A      B      d  element / (parent_sid,parent_cycle,sub_id)
+_M15_counter candles 4228 floor values 32 {'pinbar_body_floor=0.000120': 661, 'pinbar_body_floor=0.000140': 659, 'pinbar_body_floor=0.000130': 570, 'pinbar_body_floor=0.000150': 328, 'pinbar_body_floor=0.000160': 272} floor pinbars 410 {'maru': 112, 'normal': 298}
+_M15_confluence candles 4228 floor values 32 {'pinbar_body_floor=0.000120': 661, 'pinbar_body_floor=0.000140': 659, 'pinbar_body_floor=0.000130': 570, 'pinbar_body_floor=0.000150': 328, 'pinbar_body_floor=0.000160': 272} floor pinbars 410 {'maru': 112, 'normal': 298}

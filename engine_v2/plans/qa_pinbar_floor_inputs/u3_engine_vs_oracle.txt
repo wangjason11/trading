@@ -1,0 +1,19 @@
+engine: pinbar_floor_window_source='final', window 90, p90, seed windows 2
+
+## H1: 1058 candles; seed 559 candles 2025-10-14 14:00:00+00:00 -> 2025-11-14 21:00:00+00:00
+   floor NaN on 0 candles; floor min 2.3100 max 3.5000 pips
+   types maru/normal/pinbar: today 289/233/536 -> U2 (list) 274/174/610 -> U3 engine 279/182/597
+   U2 -> U3: 15 change (1 become, 14 stop); from maru 5, normal 10; with a pin direction 1
+   today -> U3: 61 change (61 become, 0 stop); from maru 10, normal 51; with a pin direction 5
+   is_floor_pinbar 101 (maru 17, normal 84)
+   vs the prediction's per-candle U3 list (75 listed): 0 mismatches
+
+## M15: 4228 candles; seed 480 candles 2025-11-09 22:00:00+00:00 -> 2025-11-14 21:45:00+00:00
+   floor NaN on 0 candles; floor min 1.0000 max 2.5100 pips
+   types maru/normal/pinbar: today 1358/920/1950 -> U2 (list) 1267/717/2244 -> U3 engine 1280/730/2218
+   U2 -> U3: 64 change (19 become, 45 stop); from maru 27, normal 37; with a pin direction 5
+   today -> U3: 268 change (268 become, 0 stop); from maru 78, normal 190; with a pin direction 26
+   is_floor_pinbar 410 (maru 112, normal 298)
+   vs the prediction's per-candle U3 list (313 listed): 0 mismatches
+
+ALL MATCH

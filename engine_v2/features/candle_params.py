@@ -19,8 +19,10 @@ class CandleParams:
     # `pinbar_floor_window` most recent pinbars STRICTLY before it; a body-%
     # maru / normal whose body is strictly below it becomes a pinbar
     # (`classify_candles` step 4). No full window -> no floor.
-    # `pinbar_floor_window_source`: "natural" = the body-% pinbars fill the
-    # window; "final" = the body-% pinbars + the ones the floor demoted.
+    # `pinbar_floor_window_source`: "final" (the default since PLAN_U U3 —
+    # the user's pick, 2026-10-28) = the body-% pinbars + the ones the floor
+    # demoted fill the window, candle by candle; "natural" (U2; kept as a
+    # switch) = the body-% pinbars only.
     # `pinbar_floor_seed_windows`: the history fetched before a replay's frame
     # (`run_replay.fetch_floor_seed`) holds at least this many windows of
     # body-% pinbars. Read by `features/pinbar_body_floor.py` and the seed
@@ -28,7 +30,7 @@ class CandleParams:
     # `pinbar_body_pip_floor`, removed at U2).
     pinbar_floor_window: int = 90
     pinbar_floor_percentile: float = 90.0
-    pinbar_floor_window_source: str = "natural"
+    pinbar_floor_window_source: str = "final"
     pinbar_floor_seed_windows: int = 2
 
     special_maru: float = 0.5

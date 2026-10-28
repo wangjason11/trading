@@ -1,0 +1,41 @@
+## 1. H1 candle types (*_final.csv, by name)
+   S_U2 -> U3: 15 candles change type (1 become pinbars, 14 stop); from maru 5, normal 10; with a pin direction 1 (on the side where it is a pinbar)
+   types maru/normal/pinbar 274/174/610 -> 279/182/597
+   is_floor_pinbar 101 (maru 17, normal 84); pinbar_body_floor empty on 0 rows
+   vs the prediction's per-candle list: 0 mismatches []
+   *_final.csv columns that changed (rows):
+     candle_type 15, pinbar_dir 1, normal_dir 5, is_special_maru 4, pinbar_body_floor 828, is_floor_pinbar 15, is_big_maru_as0 14, is_big_normal_as0 14
+     prior_maru_max_len_as0 27, big_ratio_as0 27, is_big_maru_as1 13, is_big_normal_as1 11, prior_maru_max_len_as1 27, big_ratio_as1 27, is_big_maru_as2 11, is_big_normal_as2 8
+     prior_maru_max_len_as2 27, big_ratio_as2 27, pat 7, pat_dir 6, pat_status 6, pat_start_idx 7, pat_end_idx 7, pat_confirm_idx 4
+
+## 2. structure events, per (sub_id, structure_id, cycle_id, type): (idx, anchor, via/to) before -> after
+### H1: 325 -> 325 events; 0 keys differ
+### counter: 591 -> 591 events; 0 keys differ
+### confluence: 1386 -> 1386 events; 1 keys differ
+   sub=1 sid=0 cyc=4 CTS_UPDATED: -[(2364, 'cts2364', 'double_maru')] +[(2364, 'cts2364', 'one_maru_continuous')]
+
+## 3. zones, fibs, ICs, WVMI (keyed per structure)
+### KL H1: byte-equal
+### KL counter: byte-equal
+### KL confluence: 21 -> 21 rows; 1 keys differ
+   (0, 0, 1, 'BOS'): [(1020, 916, 'no base star', '0.57066', '0.57038', '2025-12-03 16:00')] -> [(1020, 917, 'base', '0.57065', '0.57038', '2025-12-03 16:00')]
+   meta keys that differ (rows, positional): base_idx 1, base_pattern 1, bounds_steps 1, inner 1
+### POI H1: byte-equal
+### POI counter: byte-equal
+### POI confluence: byte-equal
+### fib H1: byte-equal
+### fib counter: byte-equal
+### fib confluence: byte-equal
+### picked IC H1: 7 -> 7 rows; 0 keys differ
+### picked IC counter: 15 -> 15 rows; 0 keys differ
+### picked IC confluence: 38 -> 38 rows; 0 keys differ
+### WVMI H1: 5 -> 5 rows; 1 keys differ
+   ('', '0', '0'): [('110', '447', '473', '590', '0.5130226664789526', '0.2369100930072339', 'locked')] -> [('110', '447', '468', '590', '0.5130226664789526', '0.6454716095729705', 'locked')]
+### WVMI counter: byte-equal
+### WVMI confluence: 18 -> 18 rows; 1 keys differ
+   ('0', '0', '1'): [('918', '1019', '1021', '1107', '0.11277751535191309', '0.33543400713436383', 'locked')] -> [('920', '1019', '1021', '1107', '0.22111599907385968', '0.33543400713436383', 'locked')]
+### WVMI LP rows H1: 54 -> 54
+### WVMI LP rows counter: 76 -> 76
+### WVMI LP rows confluence: 214 -> 214
+
+## 4. byte-equal (20 of 30): _raw.csv, _M15_confluence_fib_lifecycle.csv, _M15_confluence_poi_zones.csv, _M15_confluence_subs.csv, _M15_confluence_triggers.csv, _M15_counter_fib_lifecycle.csv, _M15_counter_kl_zones.csv, _M15_counter_poi_zones.csv, _M15_counter_structure_events.csv, _M15_counter_subs.csv, _M15_counter_triggers.csv, _M15_counter_wvmi.csv, _M15_counter_wvmi_lps.csv, _M15_unresolved_triggers.csv, _fib_lifecycle.csv, _imbalance_instances.csv, _kl_zones.csv, _poi_zones.csv, _structure_events.csv, _structure_levels.csv

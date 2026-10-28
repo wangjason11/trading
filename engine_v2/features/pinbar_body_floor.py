@@ -3,9 +3,11 @@
 The floor of candle i = `numpy.percentile` (linear) of the bodies of the `params.pinbar_floor_window` most recent
 pinbars STRICTLY before i, at `params.pinbar_floor_percentile`; no full window -> NaN (no floor). Which pinbars fill
 the window = `params.pinbar_floor_window_source`:
-  - "natural": the body-% pinbars (the floor not applied) — a candle's floor depends only on the candles before it;
-  - "final": the final pinbars (body-% + the ones the floor demoted), candle by candle in index order, each
-    demotion entering the next windows.
+  - "final" (the default since PLAN_U U3, the user's pick 2026-10-28): the final pinbars (body-% + the ones the floor
+    demoted), candle by candle in index order, each demotion entering the next windows — a candle's floor depends on
+    where the history starts until two starts converge (the seed guard, `run_replay.fetch_floor_seed`);
+  - "natural" (U2; kept as a switch): the body-% pinbars (the floor not applied) — a candle's floor depends only on
+    the candles before it.
 
 Pure: no I/O. A replay's history before its frame (the seed, `run_replay.fetch_floor_seed`) only fills the first
 windows; the frame's own features stay frame-only.

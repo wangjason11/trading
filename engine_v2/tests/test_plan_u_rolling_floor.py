@@ -59,11 +59,11 @@ def _floors(specs, params, seed=None):
 # --- the floor function -------------------------------------------------------------------------------------------
 
 def test_the_settings_are_the_users():
-    """The user's rule (2026-10-27 / 28): the p90 of the 90 most recent pinbars, the natural window first (U2), a seed
-    of 2 windows."""
+    """The user's rule (2026-10-27 / 28): the p90 of the 90 most recent pinbars, a seed of 2 windows; the window =
+    the FINAL pinbars (body-% + floor-demoted) — the user's pick at U3 (2026-10-28), natural (U2) kept as a switch."""
     p = CandleParams()
     assert (p.pinbar_floor_window, p.pinbar_floor_percentile, p.pinbar_floor_window_source,
-            p.pinbar_floor_seed_windows) == (90, 90.0, "natural", 2)
+            p.pinbar_floor_seed_windows) == (90, 90.0, "final", 2)
 
 
 def test_the_window_is_strictly_before_the_candle():

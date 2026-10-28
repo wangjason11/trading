@@ -2,8 +2,10 @@
 
 **Status: U1 LANDED 2026-10-28 (= §4.2; source `b64b10a`, save **S_U1** `20261028_090632_b64b10a`, U2's `/compare`
 baseline; §9); the cold review DONE (§8 — no blocker; its U2 amendments carried, §9 "U2"); U2 LANDED 2026-10-28 (= §5.2
-exactly; source `84fbbc6`, save **S_U2** `20261028_113834_84fbbc6` = the new `LATEST_<branch>`, U3's `/compare`
-baseline; §9 "U2"); U3 NEXT (§6).** U1's baseline **S_controls**
+exactly; source `84fbbc6`, save **S_U2** `20261028_113834_84fbbc6`, U3's `/compare` baseline; §9 "U2"); U3 the final
+window LANDED 2026-10-28 (= §6 exactly — the user's pick after seeing both, natural kept as a switch; §9 "U3"); U3b
+NEXT — the floor seed guard steps back until final mode converges (the user's "Guard extends", §9 "U3").** U1's
+baseline **S_controls**
 `artifacts/commits/week9-entries-decisions/20261027_164527_5dfb5b3` (`LATEST_week9-entries-decisions` until S_U1; source
 `5dfb5b3`, HEAD at drafting `4914f31`, code = `5dfb5b3`); suite 2108. Session order item 7 (register
 `IDEA_PARKING_LOT.md` §D "SESSION ORDER" = §D.1 item 4). THREE landings, one cause per `/compare`, each with its own
@@ -22,8 +24,12 @@ its U2 / U3 columns); U1's checks `u1_landing_check.py`, `m15_hover_floor_count.
 rendered hover example); U2's checks `u2_engine_vs_oracle.py` (the engine's own fetch + classify vs the
 prediction's per-candle list), `u2_compare.py` (the downstream keyed per structure vs S_U1), `u2_causes.py` (the
 classification deltas in each moved event's window), `gate_floor_seed_sim.py` (the fetch gate's seed branches),
-`mutants_u2.py` (+ `u2_fig_named_diff.txt`, `u2_chart_look_times.txt`, `mutants_u2_rerun.txt`); each with its `.txt`
-where it prints one.
+`mutants_u2.py` (+ `u2_fig_named_diff.txt`, `u2_chart_look_times.txt`, `mutants_u2_rerun.txt`); U3's
+`make_variant_u3.py` (the variant tree), `u3_engine_vs_oracle.py` (the engine's final-mode types vs the U3 column — run
+where the default is "final"), `u3_compare.py` / `u3_causes.py` (the downstream vs S_U2, keyed, and each move's
+candles), `u3_changed_candles.py` (every candle U2 ↔ U3, both floors), `u3_fig_detail.py` (+ `u3_fig_named_diff.txt`,
+`u3_m15_hover_floor_count.txt`), `u3_window_example.py` (the two windows at H1 446), `u3_convergence.py` (the
+convergence check measured on 2 – 5 window seeds); each with its `.txt` where it prints one.
 
 ---
 
@@ -421,3 +427,67 @@ each lands:
   is left (none in the engine; only the test fixtures pass 2.2 / 1.0 pips through the `body_floor=` seam). One
   procedural slip, undone before the save: the commit-save gate was extracted with a `sed` range that also ran the rest
   of the skill (a bogus save commit + its cherry-pick; both refs moved back) — the skill now says so.
+
+### U3 — the variant MEASURED 2026-10-28, = §6 exactly; the user picked FINAL + the convergence check
+- **The pick (2026-10-28):** shown this comparison, the user asked "sorry to clarify, final is with demoted included?"
+  (yes — the window = the 90 most recent pinbars of either kind; natural = body-% pinbars only; the example at H1 446,
+  `u3_window_example.py` + `.txt`: natural reaches back 239 h, p90 3.30 → pinbar; final holds 17 demoted bodies of
+  1.1 – 2.6 pips, reaches back 201 h, p90 2.60 → stays normal), then chose **"Final + convergence check"** (over the
+  recommended "natural, remove final": the modes differ by four records here, and natural has no start-dependence).
+  The optional U2 landing review: "Skip it". So: the flip (the landing = this variant), then the per-run convergence
+  check (§8 "For U3") as its own landing.
+- **The convergence check, measured before building** (`u3_convergence.py` + `.txt`): as worded — the seed's first
+  window dropped, raise if a frame floor differs — it FAILS on this replay with the 2-window seed (H1 57 frame floors
+  differ, idx 0 – 182, 1 type, idx 8; the two runs' windows agree only from frame idx 200; M15 0 differ, agree from
+  frame idx 15). With 3 windows (the guard's 3 steps: H1 840 candles / 355 body-% pinbars, M15 816 / 310) it passes on
+  both TFs, the windows agree INSIDE the seed (H1 row 582 of 840, M15 721 of 816), and the frame floors equal the
+  2-window seed's on every candle (also at 4 / 5 windows) — the 2-window result was already converged, the check just
+  could not show it. Offered: (1) the guard extends the seed until the full and the drop-one-window runs agree by the
+  seed's last candle (seed-only, so the M15 seed is checked before the M15 frame is fetched; raise after 8 steps);
+  (2) the check as worded on a fixed 3-window seed; (3) as worded on 2 windows — raises here. **The user: "Guard
+  extends"** (the recommendation). **The natural mode: "Keep as a switch"** — `pinbar_floor_window_source` stays,
+  default "final", "natural" selectable with its tests.
+- **Landing order** (one cause per `/compare`): U3 the flip (= the variant above); then U3b the guard's convergence
+  rule (predicted: no candle changes on this window; only the two `[floor_seed]` lines — the gate's expected lines).
+- **The flip:** `candle_params.py` the default "final" (+ its comment), `pinbar_body_floor.py` the docstring (final
+  the default, its start-dependence), `test_plan_u_rolling_floor.py::test_the_settings_are_the_users` pins "final"
+  (the unit tests keep passing each mode explicitly). The landing replay (run mode): FETCH GATE PASS, the seed lines
+  unchanged, skip grep 33 (= S_U2's lines), timing total 65.14 s; **= the variant: 30 / 30 CSVs byte-equal, the
+  figures equal (`fig_named_diff.py`: no trace changed, layouts equal), the 3 PNGs byte-equal.**
+- **Variant** (`qa_pinbar_floor_inputs/make_variant_u3.py`: a `git archive` of `e5c3b07` in `%TEMP%\u3v`, the
+  `CandleParams.pinbar_floor_window_source` default "natural" -> "final", nothing else — the setting's one read site is
+  `rolling_pinbar_body_floor`): FETCH GATE PASS, both `[floor_seed]` lines = S_U2's (the guard counts body-% pinbars);
+  skip grep 33, the same lines as S_U2 (only the tree path in the FutureWarning lines differs); timing total 85.39 s.
+- **Prediction met** (`u3_engine_vs_oracle.py` + `.txt`, run in the variant tree — the engine's own fetch + classify vs
+  `plan_u_prediction.txt`'s U3 column, 0 mismatches on both TFs): H1 15 change vs U2 (1 becomes a pinbar, 14 stop; 5
+  marus + 10 normals; 1 with a pin direction), types 279 / 182 / 597, `is_floor_pinbar` 101 (17 / 84); M15 64 (19 / 45;
+  27 / 37; 5), 1280 / 730 / 2218, `is_floor_pinbar` 410 (112 / 298) — also on both lens charts' hovers
+  (`u3_m15_hover_floor_count.txt`). A slip in the first draft of the check, fixed before use: "with a pin direction"
+  read the U3 frame's `pinbar_dir`, which is 0 on a candle that STOPS being a pinbar — it now takes the direction the
+  candle has as a pinbar (the engine's wick rule, every maru / normal made a floor pinbar), as the prediction does.
+- **The floors** (`u3_changed_candles.py` + `.txt`, every changed candle with idx, time, body, both floors): final mode
+  LOWERS the floor on most candles — a floor-demoted body is below the floor by definition, so each demotion entering
+  the window pulls the next p90 down (a negative feedback). H1 the floor differs on 794 of 1058 candles (U3 − U2 mean
+  −0.08 pips, −0.70 … +0.40; lower on 536, higher on 258; median 3.03 → 3.00); M15 on 2777 of 4228 (mean −0.03, −0.51 …
+  +0.49; median 1.40 both). 8 of the 64 M15 type changes come from a 0.01-pip floor move (the body on the grid, at the
+  floor on one side), none of H1's.
+- **Downstream vs S_U2** (`u3_compare.py` + `.txt`, `u3_causes.py` + `.txt`, `u3_fig_named_diff.txt`,
+  `u3_fig_detail.py` + `.txt`): 20 / 30 CSVs byte-equal — **no sub, trigger, POI, fib or IC pick moves; no H1 or counter
+  event moves**. What moves, each with its cause:
+  - H1 WVMI (sid 0, cycle 0): FP 473 → 468 (2025-12-12 15:00 → 10:00), pullback momentum 0.237 → 0.645 (+ the 7 LP rows'
+    hovers): 457 and 462 (marus, bodies 3.2 / 3.1 pips; floor U2 3.30, U3 3.03) are marus again, so they re-enter
+    the prior-5-maru pool and push out an older maru — the pool's max candle length (high − low) at 458 30 → 17 pips;
+    458 – 474 get their big flags back (U2 had removed them —
+    §9 "U2", the reverse) and 468 (normal 3.4, big) is the first pullback wave candle.
+  - confluence sub 0 cycle 1: 916 (normal 1.7, floor 1.60 → 1.71) and 918 (normal 1.6, 1.51 → 1.71) become pinbars —
+    the BOS KL zone's base 916 'no base star' → 917 'base' (top 0.57066 → 0.57065, start 11:00 → 11:15), WVMI (0, 0, 1)
+    FB 918 → 920 (breakout momentum 0.113 → 0.221; its 20 LP rows' hovers).
+  - confluence sub 1 cycle 4: the CTS_UPDATED at 2364 `double_maru` → `one_maru_continuous` (+ its RANGE_RESET /
+    STATE_CHANGED `pat`): 2363 (maru, body 3.4) regains `is_big_maru` (the pool's max candle length 8.6 → 6.4 pips) — S_U1's pattern
+    back.
+  - The IC check rows (not the picks): `candle_type` / leg types on H1 2, counter 10, confluence 23 rows; `ip_rank` on
+    1 / 5 unpicked rows.
+  - Charts (`fig_named_diff.py`): counts unchanged — H1 79 / 232, counter 154 / 134, confluence 302 / 305. Changed: the
+    candle hovers (the floors), the breakout-pattern markers (`struct:*`: H1 +6 markers, 1 renamed; M15 a few added /
+    removed / renamed on both lens charts — the same M15 frame), the H1 FP wave candle (+ its full-height vertical line,
+    a layout shape) on all three charts, the confluence KL zone + outline of sub 0 c1, its FB wave candle, the WVMI LP hovers.

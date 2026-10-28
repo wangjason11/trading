@@ -863,6 +863,23 @@ WVMI marks; every candle hover's floor). The fetch gate checks the two `[floor_s
 480 / 189. Skip grep 33 (the same lines). Suite 2146; mutants 30 / 30. S_U2 `20261028_113834_84fbbc6` (source
 `84fbbc6`, save `ca25478`, trunk `562d237`; = `LATEST_<branch>` from 2026-10-28; run mode, the save replay =
 `u2_compare.py` output identical to the compared replay's). U3 (the final window) is the next flip.
+**PLAN_U U3 (2026-10-28, the final window — the floor's 90 pinbars include the floor-demoted ones, candle by candle;
+`CandleParams.pinbar_floor_window_source` default "natural" → "final", "natural" kept as a switch; the user's pick
+after seeing both) — BEHAVIOUR, no format change** (same columns as S_U2; diff the events / zones KEYED —
+`plans/qa_pinbar_floor_inputs/u3_compare.py BASE CUR`, the causes `u3_causes.py`, every changed candle
+`u3_changed_candles.py`, the chart elements `u3_fig_detail.py`). = the prediction (`plan_u_prediction.txt`'s U3
+column; `u3_engine_vs_oracle.py`, 0 mismatches): vs S_U2 H1 15 candles change type (1 becomes a pinbar, 14 stop; 5
+marus / 10 normals), types 274 / 174 / 610 → 279 / 182 / 597, `is_floor_pinbar` 114 → 101; M15 64 (19 / 45), 1267 /
+717 / 2244 → 1280 / 730 / 2218, `is_floor_pinbar` 436 → 410 on both lens hovers. 20 / 30 CSVs byte-equal — no sub,
+trigger, POI, fib or IC pick moves, no H1 or counter event. What moves: H1 WVMI (0,0) FP 473 → 468 (pullback momentum
+0.237 → 0.645; its 7 LP rows); confluence sub 0 cycle 1 the BOS KL base 916 'no base star' → 917 'base' (top 0.57066
+→ 0.57065) + WVMI (0,0,1) FB 918 → 920; confluence sub 1 cycle 4 the CTS_UPDATED at 2364 via `double_maru` →
+`one_maru_continuous` (+ its RANGE_RESET / STATE_CHANGED `pat`); the IC check rows' candle / leg types (no pick).
+Charts (`fig_named_diff.py`): counts unchanged (79 / 232, 154 / 134, 302 / 305); changed: the candle hovers, the
+breakout-pattern markers, the H1 FP wave candle + its vertical line, the confluence sub 0 c1 KL zone + its FB wave
+candle, the WVMI LP hovers. The landing replay = the U3 variant (`make_variant_u3.py`): 30 / 30 CSVs byte-equal, the
+figures and PNGs equal. The `[floor_seed]` lines unchanged (the guard counts body-% pinbars). Skip grep 33 (the same
+lines). U3b (the seed guard extends until final mode converges) is next — it changes the two `[floor_seed]` lines.
 
 **M15.counter** and **M15.confluence** (9 files each — 7 per-lens debug CSVs
 with the same filename suffixes prefixed `*_M15_counter_` /
