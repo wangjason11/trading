@@ -279,7 +279,10 @@ SYLLABUS Week 9 Part 2 "Zone size at entry and stop-loss".
    for wave candles + WVMI (D.2, PLAN_H Q-W) — a behaviour change: its own plan, prediction, `/compare`, chart look.
    Order (proposed by Claude — the zero-change landings first, so the behaviour change's `/compare` carries one
    cause; the user may reorder): 8a → 8b → 8c. Not picked, stay in D.2: the missing-label fill paths, B5, the
-   "sub 3 cyc 3 has no POI record" note (item 1's debugging log, status unverified), the sub probe reference = the
+   "sub 3 cyc 3 has no POI record" note (item 1's debugging log; re-measured 2026-10-28 on S_V8c: its case — an
+   ended, never-locked sub fib, which the POI record gate skips — has 0 instances on either lens; the 4 locked sub
+   fibs without a POI row are `no_ic_candidate` / `all_ic_candidates_pinbar` outcomes —
+   `engine_v2/plans/plan_v_inputs/backlog_no_poi_census.py` / `.txt`), the sub probe reference = the
    derived CTS KL zone. IC Step 4: KEEP DEFERRED. Moved to D.3 (Parts 2 / 3): the candle-direction / rejection
    confirmation, zone strength scoring, the M5 layer. Then Part 1 is complete.
    **Progress 2026-10-28 (PLAN_V, `engine_v2/plans/PLAN_V_part1_minor_items.md`):** 8a DONE (`955489b`, zero change)
@@ -331,7 +334,7 @@ SYLLABUS Week 9 Part 2 "Zone size at entry and stop-loss".
    write-up (all DONE by PLAN_L L1 + the decisions below): POI_ZONES_SPEC §3's step structure, the code's
    "candidates" names (`find_ic_candidates`, `*_ip_candidates.csv` → `*_ic_candidates.csv`), the fallbacks (Step 3
    the ranking rules, L2; Step 4 — D.2 "Step 4 of IC identification", deferred). Still open from the debugging log: sub 3 cyc 3
-   has no POI record (PLAN_H §8.9). **The write-up RECEIVED 2026-10-09** (verbatim
+   has no POI record (PLAN_H §8.9; 0 instances of its case on S_V8c, 2026-10-28 — SESSION ORDER item 8's note). **The write-up RECEIVED 2026-10-09** (verbatim
    `engine_v2/plans/plan_h_inputs/ic_identification_revamp_spec.md`; the reading + the measurement: PLAN_H §8.9 "The
    IC identification revamp"): Step 1 the IC candidates, Step 2 the IP (both as built), **Step 3 NEW — the general
    ranking when no pattern exists** (its own four ranking rules over the unfiltered Step 1 list — a separate rule set

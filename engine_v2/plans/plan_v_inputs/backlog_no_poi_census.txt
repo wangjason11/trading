@@ -1,0 +1,47 @@
+== confluence: 21 sub fib records (last version per sub / cycle), 0 ended + never locked; POI records: 17
+   locked: {True: 20, False: 1}, ended: 20 of 21
+   every (sub, cycle) with NO POI record (4), any reason:
+     sub 1 cyc 0: fib 1797 -> 1816, status=inactive, active=True, locked=True, live nan -> 1894.0, end_reason=new_cycle, activated_at=1816
+     sub 1 cyc 3: fib 2078 -> 2231, status=ended, active=True, locked=True, live 2231.0 -> 2343.0, end_reason=new_cycle, activated_at=2231
+     sub 2 cyc 0: fib 2365 -> 2557, status=ended, active=True, locked=True, live 2470.0 -> 2608.0, end_reason=new_cycle, activated_at=2369
+     sub 3 cyc 0: fib 2639 -> 2736, status=inactive, active=True, locked=True, live nan -> 2829.0, end_reason=new_cycle, activated_at=2651
+== counter: 8 sub fib records (last version per sub / cycle), 0 ended + never locked; POI records: 7
+   locked: {True: 7, False: 1}, ended: 7 of 8
+   every (sub, cycle) with NO POI record (1), any reason:
+     sub 3 cyc 0: fib 2639 -> 2736, status=inactive, active=True, locked=True, live nan -> 2829.0, end_reason=new_cycle, activated_at=2651
+== confluence: ip_outcome per (sub, cycle) in *_ic_candidates.csv
+   sub 0 cyc 0: ['no_pattern']
+   sub 0 cyc 1: ['pattern']
+   sub 0 cyc 2: ['no_pattern']
+   sub 0 cyc 3: ['pattern']
+   sub 0 cyc 4: ['no_pattern']
+   sub 1 cyc 0: ['nan']
+   sub 1 cyc 1: ['pattern']
+   sub 1 cyc 2: ['no_pattern']
+   sub 1 cyc 3: ['nan']
+   sub 1 cyc 4: ['pattern']
+   sub 2 cyc 0: ['no_pattern']
+   sub 2 cyc 1: ['no_pattern']
+   sub 3 cyc 0: ['no_pattern']
+   sub 3 cyc 1: ['no_pattern']
+   sub 3 cyc 2: ['pattern']
+   sub 4 cyc 0: ['pattern']
+   sub 5 cyc 0: ['pattern']
+   sub 7 cyc 0: ['no_pattern']
+   sub 8 cyc 0: ['pattern']
+   sub 8 cyc 1: ['pattern']
+   sub 8 cyc 2: ['pattern']
+== counter: ip_outcome per (sub, cycle) in *_ic_candidates.csv
+   sub 3 cyc 0: ['no_pattern']
+   sub 3 cyc 1: ['no_pattern']
+   sub 3 cyc 2: ['pattern']
+   sub 5 cyc 0: ['pattern']
+   sub 6 cyc 0: ['pattern']
+   sub 8 cyc 0: ['pattern']
+   sub 8 cyc 1: ['pattern']
+   sub 8 cyc 2: ['pattern']
+== confluence sub 1 cyc 0: 9 rows, IC candidates 0, ic_candidate_count ['nan'], reasons ['continuation_not_big_maru', 'ic_not_last_opp', 'initial_before_bos_anchor', 'nan']
+== confluence sub 1 cyc 3: 76 rows, IC candidates 0, ic_candidate_count ['nan'], reasons ['continuation_body_not_greater', 'continuation_not_big_maru', 'ic_not_last_opp', 'initial_fails']
+== confluence sub 2 cyc 0: 83 rows, IC candidates 1, ic_candidate_count ['1.0'], reasons ['all_ic_candidates_pinbar', 'continuation_body_not_greater', 'continuation_not_big_maru', 'ic_not_last_opp']
+== confluence sub 3 cyc 0: 43 rows, IC candidates 1, ic_candidate_count ['1.0'], reasons ['all_ic_candidates_pinbar', 'continuation_body_not_greater', 'continuation_not_big_maru', 'ic_not_last_opp']
+== counter sub 3 cyc 0: 43 rows, IC candidates 1, ic_candidate_count ['1'], reasons ['all_ic_candidates_pinbar', 'continuation_body_not_greater', 'continuation_not_big_maru', 'ic_not_last_opp']
