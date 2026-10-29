@@ -1,0 +1,16 @@
+window 2025-06-01 -> 2025-07-20 (H1 from 2025-06-01 00:00:00+00:00); H1 frame 840 candles
+  [floor_seed] H1: 840 candles 2025-04-13 21:00:00+00:00 -> 2025-05-30 20:00:00+00:00, 3 steps, 356 body-% pinbars (need 180), the final window converged
+  [floor_seed] M15: 816 candles 2025-05-20 09:00:00+00:00 -> 2025-05-30 20:45:00+00:00, 3 steps, 328 body-% pinbars (need 180), the final window converged
+  [data_bridge] Fetched 3356 M15 candles for NZD_USD in 4 chunks
+examined: {'EXPOSED_fib_tracker': 4, 'false_answers_cross_cycle_fib': 20, 'false_answers_fib_tracker': 14}
+
+  M15 frame-from 2025-07-17 00:00 n=176 fib_tracker.py:_handle_cross_cycle_cts_updated:1110 sid=0 cycle=0 moment m=60 window=(50, 60) sd=1; MS-embedded twin: yes
+    fed for the cycle at m: ['CTS_UPDATED']; SUPERSEDED at m+1 by CTS_UPDATED (moment 61) -> a re-ask at m+1 = today
+        idx time                 open     high      low    close  gap (bull) / events fed for the cycle
+         58 2025-07-17 14:30  0.59206  0.59224  0.59174  0.59204                                         
+         59 2025-07-17 14:45  0.59203  0.59227  0.59182  0.59204  c1                                     
+         60 2025-07-17 15:00  0.59206  0.59261  0.59202  0.59252  c2                                     CTS_UPDATED/replay_raw
+         61 2025-07-17 15:15  0.59251  0.59282  0.59236  0.59280  c3 = formed_at (gap 0.59227-0.59236)   CTS_UPDATED/replay_raw
+         62 2025-07-17 15:30  0.59281  0.59316  0.59259  0.59299                                         CTS_UPDATED/replay_raw
+
+classified (downstream decisions): {'superseded at m+1': 1}

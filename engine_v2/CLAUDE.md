@@ -70,9 +70,10 @@ reference window; + every KL zone hover's `kind=BOS / CTS`, PLAN_W §4); item 10
 2026-10-28): a sweep of every parked / deferred item across the docs, the user picks what to cover before Part 2 —
 "make sure our overall MS is totally solid" (register §D SESSION ORDER item 10) — the sweep DONE 2026-10-28
 (`plans/part1_sweep_inputs/part1_sweep.md`) and its picks (`plans/PLAN_X_part1_ms_checks.md`): X1 the
-REVERSAL_CANDIDATE pattern-name fix (saved S_X1), X2 the MS risk census on 5 windows (every check 0 in effect); NOW
-X3, the fib re-ask built as a variant (the user: "Variant first, then close"), then Part 1 closes); NEXT Part 2 entry decisions (+ the entry confirmation candle
-patterns, zone size at entry / stop — register §D.3), Part 3 other decisions.
+REVERSAL_CANDIDATE pattern-name fix (saved S_X1), X2 the MS risk census on 5 windows (every check 0 in effect), X3
+the fib re-ask built as a variant — 0 MS decisions flip on 5 windows, the line closed by the user); **Week 9 Part 1
+CLOSED 2026-10-28**. NEXT: **Part 2** entry decisions (+ the entry confirmation candle patterns, zone size at entry /
+stop, the candle-direction confirmation, zone strength, M5 — register §D.3), Part 3 other decisions.
 
 **Pre-Week 8 fix:** Exception 2 probe relaxed from CTS_CONFIRMED to CTS_ESTABLISHED (`bbb6d32`).
 

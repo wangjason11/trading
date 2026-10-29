@@ -303,7 +303,9 @@ pre-c3").
 ## 7. Out of scope (follow-ups, logged)
 
 - **Re-ask when the gap forms** (user-accepted): FibTracker re-evaluates a failed decision at the candle a relevant
-  gap's c3 closes → "dropped" becomes "one candle later"; also closes the M1 c3 instance.
+  gap's c3 closes → "dropped" becomes "one candle later"; also closes the M1 c3 instance. — CLOSED 2026-10-28
+  (`PLAN_X_part1_ms_checks.md` §X3: built as a variant, replayed on 5 windows — 0 MS decisions flip; the user:
+  "Close the line"; not built).
 - **The pre-existing MS/FibTracker activation divergence** (a gap forming after an H1 cycle-≥1 EST: MS inners include
   it, the one-shot fib never activates) — measure on this window; decide with the re-ask design.
 - **Pattern-path CTS_UPDATED has no recorded moment** → no cut there (0 cells). Closed when the event carries its

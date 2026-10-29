@@ -1,0 +1,34 @@
+window 2026-02-01 -> 2026-03-20 (H1 from 2026-02-01 00:00:00+00:00); H1 frame 819 candles
+  [floor_seed] H1: 792 candles 2025-12-14 22:00:00+00:00 -> 2026-01-30 21:00:00+00:00, 3 steps, 375 body-% pinbars (need 180), the final window converged
+  [floor_seed] M15: 816 candles 2026-01-20 10:00:00+00:00 -> 2026-01-30 21:45:00+00:00, 3 steps, 318 body-% pinbars (need 180), the final window converged
+  [data_bridge] Fetched 3272 M15 candles for NZD_USD in 4 chunks
+examined: {'EXPOSED_cross_cycle_fib': 5, 'EXPOSED_fib_tracker': 20, 'false_answers_cross_cycle_fib': 40, 'false_answers_fib_tracker': 20}
+
+  M15 frame-from 2026-02-25 17:15 n=1563 fib_tracker.py:_on_cts_established:853 sid=0 cycle=0 moment m=55 window=(50, 55) sd=-1; MS-embedded twin: yes
+    fed for the cycle at m: ['CTS_ESTABLISHED']; SUPERSEDED at m+1 by CTS_UPDATED (moment 56) -> a re-ask at m+1 = today
+        idx time                 open     high      low    close  gap (bear) / events fed for the cycle
+         53 2026-02-26 06:30  0.60038  0.60073  0.60034  0.60070                                         
+         54 2026-02-26 06:45  0.60072  0.60078  0.60039  0.60040  c1                                     
+         55 2026-02-26 07:00  0.60038  0.60044  0.59966  0.59979  c2                                     CTS_ESTABLISHED/double_maru
+         56 2026-02-26 07:15  0.59978  0.60014  0.59948  0.59956  c3 = formed_at (gap 0.60014-0.60039)   CTS_UPDATED/replay_raw
+         57 2026-02-26 07:30  0.59954  0.59977  0.59947  0.59969                                         CTS_UPDATED/replay_raw
+
+  M15 frame-from 2026-03-13 08:15 n=443 cross_cycle_fib.py:resolve_cross_cycle_eligibility:273 sid=0 cycle=1 moment m=73 window=(70, 73) sd=1; MS-embedded twin: yes
+    fed for the cycle at m: ['CTS_THRESHOLD_UPDATED']; SUPERSEDED at m+1 by CTS_THRESHOLD_UPDATED (moment 74) -> a re-ask at m+1 = today
+        idx time                 open     high      low    close  gap (bull) / events fed for the cycle
+         71 2026-03-16 02:00  0.58045  0.58064  0.58024  0.58064                                         
+         72 2026-03-16 02:15  0.58064  0.58074  0.58046  0.58073  c1                                     CTS_THRESHOLD_UPDATED
+         73 2026-03-16 02:30  0.58073  0.58106  0.58063  0.58088  c2                                     CTS_THRESHOLD_UPDATED
+         74 2026-03-16 02:45  0.58088  0.58108  0.58080  0.58084  c3 = formed_at (gap 0.58074-0.58080)   CTS_THRESHOLD_UPDATED
+         75 2026-03-16 03:00  0.58086  0.58128  0.58086  0.58102                                         CTS_THRESHOLD_UPDATED
+
+  M15 frame-from 2026-03-17 21:30 n=198 fib_tracker.py:_update_fib_cts:1218 sid=0 cycle=0 moment m=55 window=(50, 55) sd=-1; MS-embedded twin: yes
+    fed for the cycle at m: ['CTS_UPDATED']; SUPERSEDED at m+1 by CTS_UPDATED (moment 56) -> a re-ask at m+1 = today
+        idx time                 open     high      low    close  gap (bear) / events fed for the cycle
+         53 2026-03-18 10:45  0.58590  0.58602  0.58565  0.58580                                         CTS_UPDATED/replay_raw
+         54 2026-03-18 11:00  0.58578  0.58614  0.58568  0.58609  c1                                     
+         55 2026-03-18 11:15  0.58608  0.58628  0.58495  0.58498  c2                                     CTS_UPDATED/replay_raw
+         56 2026-03-18 11:30  0.58498  0.58554  0.58480  0.58527  c3 = formed_at (gap 0.58554-0.58568)   CTS_UPDATED/replay_raw
+         57 2026-03-18 11:45  0.58526  0.58560  0.58499  0.58542                                         
+
+classified (downstream decisions): {'superseded at m+1': 3}

@@ -56,7 +56,7 @@ The open lines below carry over (fold in when their files are next touched); D a
 
 ## C. Part 4 closure — DONE 2026-09-30 (all three items in "Recently closed"; Part 4 is complete)
 
-## D. Week 9 Part 1 — Entry prerequisites (before Entries) — SESSION ORDER items 1–9 DONE 2026-10-28; Part 1 stays OPEN for item 10, the sweep of every parked / deferred item (the user 2026-10-28); D.3 = the items moved to Parts 2 / 3
+## D. Week 9 Part 1 — Entry prerequisites (before Entries) — SESSION ORDER items 1–10 DONE; Part 1 CLOSED 2026-10-28 (after item 10's picks, PLAN_X); D.3 = the items moved to Parts 2 / 3 — NEXT: Part 2
 
 **Week 9 = "Entries & Decisions"** (renamed by the user 2026-09-30), in three parts: **Part 1** Entry prerequisite
 items (this bucket), **Part 2** the actual Entry decision build & logic, **Part 3** Other decisions build & logic
@@ -393,6 +393,10 @@ SYLLABUS Week 9 Part 2 "Zone size at entry and stop-loss".
    — "Close Part 1". **The order (the user, asked next): "Variant first, then close"** — the NEXT session designs +
    builds the fib re-ask as a variant (PLAN_X X3) and replays the 5 windows; Week 9 Part 1 closes right after it
    ("MS totally solid before Part 2" stays the gate). Saved meanwhile: S_X1 `20261028_195331_ebbf223`.
+   **Item 10 DONE + Part 1 CLOSED (2026-10-28, the next session):** PLAN_X X3 — the fib re-ask designed with the user
+   (scope "All four sites", no cold review), built as a variant on scratch trees and replayed on the 5 windows: 0 MS
+   decisions flip (PLAN_X §X3 "X3 result"); the user: "Close the line" ("Recently closed") and "Push after the close".
+   **Week 9 Part 1 is CLOSED** — NEXT: Week 9 Part 2 (§D.3 + SYLLABUS Week 9).
 
 **D.1 — Ordered (the heavy items):**
 1. **One POI per cycle** (redefine the IC & POI zone logic) — B landed; its chart debugging PAUSED for item 2 (user
@@ -688,18 +692,12 @@ SYLLABUS Week 9 Part 2 "Zone size at entry and stop-loss".
   Scenario-1/revert ↔ ceiling merge; `M = 0` behaviour; the deeper-walk fill-as-of decision. Detail:
   `engine_v2/zones/CROSS_CYCLE_FIB_SPEC.md` §11b + §13, memory `project_cross_cycle_fib_unification.md`.
   2026-10-06: likely absorbed by §D.1 item 2 — CONFIRMED (the revamp COMPLETE 2026-10-09: PLAN_I S1–S6 + PLAN_J).
-- **Plan F §7 follow-ups** — re-ask a failed fib decision when a relevant gap's c3 closes ("dropped" → "one candle
-  later"); ~~the MS vs FibTracker activation divergence~~ (retired by PLAN_I S5 — MS reads FibTracker's decision;
-  found stale by the item-10 sweep 2026-10-28); latent: `inst.meta` mutated on imbalance
-  instances shared across projections, the chart hover picks a POI by nearest inner price, single-candle stretches
-  dropped. TRIGGER (chart review shows a dropped fib) / parked by the user. MEASURED 2026-10-28 (PLAN_X X2, 5
-  windows; the user's pick at item 10): 236 False answers → 14 decisions a gap one candle later would flip — 0
-  activations DROPPED: 5 activations one candle late, 3 de-activations one candle before the re-activation, 2 on the H1
-  main sid 0 cycle 0 (carved out of MS's proximity), 2 crosses one candle late, 2 crosses pre-created for a cycle not
-  yet established (no POI, no MS read). Not proven: whether a one-candle exposure at a CTS update ever flips a
-  proximity decision (needs the re-ask built, as a variant) — **the user 2026-10-28: "Build the fib re-ask as a
-  variant"** (PLAN_X X3, to plan). Detail:
-  `engine_v2/plans/PLAN_F_imbalance_c3_knowability.md` §7.
+- **Plan F §7 follow-ups** — ~~re-ask a failed fib decision when a relevant gap's c3 closes~~ (CLOSED 2026-10-28 —
+  "Recently closed": built as a variant, 0 MS decisions flip on 5 windows, the user: "Close the line"); ~~the MS vs
+  FibTracker activation divergence~~ (retired by PLAN_I S5 — MS reads FibTracker's decision; found stale by the
+  item-10 sweep 2026-10-28); still parked, latent: `inst.meta` mutated on imbalance instances shared across
+  projections, the chart hover picks a POI by nearest inner price, single-candle stretches dropped. TRIGGER (a chart
+  review / a consumer hits one) / parked by the user. Detail: `engine_v2/plans/PLAN_F_imbalance_c3_knowability.md` §7.
 - ~~**Double RANGE_STARTED from the offline finalize**~~ — CLOSED 2026-10-28 (the user, item 10: "Close the double
   RANGE_STARTED" — superseded since PLAN_J J1, PLAN_X X2). "Recently closed"; its remaining look-ahead joined §F.
 - **`REVERSAL_CANDIDATE` straddling a sub's cap** — `knowable_at_idx` keys it on `ev.idx`, not its `apply_idx`, so a
@@ -859,6 +857,19 @@ detailed sweep.") — the chart revamp, the dot-hover quirks, the hovers not on 
 
 ## Recently closed (history pointers)
 
+- **Week 9 Part 1 — Entry prerequisites** (§D, SESSION ORDER items 1–10) — CLOSED 2026-10-28 after item 10's last
+  pick (the fib re-ask variant, below); the user's order "Variant first, then close". Branch `week9-entries-decisions`
+  pushed after the close (the user: "Push after the close"). NEXT: Week 9 Part 2 (§D.3, SYLLABUS Week 9).
+- **The fib re-ask** (§E "Plan F §7 follow-ups"; PLAN_F §7, user-accepted 2026-09-23) — CLOSED 2026-10-28 by the user
+  ("Close the line") on PLAN_X X3's variant (`engine_v2/plans/PLAN_X_part1_ms_checks.md` §X3; the user's scope "All
+  four sites"): a failed fib decision whose window reaches its moment m re-asked once at m + 1 (the gap's c3), in both
+  trackers, MS refreshing its POI snapshot. On 5 windows **0 MS decisions flip** — every structure-events / trigger /
+  sub / POI / KL / IC / WVMI CSV byte-equal; only fib records move: the 14 X2 exposures (11 are re-asked at m + 1 by
+  the cycle's own next event already; the other 3 are unread by MS — the H1 cycle-0 carve-out, two crosses before
+  their cycle is established), all meta-only except reference counter sub 6 (its cycle-0 fib ends 3807 `new_cycle`
+  instead of 4143, a cycle-1 cross drawn 3807–4143 — the existing "a pre-established cross ends the previous cycle's
+  fib" rule, triggered earlier) and the H1 main sid 0 cycle 0 `deactivated_at` 117 → 170. Nothing built; the rule as
+  code stays in PLAN_X §X3 (`plan_x_inputs/x3_variant_patch.py`) for a future landing (e.g. live mode).
 - **The probe's ad-hoc BOS_0 zone reads past its search bound ("L5b")** (§D.2; Plan A 2026-09-19, registered by the
   item-10 sweep) — CLOSED 2026-10-28 by the user ("Close the probe BOS_0 read") on PLAN_X X2's measurement: at a reset
   `unified_probe._bos0_inner_at_start` → `identify_base_pattern` CAN read up to 5 candles past `probe_end_idx`, but on 5
@@ -885,8 +896,8 @@ detailed sweep.") — the chart revamp, the dot-hover quirks, the hovers not on 
   probe's reference = its derived CTS zone as of the read, `538cd2f` the sub CTS KL zones exported + drawn hidden
   behind the M15 `Sub CTS zones` button; saves S_W9b `20261028_165600_aff21f8`, S_W9c `20261028_180228_538cd2f`).
   Items 1–8 and their plans (PLAN_H … PLAN_V): §D "SESSION ORDER" + memory `project_session_order_status.md`; + the
-  KL hover's `kind=` line (PLAN_W §4, S_W9d). Week 9 Part 1 itself stays OPEN for item 10 (the parked-items sweep,
-  the user 2026-10-28). Not pushed (the user's call).
+  KL hover's `kind=` line (PLAN_W §4, S_W9d). Week 9 Part 1 then closed after item 10 (the parked-items sweep +
+  PLAN_X — the first entry above).
 - **The cycle-0 carve-out revisit** (§D 5b; raised by the user 2026-10-26, scheduled 2026-10-27) — CLOSED 2026-10-27
   by PLAN_T in two landings: T1 `453f227` (the first_confluence probe's MS reads what its sub reads; zero change; save
   S_T1 `20261027_131836_453f227`) and T2 (the carve-out kept on the main sid 0 + the sub its cycle-0 first_confluence

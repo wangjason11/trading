@@ -1,0 +1,8 @@
+window 2026-02-01 -> 2026-03-20: H1 819 candles
+counts: {'downstream.CHANGED_cross': 4, 'downstream.CHANGED_single': 12, 'downstream.CHANGED_update': 5, 'downstream.ran_cross': 20, 'downstream.ran_single': 12, 'downstream.ran_update': 5, 'ms_embedded.CHANGED_cross': 1, 'ms_embedded.CHANGED_single': 4, 'ms_embedded.CHANGED_update': 1, 'ms_embedded.ran_cross': 5, 'ms_embedded.ran_single': 4, 'ms_embedded.ran_update': 1, 'ms_poi_refresh_by_reask': 5, 'ms_poi_refresh_inner_changed': 5}
+MS POI refreshes by a re-ask whose inner changed:
+  frame-from 2026-02-01 22:00 n=3272 sid=0 cycle=0 candle=1765: [] -> [0.60034]
+  frame-from 2026-02-01 22:00 n=3272 sid=0 cycle=0 candle=1765: [] -> [0.60034]
+  frame-from 2026-02-25 17:15 n=1563 sid=0 cycle=0 candle=56: [] -> [0.60034]
+  frame-from 2026-02-25 17:15 n=1563 sid=0 cycle=0 candle=56: [] -> [0.60034]
+  frame-from 2026-03-17 21:30 n=198 sid=0 cycle=0 candle=56: [] -> [0.58568]

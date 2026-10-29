@@ -1,0 +1,61 @@
+window 2025-12-01 -> 2026-01-20 (H1 from 2025-11-15 00:00:00+00:00); H1 frame 1058 candles
+  [floor_seed] H1: 840 candles 2025-09-28 21:00:00+00:00 -> 2025-11-14 21:00:00+00:00, 3 steps, 355 body-% pinbars (need 180), the final window converged
+  [floor_seed] M15: 816 candles 2025-11-04 10:00:00+00:00 -> 2025-11-14 21:45:00+00:00, 3 steps, 310 body-% pinbars (need 180), the final window converged
+  [data_bridge] Fetched 4228 M15 candles for NZD_USD in 5 chunks
+examined: {'EXPOSED_cross_cycle_fib': 4, 'EXPOSED_fib_tracker': 31, 'false_answers_cross_cycle_fib': 51, 'false_answers_fib_tracker': 60}
+
+  H1 frame-from 2025-11-16 22:00 n=1058 fib_tracker.py:_update_fib_cts:1218 sid=0 cycle=0 moment m=163 window=(96, 163) sd=1; MS-embedded twin: yes
+    fed for the cycle at m: ['CTS_UPDATED']; NO fed event for the cycle at m+1 (next: CTS_UPDATED at 170) -> a re-ask at m+1 CHANGES the timing
+        idx time                 open     high      low    close  gap (bull) / events fed for the cycle
+        161 2025-11-25 15:00  0.56064  0.56116  0.56016  0.56080                                         
+        162 2025-11-25 16:00  0.56080  0.56147  0.56060  0.56078  c1                                     
+        163 2025-11-25 17:00  0.56078  0.56287  0.56078  0.56262  c2                                     CTS_UPDATED/replay_raw
+        164 2025-11-25 18:00  0.56262  0.56262  0.56212  0.56226  c3 = formed_at (gap 0.56147-0.56212)   
+        165 2025-11-25 19:00  0.56226  0.56264  0.56186  0.56249                                         
+
+  H1 frame-from 2025-11-16 22:00 n=1058 fib_tracker.py:_update_fib_cts:1218 sid=0 cycle=0 moment m=171 window=(96, 171) sd=1; MS-embedded twin: yes
+    fed for the cycle at m: ['CTS_UPDATED']; SUPERSEDED at m+1 by CTS_UPDATED (moment 172) -> a re-ask at m+1 = today
+        idx time                 open     high      low    close  gap (bull) / events fed for the cycle
+        169 2025-11-25 23:00  0.56220  0.56268  0.56214  0.56248                                         
+        170 2025-11-26 00:00  0.56248  0.56320  0.56233  0.56276  c1                                     CTS_UPDATED/replay_raw
+        171 2025-11-26 01:00  0.56272  0.56824  0.56262  0.56684  c2                                     CTS_UPDATED/replay_raw
+        172 2025-11-26 02:00  0.56685  0.56920  0.56666  0.56873  c2 c3 = formed_at (gap 0.56320-0.56851) CTS_UPDATED/one_maru_continuous
+        173 2025-11-26 03:00  0.56870  0.56966  0.56851  0.56910                                         CTS_UPDATED/replay_raw
+
+  M15 frame-from 2025-12-19 00:45 n=1913 fib_tracker.py:_on_cts_established:853 sid=0 cycle=0 moment m=53 window=(50, 53) sd=1; MS-embedded twin: yes
+    fed for the cycle at m: ['CTS_ESTABLISHED']; SUPERSEDED at m+1 by CTS_UPDATED (moment 54) -> a re-ask at m+1 = today
+        idx time                 open     high      low    close  gap (bull) / events fed for the cycle
+         51 2025-12-19 13:30  0.57412  0.57447  0.57407  0.57412                                         
+         52 2025-12-19 13:45  0.57412  0.57454  0.57408  0.57452  c1                                     
+         53 2025-12-19 14:00  0.57454  0.57522  0.57446  0.57522  c2                                     CTS_ESTABLISHED/double_maru
+         54 2025-12-19 14:15  0.57522  0.57532  0.57500  0.57520  c3 = formed_at (gap 0.57454-0.57500)   CTS_UPDATED/replay_raw
+         55 2025-12-19 14:30  0.57518  0.57578  0.57509  0.57578                                         CTS_UPDATED/replay_raw
+
+  M15 frame-from 2025-12-23 21:15 n=1639 fib_tracker.py:_handle_cross_cycle_cts_updated:1110 sid=0 cycle=0 moment m=61 window=(50, 61) sd=-1; MS-embedded twin: yes
+    fed for the cycle at m: ['CTS_UPDATED']; SUPERSEDED at m+1 by CTS_UPDATED (moment 62) -> a re-ask at m+1 = today
+        idx time                 open     high      low    close  gap (bear) / events fed for the cycle
+         59 2025-12-24 12:00  0.58424  0.58458  0.58416  0.58457                                         
+         60 2025-12-24 12:15  0.58458  0.58459  0.58414  0.58415  c1                                     CTS_ESTABLISHED/continuous
+         61 2025-12-24 12:30  0.58415  0.58434  0.58383  0.58394  c2                                     CTS_UPDATED/replay_raw
+         62 2025-12-24 12:45  0.58392  0.58396  0.58354  0.58368  c2 c3 = formed_at (gap 0.58382-0.58414) CTS_UPDATED/replay_raw
+         63 2025-12-24 13:00  0.58368  0.58382  0.58356  0.58373                                         
+
+  M15 frame-from 2025-12-23 21:15 n=1639 fib_tracker.py:_update_fib_cts:1218 sid=0 cycle=0 moment m=133 window=(50, 133) sd=-1; MS-embedded twin: yes
+    fed for the cycle at m: ['CTS_UPDATED']; SUPERSEDED at m+1 by CTS_UPDATED (moment 134) -> a re-ask at m+1 = today
+        idx time                 open     high      low    close  gap (bear) / events fed for the cycle
+        131 2025-12-26 06:00  0.58352  0.58367  0.58333  0.58350                                         
+        132 2025-12-26 06:15  0.58350  0.58368  0.58343  0.58354  c1                                     
+        133 2025-12-26 06:30  0.58354  0.58359  0.58288  0.58296  c2                                     CTS_UPDATED/replay_raw
+        134 2025-12-26 06:45  0.58294  0.58297  0.58276  0.58284  c3 = formed_at (gap 0.58297-0.58343)   CTS_UPDATED/replay_raw
+        135 2025-12-26 07:00  0.58286  0.58294  0.58255  0.58258                                         CTS_UPDATED/replay_raw
+
+  M15 frame-from 2026-01-09 02:45 n=657 cross_cycle_fib.py:resolve_cross_cycle_eligibility:273 sid=0 cycle=1 moment m=235 window=(234, 235) sd=1; MS-embedded twin: yes
+    fed for the cycle at m: ['CTS_THRESHOLD_UPDATED']; NO fed event for the cycle at m+1 (next: CTS_THRESHOLD_UPDATED at 608) -> a re-ask at m+1 CHANGES the timing
+        idx time                 open     high      low    close  gap (bull) / events fed for the cycle
+        233 2026-01-13 13:00  0.57586  0.57620  0.57576  0.57590                                         
+        234 2026-01-13 13:15  0.57590  0.57596  0.57552  0.57568  c1                                     
+        235 2026-01-13 13:30  0.57564  0.57827  0.57562  0.57684  c2                                     CTS_THRESHOLD_UPDATED
+        236 2026-01-13 13:45  0.57683  0.57690  0.57604  0.57654  c3 = formed_at (gap 0.57596-0.57604)   
+        237 2026-01-13 14:00  0.57654  0.57690  0.57635  0.57662                                         
+
+classified (downstream decisions): {'re-ask changes the timing': 2, 'superseded at m+1': 4}

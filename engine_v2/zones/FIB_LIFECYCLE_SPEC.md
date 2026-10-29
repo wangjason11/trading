@@ -409,7 +409,8 @@ the update candle deactivates there and can reactivate at the next event. A deci
 with no later re-check (e.g. an H1 cycle-≥1 fib, activated only at its EST) is
 **dropped**, not delayed, when its only gap forms one candle after the event —
 accepted; `IMBALANCE_FILL_SEMANTICS.md` "Decided at the event — and the accepted
-divergence" (the re-ask follow-up: `plans/PLAN_F_imbalance_c3_knowability.md` §7).
+divergence" (the re-ask follow-up, `plans/PLAN_F_imbalance_c3_knowability.md` §7: built as a
+variant and CLOSED 2026-10-28 — 0 MS decisions flip on 5 windows, `plans/PLAN_X_part1_ms_checks.md` §X3).
 **Decision: keep this coarse, event-granularity logging** — record flips where the tracker
 *already* detects them, add **no** per-candle walk. Rationale: no consumer needs
 per-candle fib accuracy; it matches current behavior (clean `/compare`); and it's
@@ -866,7 +867,8 @@ updated deliberately.
   incremental state-machine item). The coarse CTS-event granularity stands. The
   narrower Plan F follow-up — re-ask a failed decision when a relevant gap's c3
   closes, so a gap forming just after an event delays rather than drops the fib
-  (§8.3) — is logged in `plans/PLAN_F_imbalance_c3_knowability.md` §7.
+  (§8.3) — was built as a variant and CLOSED 2026-10-28 (`plans/PLAN_X_part1_ms_checks.md`
+  §X3: 0 MS decisions flip on 5 windows; the rule as code kept there; PLAN_F §7).
 - **WVMI lifecycle** — DECIDED: WVMI has no lifecycle of its own (a record
   lifecycle was added and removed 2026-05-27); its CYCLE's `compute_cycle_lifecycle`
   window bounds the temp LP and sets `WVMIRecord.cycle_collapsed` (Plan G,

@@ -1,0 +1,74 @@
+== 1. w9b_window_compare ==
+     A      B      d  element / (parent_sid,parent_cycle,sub_id)
+CSVs: base 30, variant 30; only base []; only variant []
+md5-different: 1 of 30
+  NZD_USD_H1_2025-06-01_2025-07-20_sd1_eps0p0001_rk2-5_M15_counter_fib_lifecycle.csv: rows 9 -> 9, removed 1, added 1
+     - H1.main >> M15.counter,0,0,0,0,,3271.0,,,active,True,True,3230,3329,"{'activated_at': 3241, 'activated_on': 'update', 'locked_at': 3346, 'ic_ref_price': 0.59338, 'ic_ref_source': 'prev_structure_bos', 'ic_ref_break_pattern_anchor_idx': 3270, 'ic_ref_break_conf
+     + H1.main >> M15.counter,0,0,0,0,,3271.0,,,active,True,True,3230,3329,"{'activated_at': 3241, 'activated_on': 'reask', 'locked_at': 3346, 'ic_ref_price': 0.59338, 'ic_ref_source': 'prev_structure_bos', 'ic_ref_break_pattern_anchor_idx': 3270, 'ic_ref_break_confi
+FIG NZD_USD_H1_2025-06-01_2025-07-20_sd1_eps0p0001_rk2-5.html: traces 32 -> 32, shapes 68 -> 68, traces differing (multiset) 0, names []; count deltas {}
+FIG NZD_USD_H1_2025-06-01_2025-07-20_sd1_eps0p0001_rk2-5_M15_confluence.html: traces 240 -> 240, shapes 182 -> 182, traces differing (multiset) 0, names []; count deltas {}
+FIG NZD_USD_H1_2025-06-01_2025-07-20_sd1_eps0p0001_rk2-5_M15_counter.html: traces 178 -> 178, shapes 129 -> 129, traces differing (multiset) 0, names []; count deltas {}
+C:/Users/wangj/AppData/Local/Temp/px3/0601b: [floor_seed] H1: 840 candles 2025-04-13 21:00:00+00:00 -> 2025-05-30 20:00:00+00:00, 3 steps, 356 body-% pinbars (need 180), the final window converged | [floor_seed] M15: 816 candles 2025-05-20 09:00:00+00:00 -> 2025-05-30 20:45:00+00:00, 3 steps, 328 body-% pinbars (need 180), the final window converged | [data_bridge] Fetched 3356 M15 candles for NZD_USD in 4 chunks | DEBUG traces: 32 | DEBUG shapes: 68 | [m15_chart] traces: 178, shapes: 129 | [m15_chart] traces: 240, shapes: 182
+C:/Users/wangj/AppData/Local/Temp/px3/0601v: [floor_seed] H1: 840 candles 2025-04-13 21:00:00+00:00 -> 2025-05-30 20:00:00+00:00, 3 steps, 356 body-% pinbars (need 180), the final window converged | [floor_seed] M15: 816 candles 2025-05-20 09:00:00+00:00 -> 2025-05-30 20:45:00+00:00, 3 steps, 328 body-% pinbars (need 180), the final window converged | [data_bridge] Fetched 3356 M15 candles for NZD_USD in 4 chunks | DEBUG traces: 32 | DEBUG shapes: 68 | [m15_chart] traces: 178, shapes: 129 | [m15_chart] traces: 240, shapes: 182
+
+== 2. MS decisions: structure events + triggers / subs (rows only in one side) ==
+  NZD_USD_H1_2025-06-01_2025-07-20_sd1_eps0p0001_rk2-5_M15_confluence_structure_events.csv: rows 511 -> 511; removed 0, added 0
+  NZD_USD_H1_2025-06-01_2025-07-20_sd1_eps0p0001_rk2-5_M15_counter_structure_events.csv: rows 358 -> 358; removed 0, added 0
+  NZD_USD_H1_2025-06-01_2025-07-20_sd1_eps0p0001_rk2-5_structure_events.csv: rows 103 -> 103; removed 0, added 0
+  NZD_USD_H1_2025-06-01_2025-07-20_sd1_eps0p0001_rk2-5_M15_confluence_triggers.csv: rows 4 -> 4; removed 0, added 0
+  NZD_USD_H1_2025-06-01_2025-07-20_sd1_eps0p0001_rk2-5_M15_counter_triggers.csv: rows 4 -> 4; removed 0, added 0
+  NZD_USD_H1_2025-06-01_2025-07-20_sd1_eps0p0001_rk2-5_M15_unresolved_triggers.csv: rows 1 -> 1; removed 0, added 0
+  NZD_USD_H1_2025-06-01_2025-07-20_sd1_eps0p0001_rk2-5_M15_confluence_subs.csv: rows 4 -> 4; removed 0, added 0
+  NZD_USD_H1_2025-06-01_2025-07-20_sd1_eps0p0001_rk2-5_M15_counter_subs.csv: rows 4 -> 4; removed 0, added 0
+  NZD_USD_H1_2025-06-01_2025-07-20_sd1_eps0p0001_rk2-5_M15_unresolved_triggers.csv: rows 1 -> 1; removed 0, added 0
+
+== 3. fib records keyed (structure_path_id, structure_id, cycle_id, version) ==
+  NZD_USD_H1_2025-06-01_2025-07-20_sd1_eps0p0001_rk2-5_M15_confluence_fib_lifecycle.csv: records 11 -> 11; differing 0
+  NZD_USD_H1_2025-06-01_2025-07-20_sd1_eps0p0001_rk2-5_M15_counter_fib_lifecycle.csv: records 8 -> 8; differing 1
+  ('H1.main >> M15.counter', 0, 0, 'NA', 3230): meta.activated_on update -> reask
+  NZD_USD_H1_2025-06-01_2025-07-20_sd1_eps0p0001_rk2-5_fib_lifecycle.csv: records 1 -> 1; differing 0
+
+== 4. the variant's [fib][reask] log lines ==
+  38 lines; CHANGED 4; WARNING 0
+  [prox_view] pool#4 cap=None: [fib][reask] summary: {'CHANGED_single': 1, 'pending_past_data_edge': 0, 'ran_single': 3, 'registered_single': 3}; walk-back (process total) {'examined': 340}
+  [prox_view] pool#4 cap=3346: [fib][reask] summary: {'CHANGED_single': 1, 'pending_past_data_edge': 0, 'ran_single': 3, 'registered_single': 3}; walk-back (process total) {'examined': 340}
+  [fib][reask] sid=0 cycle=0 single: False at 60 (window end 60) -> re-asked at 61: CHANGED
+  [fib][reask] summary: {'CHANGED_single': 1, 'pending_past_data_edge': 0, 'ran_single': 3, 'registered_single': 3}; walk-back (process total) {'examined': 392}
+  summaries (37; one per downstream feed — the last carries the process walk-back total):
+  [fib][reask] summary: {'pending_past_data_edge': 0}; walk-back (process total) {}
+  [prox_view] pool#0 cap=None: [fib][reask] summary: {'pending_past_data_edge': 0}; walk-back (process total) {'examined': 54}
+  [prox_view] pool#0 cap=1507: [fib][reask] summary: {'pending_past_data_edge': 0}; walk-back (process total) {'examined': 54}
+  [prox_view] pool#0 cap=1744: [fib][reask] summary: {'pending_past_data_edge': 0}; walk-back (process total) {'examined': 54}
+  [prox_view] pool#0 cap=1953: [fib][reask] summary: {'pending_past_data_edge': 0}; walk-back (process total) {'examined': 54}
+  [prox_view] pool#0 cap=1961: [fib][reask] summary: {'pending_past_data_edge': 0}; walk-back (process total) {'examined': 54}
+  [prox_view] pool#0 cap=2059: [fib][reask] summary: {'pending_past_data_edge': 0}; walk-back (process total) {'examined': 54}
+  [prox_view] pool#0 cap=2170: [fib][reask] summary: {'pending_past_data_edge': 0}; walk-back (process total) {'examined': 54}
+  [prox_view] pool#1 cap=None: [fib][reask] summary: {'pending_past_data_edge': 0}; walk-back (process total) {'examined': 104}
+  [prox_view] pool#1 cap=2089: [fib][reask] summary: {'pending_past_data_edge': 0}; walk-back (process total) {'examined': 104}
+  [prox_view] pool#1 cap=2112: [fib][reask] summary: {'pending_past_data_edge': 0}; walk-back (process total) {'examined': 104}
+  [prox_view] pool#1 cap=2171: [fib][reask] summary: {'pending_past_data_edge': 0}; walk-back (process total) {'examined': 114}
+  [prox_view] pool#1 cap=2198: [fib][reask] summary: {'pending_past_data_edge': 0}; walk-back (process total) {'examined': 126}
+  [prox_view] pool#1 cap=2271: [fib][reask] summary: {'pending_past_data_edge': 0}; walk-back (process total) {'examined': 140}
+  [prox_view] pool#1 cap=2274: [fib][reask] summary: {'pending_past_data_edge': 0}; walk-back (process total) {'examined': 154}
+  [prox_view] pool#1 cap=2432: [fib][reask] summary: {'pending_past_data_edge': 0}; walk-back (process total) {'examined': 169}
+  [prox_view] pool#1 cap=2467: [fib][reask] summary: {'pending_past_data_edge': 0}; walk-back (process total) {'examined': 184}
+  [prox_view] pool#1 cap=3047: [fib][reask] summary: {'pending_past_data_edge': 0}; walk-back (process total) {'examined': 211}
+  [prox_view] pool#1 cap=3083: [fib][reask] summary: {'pending_past_data_edge': 0}; walk-back (process total) {'examined': 242}
+  [prox_view] pool#1 cap=3139: [fib][reask] summary: {'pending_past_data_edge': 0}; walk-back (process total) {'examined': 285}
+  [prox_view] pool#1 cap=3145: [fib][reask] summary: {'pending_past_data_edge': 0}; walk-back (process total) {'examined': 334}
+  [prox_view] pool#2 cap=None: [fib][reask] summary: {'pending_past_data_edge': 0}; walk-back (process total) {'examined': 336}
+  [prox_view] pool#2 cap=3145: [fib][reask] summary: {'pending_past_data_edge': 0}; walk-back (process total) {'examined': 336}
+  [prox_view] pool#2 cap=3188: [fib][reask] summary: {'pending_past_data_edge': 0}; walk-back (process total) {'examined': 336}
+  [prox_view] pool#2 cap=3319: [fib][reask] summary: {'pending_past_data_edge': 0}; walk-back (process total) {'examined': 337}
+  [prox_view] pool#2 cap=3346: [fib][reask] summary: {'pending_past_data_edge': 0}; walk-back (process total) {'examined': 338}
+  [prox_view] pool#3 cap=None: [fib][reask] summary: {'pending_past_data_edge': 0}; walk-back (process total) {'examined': 340}
+  [prox_view] pool#3 cap=3204: [fib][reask] summary: {'pending_past_data_edge': 0}; walk-back (process total) {'examined': 340}
+  [prox_view] pool#3 cap=3214: [fib][reask] summary: {'pending_past_data_edge': 0}; walk-back (process total) {'examined': 340}
+  [prox_view] pool#4 cap=None: [fib][reask] summary: {'CHANGED_single': 1, 'pending_past_data_edge': 0, 'ran_single': 3, 'registered_single': 3}; walk-back (process total) {'examined': 340}
+  [prox_view] pool#4 cap=3235: [fib][reask] summary: {'pending_past_data_edge': 0, 'ran_single': 1, 'registered_single': 1}; walk-back (process total) {'examined': 340}
+  [prox_view] pool#4 cap=3346: [fib][reask] summary: {'CHANGED_single': 1, 'pending_past_data_edge': 0, 'ran_single': 3, 'registered_single': 3}; walk-back (process total) {'examined': 340}
+  [fib][reask] summary: {'pending_past_data_edge': 0}; walk-back (process total) {'examined': 340}
+  [fib][reask] summary: {'pending_past_data_edge': 0}; walk-back (process total) {'examined': 390}
+  [fib][reask] summary: {'pending_past_data_edge': 0}; walk-back (process total) {'examined': 391}
+  [fib][reask] summary: {'pending_past_data_edge': 0}; walk-back (process total) {'examined': 392}
+  [fib][reask] summary: {'CHANGED_single': 1, 'pending_past_data_edge': 0, 'ran_single': 3, 'registered_single': 3}; walk-back (process total) {'examined': 392}

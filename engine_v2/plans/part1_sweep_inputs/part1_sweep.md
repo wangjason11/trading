@@ -97,6 +97,8 @@ still in the code): the fill state `armed_idx` / `confirmed_fill_idx` written on
 projections (the debug export shows the last writer); the chart's POI hover picks a POI by nearest inner price (can
 show an inactive twin); a single-candle active stretch is not drawn (`sx1 <= sx0`, 3 sites). **SUPERSEDED** in that
 line: "the MS vs FibTracker activation divergence" — MS reads FibTracker's decision since PLAN_I S5 (2026-10-08).
+**The re-ask: MEASURED 2026-10-28 (PLAN_X X2: 14 exposed decisions, 0 dropped) + built as a variant (PLAN_X X3: 0 MS
+decisions flip on 5 windows) — CLOSED by the user ("Close the line").** The three display / debug items stay parked.
 
 **2.2 ★ Step 4 of IC identification — the lower-TF fallback** — when no IC candidate is left (`no_ic_candidate`,
 `all_ic_candidates_pinbar`), rerun Steps 1–3 on the lower TF; today no IC → no POI. **KEEP DEFERRED** (the user

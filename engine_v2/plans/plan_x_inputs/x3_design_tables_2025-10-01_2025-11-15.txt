@@ -1,0 +1,25 @@
+window 2025-10-01 -> 2025-11-15 (H1 from 2025-10-01 00:00:00+00:00); H1 frame 789 candles
+  [floor_seed] H1: 864 candles 2025-08-12 00:00:00+00:00 -> 2025-09-30 23:00:00+00:00, 3 steps, 370 body-% pinbars (need 180), the final window converged
+  [floor_seed] M15: 816 candles 2025-09-18 12:00:00+00:00 -> 2025-09-30 23:45:00+00:00, 3 steps, 338 body-% pinbars (need 180), the final window converged
+  [data_bridge] Fetched 3152 M15 candles for NZD_USD in 4 chunks
+examined: {'EXPOSED_cross_cycle_fib': 12, 'false_answers_cross_cycle_fib': 12}
+
+  M15 frame-from 2025-10-29 03:15 n=1219 cross_cycle_fib.py:resolve_cross_cycle_eligibility:273 sid=0 cycle=3 moment m=277 window=(239, 277) sd=-1; MS-embedded twin: yes
+    fed for the cycle at m: ['CTS_THRESHOLD_UPDATED']; NO fed event for the cycle at m+1 (next: CTS_ESTABLISHED at 326) -> a re-ask at m+1 CHANGES the timing
+        idx time                 open     high      low    close  gap (bear) / events fed for the cycle
+        275 2025-11-03 01:00  0.57185  0.57195  0.57170  0.57181                                         
+        276 2025-11-03 01:15  0.57180  0.57220  0.57180  0.57192  c1                                     
+        277 2025-11-03 01:30  0.57190  0.57196  0.57130  0.57139  c2                                     CTS_THRESHOLD_UPDATED
+        278 2025-11-03 01:45  0.57138  0.57164  0.57130  0.57148  c3 = formed_at (gap 0.57164-0.57180)   
+        279 2025-11-03 02:00  0.57149  0.57186  0.57138  0.57180                                         
+
+  M15 frame-from 2025-10-29 03:15 n=1219 cross_cycle_fib.py:resolve_cross_cycle_eligibility:273 sid=0 cycle=4 moment m=332 window=(332, 332) sd=-1; MS-embedded twin: yes
+    fed for the cycle at m: ['CTS_THRESHOLD_UPDATED']; SUPERSEDED at m+1 by CTS_THRESHOLD_UPDATED (moment 333) -> a re-ask at m+1 = today
+        idx time                 open     high      low    close  gap (bear) / events fed for the cycle
+        330 2025-11-03 14:45  0.56990  0.57020  0.56972  0.57020                                         
+        331 2025-11-03 15:00  0.57022  0.57064  0.57022  0.57028  c1                                     
+        332 2025-11-03 15:15  0.57030  0.57036  0.56934  0.56934  c2                                     CTS_THRESHOLD_UPDATED
+        333 2025-11-03 15:30  0.56936  0.56992  0.56924  0.56984  c3 = formed_at (gap 0.56992-0.57022)   CTS_THRESHOLD_UPDATED
+        334 2025-11-03 15:45  0.56984  0.57016  0.56975  0.57016                                         
+
+classified (downstream decisions): {'re-ask changes the timing': 1, 'superseded at m+1': 1}

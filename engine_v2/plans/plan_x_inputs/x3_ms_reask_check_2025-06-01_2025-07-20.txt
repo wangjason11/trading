@@ -1,0 +1,3 @@
+window 2025-06-01 -> 2025-07-20: H1 840 candles
+counts: {'downstream.CHANGED_single': 3, 'downstream.ran_single': 10, 'ms_embedded.CHANGED_single': 1, 'ms_embedded.ran_single': 5, 'ms_poi_refresh_by_reask': 1}
+MS POI refreshes by a re-ask whose inner changed:

@@ -384,7 +384,10 @@ You can debug **confluence vs non-confluence** trades visually.
 >   added item 9 (three of item 8's not-picked backlog entries) — DONE 2026-10-28 (PLAN_W 9a / 9b / 9c-2 / 9c-1);
 >   then item 10 (the user 2026-10-28): a sweep of every parked / deferred item (minus the Parts 2 / 3 ones), the user
 >   picks what to cover before Part 2 — "Part 2 is an important delineation from Part 1, so I want to make sure our
->   overall MS is totally solid before moving on to Part 2". Part 1 closes after it.
+>   overall MS is totally solid before moving on to Part 2". Part 1 closes after it. **Item 10 DONE 2026-10-28**
+>   (the sweep `plans/part1_sweep_inputs/part1_sweep.md`; the picks `plans/PLAN_X_part1_ms_checks.md`: X1 the
+>   REVERSAL_CANDIDATE pattern-name fix, X2 the MS risk census on 5 windows — every check 0 in effect, X3 the fib
+>   re-ask as a variant — 0 MS decisions flip, the line closed) — **Week 9 Part 1 CLOSED 2026-10-28.**
 > - **Part 2 — Entry decision build & logic** — the original Week 9 plan below, + the entry confirmation candle
 >   patterns (moved here from Part 1 by the user 2026-10-27) and the zone size at entry and stop-loss (below); + since
 >   2026-10-28 the candle-direction / rejection confirmation at a zone touch (an entry condition, next to the

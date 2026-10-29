@@ -1,0 +1,62 @@
+== 1. w9b_window_compare ==
+     A      B      d  element / (parent_sid,parent_cycle,sub_id)
+CSVs: base 23, variant 23; only base []; only variant []
+md5-different: 1 of 23
+  NZD_USD_H1_2025-10-01_2025-11-15_sd-1_eps0p0001_rk2-5_M15_confluence_fib_lifecycle.csv: rows 9 -> 9, removed 2, added 2
+     - H1.main >> M15.confluence,0,1,0,3,0.0,,2266.0,new_cycle,inactive,True,True,1983,2263,"{'cross_cycle': True, 'cross_start_cycle': 0, 'version': 0, 'activated_at': 2164, 'deactivated_by': 'own_imb_filled', 'deactivated_at': 2210, 'reactivated_at': 2259, 'locked_
+     - H1.main >> M15.confluence,0,1,0,4,0.0,2339.0,,,active,True,True,1983,2619,"{'cross_cycle': True, 'cross_start_cycle': 0, 'version': 0, 'activated_at': 2266, 'locked_at': 2621, 'ic_ref_price': 0.5737, 'ic_ref_source': 'cross_limit_anchor', 'ic_ref_break_pattern
+     + H1.main >> M15.confluence,0,1,0,3,0.0,,2266.0,new_cycle,inactive,True,True,1983,2263,"{'cross_cycle': True, 'cross_start_cycle': 0, 'version': 0, 'activated_at': 2164, 'deactivated_by': 'own_imb_filled', 'deactivated_at': 2210, 'reactivated_at': 2211, 'reactiv
+     + H1.main >> M15.confluence,0,1,0,4,0.0,2339.0,,,active,True,True,1983,2619,"{'cross_cycle': True, 'cross_start_cycle': 0, 'version': 0, 'activated_at': 2266, 'activated_on': 'reask', 'locked_at': 2621, 'ic_ref_price': 0.5737, 'ic_ref_source': 'cross_limit_ancho
+FIG NZD_USD_H1_2025-10-01_2025-11-15_sd-1_eps0p0001_rk2-5.html: traces 68 -> 68, shapes 117 -> 117, traces differing (multiset) 0, names []; count deltas {}
+FIG NZD_USD_H1_2025-10-01_2025-11-15_sd-1_eps0p0001_rk2-5_M15_confluence.html: traces 130 -> 130, shapes 100 -> 100, traces differing (multiset) 0, names []; count deltas {}
+C:/Users/wangj/AppData/Local/Temp/px3/1001b: [floor_seed] H1: 864 candles 2025-08-12 00:00:00+00:00 -> 2025-09-30 23:00:00+00:00, 3 steps, 370 body-% pinbars (need 180), the final window converged | [floor_seed] M15: 816 candles 2025-09-18 12:00:00+00:00 -> 2025-09-30 23:45:00+00:00, 3 steps, 338 body-% pinbars (need 180), the final window converged | [data_bridge] Fetched 3152 M15 candles for NZD_USD in 4 chunks | DEBUG traces: 68 | DEBUG shapes: 117 | [m15_chart] traces: 130, shapes: 100
+C:/Users/wangj/AppData/Local/Temp/px3/1001v: [floor_seed] H1: 864 candles 2025-08-12 00:00:00+00:00 -> 2025-09-30 23:00:00+00:00, 3 steps, 370 body-% pinbars (need 180), the final window converged | [floor_seed] M15: 816 candles 2025-09-18 12:00:00+00:00 -> 2025-09-30 23:45:00+00:00, 3 steps, 338 body-% pinbars (need 180), the final window converged | [data_bridge] Fetched 3152 M15 candles for NZD_USD in 4 chunks | DEBUG traces: 68 | DEBUG shapes: 117 | [m15_chart] traces: 130, shapes: 100
+
+== 2. MS decisions: structure events + triggers / subs (rows only in one side) ==
+  NZD_USD_H1_2025-10-01_2025-11-15_sd-1_eps0p0001_rk2-5_M15_confluence_structure_events.csv: rows 510 -> 510; removed 0, added 0
+  NZD_USD_H1_2025-10-01_2025-11-15_sd-1_eps0p0001_rk2-5_structure_events.csv: rows 152 -> 152; removed 0, added 0
+  NZD_USD_H1_2025-10-01_2025-11-15_sd-1_eps0p0001_rk2-5_M15_confluence_triggers.csv: rows 3 -> 3; removed 0, added 0
+  NZD_USD_H1_2025-10-01_2025-11-15_sd-1_eps0p0001_rk2-5_M15_counter_triggers.csv: rows 1 -> 1; removed 0, added 0
+  NZD_USD_H1_2025-10-01_2025-11-15_sd-1_eps0p0001_rk2-5_M15_unresolved_triggers.csv: rows 1 -> 1; removed 0, added 0
+  NZD_USD_H1_2025-10-01_2025-11-15_sd-1_eps0p0001_rk2-5_M15_confluence_subs.csv: rows 3 -> 3; removed 0, added 0
+  NZD_USD_H1_2025-10-01_2025-11-15_sd-1_eps0p0001_rk2-5_M15_counter_subs.csv: rows 1 -> 1; removed 0, added 0
+  NZD_USD_H1_2025-10-01_2025-11-15_sd-1_eps0p0001_rk2-5_M15_unresolved_triggers.csv: rows 1 -> 1; removed 0, added 0
+
+== 3. fib records keyed (structure_path_id, structure_id, cycle_id, version) ==
+  NZD_USD_H1_2025-10-01_2025-11-15_sd-1_eps0p0001_rk2-5_M15_confluence_fib_lifecycle.csv: records 8 -> 8; differing 2
+  ('H1.main >> M15.confluence', 0, 3, 0.0, 1983): meta.reactivated_at 2259 -> 2211; meta.reactivated_on <absent> -> reask
+  ('H1.main >> M15.confluence', 0, 4, 0.0, 1983): meta.activated_on <absent> -> reask
+  NZD_USD_H1_2025-10-01_2025-11-15_sd-1_eps0p0001_rk2-5_fib_lifecycle.csv: records 2 -> 2; differing 0
+
+== 4. the variant's [fib][reask] log lines ==
+  23 lines; CHANGED 8; WARNING 0
+  [prox_view] pool#1 cap=None: [fib][reask] summary: {'CHANGED_cross': 2, 'pending_past_data_edge': 0, 'ran_cross': 2, 'registered_cross': 2}; walk-back (process total) {'examined': 401}
+  [prox_view] pool#1 cap=2259: [fib][reask] summary: {'CHANGED_cross': 1, 'pending_past_data_edge': 0, 'ran_cross': 1, 'registered_cross': 1}; walk-back (process total) {'examined': 447}
+  [prox_view] pool#1 cap=2264: [fib][reask] summary: {'CHANGED_cross': 1, 'pending_past_data_edge': 0, 'ran_cross': 1, 'registered_cross': 1}; walk-back (process total) {'examined': 479}
+  [prox_view] pool#1 cap=2337: [fib][reask] summary: {'CHANGED_cross': 2, 'pending_past_data_edge': 0, 'ran_cross': 2, 'registered_cross': 2}; walk-back (process total) {'examined': 547}
+  [prox_view] pool#1 cap=2621: [fib][reask] summary: {'CHANGED_cross': 2, 'pending_past_data_edge': 0, 'ran_cross': 2, 'registered_cross': 2}; walk-back (process total) {'examined': 743}
+  [fib][reask] sid=0 cycle=3 cross: False at 277 (window end 277) -> re-asked at 278: CHANGED
+  [fib][reask] sid=0 cycle=4 cross: False at 332 (window end 332) -> re-asked at 333: CHANGED
+  [fib][reask] summary: {'CHANGED_cross': 2, 'pending_past_data_edge': 0, 'ran_cross': 2, 'registered_cross': 2}; walk-back (process total) {'examined': 939}
+  summaries (21; one per downstream feed — the last carries the process walk-back total):
+  [fib][reask] summary: {'pending_past_data_edge': 0}; walk-back (process total) {}
+  [prox_view] pool#0 cap=None: [fib][reask] summary: {'pending_past_data_edge': 0}; walk-back (process total) {}
+  [prox_view] pool#0 cap=404: [fib][reask] summary: {'pending_past_data_edge': 0}; walk-back (process total) {}
+  [prox_view] pool#0 cap=578: [fib][reask] summary: {'pending_past_data_edge': 0}; walk-back (process total) {}
+  [prox_view] pool#0 cap=734: [fib][reask] summary: {'pending_past_data_edge': 0}; walk-back (process total) {}
+  [prox_view] pool#0 cap=920: [fib][reask] summary: {'pending_past_data_edge': 0}; walk-back (process total) {}
+  [prox_view] pool#0 cap=2337: [fib][reask] summary: {'pending_past_data_edge': 0}; walk-back (process total) {}
+  [prox_view] pool#0 cap=2621: [fib][reask] summary: {'pending_past_data_edge': 0}; walk-back (process total) {}
+  [prox_view] pool#1 cap=None: [fib][reask] summary: {'CHANGED_cross': 2, 'pending_past_data_edge': 0, 'ran_cross': 2, 'registered_cross': 2}; walk-back (process total) {'examined': 401}
+  [prox_view] pool#1 cap=1990: [fib][reask] summary: {'pending_past_data_edge': 0}; walk-back (process total) {'examined': 401}
+  [prox_view] pool#1 cap=2018: [fib][reask] summary: {'pending_past_data_edge': 0}; walk-back (process total) {'examined': 401}
+  [prox_view] pool#1 cap=2066: [fib][reask] summary: {'pending_past_data_edge': 0}; walk-back (process total) {'examined': 402}
+  [prox_view] pool#1 cap=2071: [fib][reask] summary: {'pending_past_data_edge': 0}; walk-back (process total) {'examined': 405}
+  [prox_view] pool#1 cap=2140: [fib][reask] summary: {'pending_past_data_edge': 0}; walk-back (process total) {'examined': 416}
+  [prox_view] pool#1 cap=2147: [fib][reask] summary: {'pending_past_data_edge': 0}; walk-back (process total) {'examined': 427}
+  [prox_view] pool#1 cap=2259: [fib][reask] summary: {'CHANGED_cross': 1, 'pending_past_data_edge': 0, 'ran_cross': 1, 'registered_cross': 1}; walk-back (process total) {'examined': 447}
+  [prox_view] pool#1 cap=2264: [fib][reask] summary: {'CHANGED_cross': 1, 'pending_past_data_edge': 0, 'ran_cross': 1, 'registered_cross': 1}; walk-back (process total) {'examined': 479}
+  [prox_view] pool#1 cap=2337: [fib][reask] summary: {'CHANGED_cross': 2, 'pending_past_data_edge': 0, 'ran_cross': 2, 'registered_cross': 2}; walk-back (process total) {'examined': 547}
+  [prox_view] pool#1 cap=2621: [fib][reask] summary: {'CHANGED_cross': 2, 'pending_past_data_edge': 0, 'ran_cross': 2, 'registered_cross': 2}; walk-back (process total) {'examined': 743}
+  [fib][reask] summary: {'pending_past_data_edge': 0}; walk-back (process total) {'examined': 743}
+  [fib][reask] summary: {'CHANGED_cross': 2, 'pending_past_data_edge': 0, 'ran_cross': 2, 'registered_cross': 2}; walk-back (process total) {'examined': 939}

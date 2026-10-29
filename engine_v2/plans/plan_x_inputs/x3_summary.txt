@@ -1,0 +1,59 @@
+== 2025-06-01_2025-07-20
+  CSVs md5-different 1 of 30; charts with a count delta 0
+  MS-decision rows (structure events / triggers / subs / unresolved) added + removed: 0
+  fib records differing: 1
+    ('H1.main >> M15.counter', 0, 0, 'NA', 3230): meta.activated_on update -> reask
+  distinct downstream re-asks that CHANGED a fib: 1
+    sid=0 cycle=0 single: False at 60 (window end 60) -> re-asked at 61: CHANGED
+  walk-back questions examined (process total) 392; windows reaching the moment 0; WARNING lines 0
+== 2025-08-01_2025-09-20
+  CSVs md5-different 2 of 30; charts with a count delta 0
+  MS-decision rows (structure events / triggers / subs / unresolved) added + removed: 0
+  fib records differing: 2
+    ('H1.main >> M15.confluence', 0, 0, 'NA', 1490): meta.reactivated_on <absent> -> reask
+    ('H1.main >> M15.counter', 0, 0, 'NA', 1594): meta.activated_on update -> reask
+  distinct downstream re-asks that CHANGED a fib: 2
+    sid=0 cycle=0 single: False at 54 (window end 54) -> re-asked at 55: CHANGED
+    sid=0 cycle=0 update: False at 56 (window end 56) -> re-asked at 57: CHANGED
+  walk-back questions examined (process total) 93; windows reaching the moment 0; WARNING lines 0
+== 2025-10-01_2025-11-15
+  CSVs md5-different 1 of 23; charts with a count delta 0
+  MS-decision rows (structure events / triggers / subs / unresolved) added + removed: 0
+  fib records differing: 2
+    ('H1.main >> M15.confluence', 0, 3, 0.0, 1983): meta.reactivated_at 2259 -> 2211; meta.reactivated_on <absent> -> reask
+    ('H1.main >> M15.confluence', 0, 4, 0.0, 1983): meta.activated_on <absent> -> reask
+  distinct downstream re-asks that CHANGED a fib: 2
+    sid=0 cycle=3 cross: False at 277 (window end 277) -> re-asked at 278: CHANGED
+    sid=0 cycle=4 cross: False at 332 (window end 332) -> re-asked at 333: CHANGED
+  walk-back questions examined (process total) 939; windows reaching the moment 0; WARNING lines 0
+== 2025-12-01_2026-01-20
+  CSVs md5-different 3 of 30; charts with a count delta 1
+    FIG NZD_USD_H1_2025-11-15_2026-01-20_sd-1_eps0p0001_rk2-5_M15_counter.html: traces 192 -> 193, shapes 154 -> 159, traces differing (multiset) 3, names ['M15 fib']; count deltas {'M15 fib': 1}
+  MS-decision rows (structure events / triggers / subs / unresolved) added + removed: 0
+  fib records differing: 6
+    ('H1.main >> M15.confluence', 0, 0, 'NA', 2365): meta.activated_on update -> reask
+    ('H1.main >> M15.confluence', 0, 0, 'NA', 2639): meta.activated_on update -> reask; meta.reactivated_on <absent> -> reask
+    ('H1.main >> M15.counter', 0, 0, 'NA', 2639): meta.activated_on update -> reask; meta.reactivated_on <absent> -> reask
+    ('H1.main >> M15.counter', 0, 0, 'NA', 3621): end_idx 4143.0 -> 3807.0; end_reason same_dir_replacement -> new_cycle; meta.obsolete_reason <absent> -> new_cycle
+    only in variant: ('H1.main >> M15.counter', 0, 1, 0.0, 3621) start=3807.0 end=4143.0 same_dir_replacement status=ended active=True locked=False cts=3806 meta={'cross_cycle': True, 'cross_start_cycle': 0, 'version': 0, 'activated_at': 3807, 'activated_on': 'reask', 'ic_ref_price': 0.57806, 'ic_ref_source': 'prev_cycle_cts', 'cros
+    ('H1.main', 0, 0, 'NA', 96): meta.deactivated_at 117 -> 170; meta.reactivated_on <absent> -> reask
+  distinct downstream re-asks that CHANGED a fib: 6
+    sid=0 cycle=0 single: False at 53 (window end 53) -> re-asked at 54: CHANGED
+    sid=0 cycle=0 single: False at 61 (window end 61) -> re-asked at 62: CHANGED
+    sid=0 cycle=0 update: False at 133 (window end 133) -> re-asked at 134: CHANGED
+    sid=0 cycle=0 update: False at 163 (window end 163) -> re-asked at 164: CHANGED
+    sid=0 cycle=0 update: False at 171 (window end 171) -> re-asked at 172: CHANGED
+    sid=0 cycle=1 cross: False at 235 (window end 235) -> re-asked at 236: CHANGED
+  walk-back questions examined (process total) 352; windows reaching the moment 0; WARNING lines 0
+== 2026-02-01_2026-03-20
+  CSVs md5-different 1 of 23; charts with a count delta 0
+  MS-decision rows (structure events / triggers / subs / unresolved) added + removed: 0
+  fib records differing: 3
+    ('H1.main >> M15.confluence', 0, 0, 'NA', 1759): meta.activated_on update -> reask
+    ('H1.main >> M15.confluence', 0, 0, 'NA', 3124): meta.reactivated_on <absent> -> reask
+    ('H1.main >> M15.confluence', 0, 1, 0.0, 2879): meta.activated_on <absent> -> reask
+  distinct downstream re-asks that CHANGED a fib: 3
+    sid=0 cycle=0 single: False at 55 (window end 55) -> re-asked at 56: CHANGED
+    sid=0 cycle=0 update: False at 55 (window end 55) -> re-asked at 56: CHANGED
+    sid=0 cycle=1 cross: False at 73 (window end 73) -> re-asked at 74: CHANGED
+  walk-back questions examined (process total) 275; windows reaching the moment 0; WARNING lines 0

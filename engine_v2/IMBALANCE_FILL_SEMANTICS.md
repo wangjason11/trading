@@ -100,7 +100,10 @@ event can **drop** a fib / cross rather than delay it by one candle (reference
 window: counter sub 5's pre-created cycle-1 cross fib — sub 5 never establishes a
 cycle 1 — and its IC 3654 twin POI no longer exist). That is the outcome the
 engine already gives when a gap forms one candle after an event. "Re-ask when the
-gap's c3 closes" is a logged follow-up (PLAN_F §7).
+gap's c3 closes" (PLAN_F §7) was built as a VARIANT and measured 2026-10-28 on 5
+windows: 0 MS decisions flip — 11 of the 14 exposed decisions are re-asked at the
+next candle by the cycle's own next event already, the other 3 are unread by MS
+(`plans/PLAN_X_part1_ms_checks.md` §X3). CLOSED by the user; not built.
 
 **M1 divergence (accepted 2026-09-24) — RETIRED by PLAN_I S5 (2026-10-08):** the retired MS in-flight resolver
 was uncut and built its fib as always-active while FibTracker cut at the event, so in the drop case (the ONLY sd gap of
@@ -429,4 +432,7 @@ that would justify a future redesign:
 - **Re-ask when a gap forms** (PLAN_F §7): FibTracker re-evaluating a failed
   decision at the candle a relevant gap's c3 closes would turn "dropped" into
   "one candle later" (the M1 divergence it was also to close is retired since
-  PLAN_I S5 — MS reads FibTracker's decision).
+  PLAN_I S5 — MS reads FibTracker's decision). Measured as a variant and CLOSED
+  2026-10-28 (PLAN_X §X3: 0 MS decisions flip on 5 windows; the rule as code is
+  kept there) — revisit with live mode's per-candle evaluation, which would
+  subsume it.

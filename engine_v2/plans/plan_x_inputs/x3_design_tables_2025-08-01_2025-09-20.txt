@@ -1,0 +1,25 @@
+window 2025-08-01 -> 2025-09-20 (H1 from 2025-08-01 00:00:00+00:00); H1 frame 861 candles
+  [floor_seed] H1: 1168 candles 2025-05-26 08:00:00+00:00 -> 2025-07-31 23:00:00+00:00, 4 steps, 506 body-% pinbars (need 180), the final window converged
+  [floor_seed] M15: 608 candles 2025-07-23 16:00:00+00:00 -> 2025-07-31 23:45:00+00:00, 2 steps, 261 body-% pinbars (need 180), the final window converged
+  [data_bridge] Fetched 3440 M15 candles for NZD_USD in 4 chunks
+examined: {'EXPOSED_fib_tracker': 14, 'false_answers_fib_tracker': 14}
+
+  M15 frame-from 2025-08-22 00:00 n=2000 fib_tracker.py:_update_fib_cts:1218 sid=0 cycle=0 moment m=56 window=(50, 56) sd=1; MS-embedded twin: yes
+    fed for the cycle at m: ['CTS_UPDATED']; SUPERSEDED at m+1 by CTS_UPDATED (moment 57) -> a re-ask at m+1 = today
+        idx time                 open     high      low    close  gap (bull) / events fed for the cycle
+         54 2025-08-22 13:30  0.58140  0.58151  0.58130  0.58132                                         
+         55 2025-08-22 13:45  0.58132  0.58184  0.58096  0.58102  c1                                     CTS_UPDATED/replay_raw
+         56 2025-08-22 14:00  0.58102  0.58585  0.58102  0.58570  c2                                     CTS_UPDATED/replay_raw
+         57 2025-08-22 14:15  0.58572  0.58674  0.58544  0.58602  c2 c3 = formed_at (gap 0.58184-0.58602) CTS_UPDATED/one_maru_continuous
+         58 2025-08-22 14:30  0.58602  0.58694  0.58602  0.58666                                         CTS_UPDATED/replay_raw
+
+  M15 frame-from 2025-08-25 02:00 n=1896 fib_tracker.py:_on_cts_established:853 sid=0 cycle=0 moment m=54 window=(50, 54) sd=-1; MS-embedded twin: yes
+    fed for the cycle at m: ['CTS_ESTABLISHED']; SUPERSEDED at m+1 by CTS_UPDATED (moment 55) -> a re-ask at m+1 = today
+        idx time                 open     high      low    close  gap (bear) / events fed for the cycle
+         52 2025-08-25 15:00  0.58731  0.58756  0.58705  0.58732                                         
+         53 2025-08-25 15:15  0.58732  0.58750  0.58704  0.58706  c1                                     
+         54 2025-08-25 15:30  0.58708  0.58708  0.58652  0.58662  c2                                     CTS_ESTABLISHED/double_maru
+         55 2025-08-25 15:45  0.58662  0.58681  0.58644  0.58662  c3 = formed_at (gap 0.58681-0.58704)   CTS_UPDATED/replay_raw
+         56 2025-08-25 16:00  0.58660  0.58674  0.58644  0.58674                                         
+
+classified (downstream decisions): {'superseded at m+1': 2}
